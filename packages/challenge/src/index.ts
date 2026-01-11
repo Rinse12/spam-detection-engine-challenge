@@ -207,7 +207,9 @@ const getChallenge = async (
 
   const evaluateResponse = parseWithSchema<EvaluateResponse>(
     EvaluateResponseSchema,
-    await postJson(`${options.serverUrl}/evaluate`, challengeRequestMessage),
+    await postJson(`${options.serverUrl}/evaluate`, {
+      challengeRequest: challengeRequestMessage,
+    }),
     "evaluate"
   );
   const riskScore = evaluateResponse.riskScore;

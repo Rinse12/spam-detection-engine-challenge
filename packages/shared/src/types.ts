@@ -31,12 +31,9 @@ export const EvaluateResponseSchema = z.object({
   riskScore: UnitIntervalSchema,
   explanation: z.string().optional(),
   challengeId: z.string(),
-  challengeUrl: z
-    .string()
-    .url()
-    .refine((value) => isHttpUrl(value), {
-      message: "challengeUrl must be a valid HTTP/HTTPS URL",
-    }),
+  challengeUrl: z.url().refine((value) => isHttpUrl(value), {
+    message: "challengeUrl must be a valid HTTP/HTTPS URL",
+  }),
   challengeExpiresAt: UnixTimestampSchema.optional(),
 });
 

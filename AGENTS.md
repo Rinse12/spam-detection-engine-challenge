@@ -6,3 +6,4 @@
 - When you add a feature make sure to add tests to test that feature using vitest.
 - If there's a bug then you should reproduce it with a test and then fix it in code, then run the test and make sure it passes.
 - If there's schema to be shared between challenges package and http server and engine it should be stored in the shared directory
+- DO NOT DUPLICATE PLEBBIT-js schemas, just import them from plebbit-js

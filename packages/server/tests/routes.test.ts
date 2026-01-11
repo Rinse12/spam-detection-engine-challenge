@@ -1,6 +1,60 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { createServer, type SpamDetectionServer } from "../src/index.js";
 
+const baseTimestamp = Math.floor(Date.now() / 1000);
+const baseSignature = {
+  type: "ed25519",
+  signature: "sig",
+  publicKey: "pk",
+  signedPropertyNames: ["author"],
+};
+const baseSubplebbitAuthor = {
+  postScore: 0,
+  replyScore: 0,
+  firstCommentTimestamp: baseTimestamp - 86400,
+  lastCommentCid: "QmYwAPJzv5CZsnAzt8auVZRn9p6nxfZmZ75W6rS4ju4Khu",
+};
+
+const createEvaluatePayload = ({
+  commentOverrides = {},
+  authorOverrides = {},
+  subplebbitOverrides = {},
+  omitSubplebbitAuthor = false,
+}: {
+  commentOverrides?: Record<string, unknown>;
+  authorOverrides?: Record<string, unknown>;
+  subplebbitOverrides?: Record<string, unknown>;
+  omitSubplebbitAuthor?: boolean;
+} = {}) => {
+  const author: Record<string, unknown> = {
+    address: "12D3KooWTestAddress",
+    ...authorOverrides,
+  };
+
+  if (!omitSubplebbitAuthor) {
+    author.subplebbit = {
+      ...baseSubplebbitAuthor,
+      ...subplebbitOverrides,
+    };
+  }
+
+  const comment = {
+    author,
+    subplebbitAddress: "test-sub.eth",
+    timestamp: baseTimestamp,
+    protocolVersion: "1",
+    signature: baseSignature,
+    content: "Hello world",
+    ...commentOverrides,
+  };
+
+  return {
+    challengeRequest: {
+      comment,
+    },
+  };
+};
+
 describe("API Routes", () => {
   let server: SpamDetectionServer;
 
@@ -33,17 +87,7 @@ describe("API Routes", () => {
   });
 
   describe("POST /api/v1/evaluate", () => {
-    const validRequest = {
-      challengeRequestId: "req-123",
-      publication: {
-        author: {
-          address: "12D3KooWTestAddress",
-        },
-        subplebbitAddress: "test-sub.eth",
-        timestamp: Math.floor(Date.now() / 1000),
-        signature: { type: "ed25519" },
-      },
-    };
+    const validRequest = createEvaluatePayload();
 
     it("should return evaluation response for valid request", async () => {
       const response = await server.fastify.inject({
@@ -83,18 +127,14 @@ describe("API Routes", () => {
     });
 
     it("should return lower risk score for established author", async () => {
-      const establishedAuthorRequest = {
-        ...validRequest,
-        publication: {
-          ...validRequest.publication,
-          author: {
-            address: "12D3KooWEstablished",
-            firstCommentTimestamp: Math.floor(Date.now() / 1000) - 400 * 86400, // 400 days ago
-            postScore: 150,
-            replyScore: 50,
-          },
+      const establishedAuthorRequest = createEvaluatePayload({
+        authorOverrides: { address: "12D3KooWEstablished" },
+        subplebbitOverrides: {
+          firstCommentTimestamp: baseTimestamp - 400 * 86400, // 400 days ago
+          postScore: 150,
+          replyScore: 50,
         },
-      };
+      });
 
       const response = await server.fastify.inject({
         method: "POST",
@@ -107,16 +147,10 @@ describe("API Routes", () => {
     });
 
     it("should return higher risk score for new author", async () => {
-      const newAuthorRequest = {
-        ...validRequest,
-        publication: {
-          ...validRequest.publication,
-          author: {
-            address: "12D3KooWNewAccount",
-            // No firstCommentTimestamp, no karma
-          },
-        },
-      };
+      const newAuthorRequest = createEvaluatePayload({
+        authorOverrides: { address: "12D3KooWNewAccount" },
+        subplebbitOverrides: { firstCommentTimestamp: baseTimestamp - 3600 },
+      });
 
       const response = await server.fastify.inject({
         method: "POST",
@@ -128,16 +162,66 @@ describe("API Routes", () => {
       expect(body.riskScore).toBeGreaterThan(0.5); // Should be above neutral
     });
 
-    it("should return 500 for invalid request body", async () => {
+    it("should return 400 for missing subplebbit author data", async () => {
+      const response = await server.fastify.inject({
+        method: "POST",
+        url: "/api/v1/evaluate",
+        payload: createEvaluatePayload({ omitSubplebbitAuthor: true }),
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    it("should return 400 for invalid request body", async () => {
       const response = await server.fastify.inject({
         method: "POST",
         url: "/api/v1/evaluate",
         payload: { invalid: "data" },
       });
 
-      // Zod validation errors are caught by error handler and return 500
-      // The error message still contains validation details
-      expect(response.statusCode).toBe(500);
+      expect(response.statusCode).toBe(400);
+    });
+
+    it("should return 400 for invalid subplebbit author data", async () => {
+      const response = await server.fastify.inject({
+        method: "POST",
+        url: "/api/v1/evaluate",
+        payload: createEvaluatePayload({
+          subplebbitOverrides: { lastCommentCid: "not-a-cid" },
+        }),
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    it("should return 400 for missing author address", async () => {
+      const payload = createEvaluatePayload();
+      const comment = payload.challengeRequest.comment as {
+        author: Record<string, unknown>;
+      };
+      delete comment.author.address;
+
+      const response = await server.fastify.inject({
+        method: "POST",
+        url: "/api/v1/evaluate",
+        payload,
+      });
+
+      expect(response.statusCode).toBe(400);
+    });
+
+    it("should return 400 for missing subplebbit address", async () => {
+      const payload = createEvaluatePayload();
+      delete (payload.challengeRequest.comment as Record<string, unknown>)
+        .subplebbitAddress;
+
+      const response = await server.fastify.inject({
+        method: "POST",
+        url: "/api/v1/evaluate",
+        payload,
+      });
+
+      expect(response.statusCode).toBe(400);
     });
   });
 
@@ -149,15 +233,10 @@ describe("API Routes", () => {
       const evalResponse = await server.fastify.inject({
         method: "POST",
         url: "/api/v1/evaluate",
-        payload: {
-          challengeRequestId: "req-verify-test",
-          publication: {
-            author: { address: "12D3KooWVerifyTest" },
-            subplebbitAddress: "verify-sub.eth",
-            timestamp: Math.floor(Date.now() / 1000),
-            signature: { type: "ed25519" },
-          },
-        },
+        payload: createEvaluatePayload({
+          authorOverrides: { address: "12D3KooWVerifyTest" },
+          commentOverrides: { subplebbitAddress: "verify-sub.eth" },
+        }),
       });
 
       const evalBody = evalResponse.json();
@@ -276,15 +355,10 @@ describe("API Routes", () => {
       const evalResponse = await server.fastify.inject({
         method: "POST",
         url: "/api/v1/evaluate",
-        payload: {
-          challengeRequestId: "req-iframe-test",
-          publication: {
-            author: { address: "12D3KooWIframeTest" },
-            subplebbitAddress: "iframe-sub.eth",
-            timestamp: Math.floor(Date.now() / 1000),
-            signature: { type: "ed25519" },
-          },
-        },
+        payload: createEvaluatePayload({
+          authorOverrides: { address: "12D3KooWIframeTest" },
+          commentOverrides: { subplebbitAddress: "iframe-sub.eth" },
+        }),
       });
 
       const evalBody = evalResponse.json();

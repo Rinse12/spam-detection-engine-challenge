@@ -94,6 +94,27 @@ describe("spam-detection challenge package", () => {
     );
   });
 
+  it("wraps evaluate requests with the challengeRequest payload", async () => {
+    const fetchMock = stubFetch(
+      createResponse(createEvaluateResponse({ riskScore: 0.1 }))
+    );
+    const challengeFile = ChallengeFileFactory(
+      {} as SubplebbitChallengeSetting
+    );
+
+    await challengeFile.getChallenge(
+      { options: {} } as SubplebbitChallengeSetting,
+      request,
+      0
+    );
+
+    const payload = JSON.parse(
+      (fetchMock.mock.calls[0]?.[1]?.body ?? "{}") as string
+    );
+
+    expect(payload).toEqual({ challengeRequest: request });
+  });
+
   it("auto-rejects when riskScore meets the reject threshold", async () => {
     const fetchMock = stubFetch(
       createResponse(

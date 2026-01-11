@@ -58,10 +58,12 @@ export function registerIframeRoute(
       }
 
       // Get client IP for IP record
-      const clientIp = getClientIp(request);
+      const clientIp = getClientIp(request); // TODO why string | undefined? Shouldn't it always be defined?
 
       // Store IP record
+
       if (clientIp) {
+        // why remove old ip records?
         db.upsertIpRecord({
           ipAddress: clientIp,
           author: session.author,

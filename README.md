@@ -46,10 +46,12 @@ Evaluate publication risk. The server tracks author history internally, so no co
 **Request:**
 
 ```typescript
-// The request body IS the DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor from plebbit-js
-// subplebbitAddress is already included in the publication
+// The request wraps the DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor from plebbit-js
+// subplebbitAddress and author.subplebbit are required on the publication
 // Request must be signed by the subplebbit (see TODO above)
-DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor;
+{
+  challengeRequest: DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor;
+}
 ```
 
 **Response:**
@@ -57,19 +59,12 @@ DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor;
 ```typescript
 {
   riskScore: number; // 0.0 to 1.0
-  riskFactors: {
-    authorReputation: number; // Based on solved challenges, publication history
-    contentRisk: number; // Spam patterns, suspicious links
-    velocityRisk: number; // Rate of publications in time window
-    accountAge: number; // Based on firstCommentTimestamp
-    karmaScore: number; // Based on postScore + replyScore
-  }
-  explanation: string; // Human-readable reasoning for the score
+  explanation?: string; // Human-readable reasoning for the score
 
   // Pre-generated challenge URL - sub can use this if it decides to challenge
   challengeId: string;
   challengeUrl: string; // Full URL: https://spam.plebbit.org/api/v1/iframe/{challengeId}
-  challengeExpiresAt: number; // Unix timestamp, 1 hour from creation
+  challengeExpiresAt?: number; // Unix timestamp, 1 hour from creation
 }
 ```
 
@@ -87,7 +82,6 @@ Called by the subplebbit's challenge code to verify a token submitted by the aut
 {
   challengeId: string;
   token: string; // Token from iframe, submitted by author in challengeAnswer
-  authorAddress: string; // To verify token was issued for this author
   // + subplebbit signature (mechanism TBD)
 }
 ```
@@ -343,6 +337,10 @@ Implements plebbit-js `ChallengeFileFactory`:
 }
 ```
 
+When calling `/api/v1/evaluate`, the client must include `author.subplebbit`
+fields in the publication (for example, `challengeRequest.comment.author.subplebbit`).
+Requests without subplebbit author data are rejected.
+
 ### Configuration Options (Challenge Package)
 
 | Option                | Default                           | Description                                                                    |
@@ -413,7 +411,7 @@ These settings are configured on the HTTP server, not in the challenge package:
 ## Verification Plan
 
 1. Run server locally: `npm run dev`
-2. Test /evaluate endpoint with sample DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor
+2. Test /evaluate endpoint with `{ challengeRequest: DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor }`
 3. Test iframe flow using challengeUrl from /evaluate response
 4. Test /challenge/verify with valid and invalid tokens
 5. Test post-challenge filtering (country blacklist, VPN blocking, etc.)

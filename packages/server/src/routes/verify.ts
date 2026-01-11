@@ -33,7 +33,7 @@ export function registerVerifyRoute(
         };
       }
 
-      const { challengeId, token, authorAddress } = parseResult.data;
+      const { challengeId, token } = parseResult.data;
 
       // Look up challenge session
       const session = db.getChallengeSessionByChallengeId(challengeId);

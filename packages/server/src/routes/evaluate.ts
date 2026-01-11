@@ -1,7 +1,12 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
+import type {
+  DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor,
+  PublicationWithSubplebbitAuthorFromDecryptedChallengeRequest,
+} from "@plebbit/plebbit-js/dist/node/pubsub-messages/types.js";
 import type { EvaluateResponse } from "@plebbit/spam-detection-shared";
 import type { SpamDetectionDatabase } from "../db/index.js";
-import type { EvaluateRequest } from "./schemas.js";
+import { EvaluateRequestSchema, type EvaluateRequest } from "./schemas.js";
+import { derivePublicationFromChallengeRequest } from "../plebbit-js-internals.js";
 import { randomUUID } from "crypto";
 
 const CHALLENGE_EXPIRY_SECONDS = 3600; // 1 hour
@@ -26,16 +31,42 @@ export function registerEvaluateRoute(
       request: FastifyRequest<{ Body: EvaluateRequest }>,
       reply: FastifyReply
     ): Promise<EvaluateResponse> => {
-      const body = request.body as EvaluateRequest;
-
-      // Basic validation - the full type validation is handled by plebbit-js types
-      if (!body?.publication?.author?.address || !body?.publication?.subplebbitAddress) {
-        reply.status(400);
-        throw new Error("Invalid request body: missing required fields");
+      const parseResult = EvaluateRequestSchema.safeParse(request.body);
+      if (!parseResult.success) {
+        const error = new Error(
+          `Invalid request body: ${parseResult.error.issues
+            .map((issue) => issue.message)
+            .join(", ")}`
+        );
+        (error as { statusCode?: number }).statusCode = 400;
+        throw error;
       }
 
-      const author = body.publication.author.address;
-      const subplebbitAddress = body.publication.subplebbitAddress;
+      const { challengeRequest } = parseResult.data as EvaluateRequest;
+      let publication: PublicationWithSubplebbitAuthorFromDecryptedChallengeRequest;
+
+      try {
+        publication = derivePublicationFromChallengeRequest(
+          challengeRequest as DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor
+        );
+      } catch (error) {
+        const invalidError = new Error(
+          "Invalid request body: missing publication"
+        );
+        (invalidError as { statusCode?: number }).statusCode = 400;
+        throw invalidError;
+      }
+
+      if (!publication.author?.address || !publication.subplebbitAddress) {
+        const invalidError = new Error(
+          "Invalid request body: missing required fields"
+        );
+        (invalidError as { statusCode?: number }).statusCode = 400;
+        throw invalidError;
+      }
+
+      const author = publication.author.address;
+      const subplebbitAddress = publication.subplebbitAddress;
 
       // Generate challenge ID
       const challengeId = randomUUID();
@@ -54,7 +85,7 @@ export function registerEvaluateRoute(
 
       // Calculate risk score
       // TODO: This will be moved to services/riskScoring.ts
-      const riskScore = calculateRiskScore(body);
+      const riskScore = calculateRiskScore(publication);
 
       // Build response
       const response: EvaluateResponse = {
@@ -62,7 +93,7 @@ export function registerEvaluateRoute(
         challengeId,
         challengeUrl: `${baseUrl}/api/v1/iframe/${challengeId}`,
         challengeExpiresAt: expiresAt,
-        explanation: generateExplanation(riskScore, body),
+        explanation: generateExplanation(riskScore, publication),
       };
 
       return response;
@@ -74,14 +105,17 @@ export function registerEvaluateRoute(
  * Calculate a basic risk score based on available data.
  * TODO: This is a placeholder - real implementation will be in services/riskScoring.ts
  */
-function calculateRiskScore(request: EvaluateRequest): number {
-  const author = request.publication.author;
+function calculateRiskScore(
+  publication: PublicationWithSubplebbitAuthorFromDecryptedChallengeRequest
+): number {
+  const author = publication.author;
+  const subplebbitAuthor = author.subplebbit;
   let score = 0.5; // Start at neutral
 
   // Account age factor (lower score for older accounts)
-  if (author.firstCommentTimestamp) {
+  if (subplebbitAuthor?.firstCommentTimestamp) {
     const now = Math.floor(Date.now() / 1000);
-    const accountAgeSeconds = now - author.firstCommentTimestamp;
+    const accountAgeSeconds = now - subplebbitAuthor.firstCommentTimestamp;
     const accountAgeDays = accountAgeSeconds / (24 * 60 * 60);
 
     if (accountAgeDays > 365) {
@@ -101,8 +135,8 @@ function calculateRiskScore(request: EvaluateRequest): number {
   }
 
   // Karma score factor
-  const postScore = author.postScore ?? 0;
-  const replyScore = author.replyScore ?? 0;
+  const postScore = subplebbitAuthor?.postScore ?? 0;
+  const replyScore = subplebbitAuthor?.replyScore ?? 0;
   const totalKarma = postScore + replyScore;
 
   if (totalKarma > 100) {
@@ -118,7 +152,7 @@ function calculateRiskScore(request: EvaluateRequest): number {
   }
 
   // Previous comment CID factor (has history)
-  if (author.previousCommentCid || author.lastCommentCid) {
+  if (author.previousCommentCid || subplebbitAuthor?.lastCommentCid) {
     score -= 0.05;
   }
 
@@ -131,22 +165,24 @@ function calculateRiskScore(request: EvaluateRequest): number {
  */
 function generateExplanation(
   score: number,
-  request: EvaluateRequest
+  publication: PublicationWithSubplebbitAuthorFromDecryptedChallengeRequest
 ): string | undefined {
   const factors: string[] = [];
-  const author = request.publication.author;
+  const author = publication.author;
+  const subplebbitAuthor = author.subplebbit;
 
-  if (author.firstCommentTimestamp) {
+  if (subplebbitAuthor?.firstCommentTimestamp) {
     const now = Math.floor(Date.now() / 1000);
     const accountAgeDays = Math.floor(
-      (now - author.firstCommentTimestamp) / (24 * 60 * 60)
+      (now - subplebbitAuthor.firstCommentTimestamp) / (24 * 60 * 60)
     );
     factors.push(`Account age: ${accountAgeDays} days`);
   } else {
     factors.push("Account age: New account");
   }
 
-  const totalKarma = (author.postScore ?? 0) + (author.replyScore ?? 0);
+  const totalKarma =
+    (subplebbitAuthor?.postScore ?? 0) + (subplebbitAuthor?.replyScore ?? 0);
   factors.push(`Karma: ${totalKarma}`);
 
   if (score < 0.3) {
