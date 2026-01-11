@@ -290,8 +290,8 @@ Stores comment moderation publications.
 - `receivedAt` INTEGER NOT NULL
 
 ### `challengeSessions` (ephemeral)
-
-Tracks pending challenges. **Automatically purged after 1 hour.**
+#### TODO this is not complete yet, we will probably come back to this later
+Tracks pending challenges. **Automatically purged after 1 hour.**.
 
 - `id` INTEGER PRIMARY KEY
 - `challengeId` TEXT NOT NULL UNIQUE
@@ -303,7 +303,7 @@ Tracks pending challenges. **Automatically purged after 1 hour.**
 - `createdAt` INTEGER NOT NULL
 
 ### `ipRecords`
-
+#### TODO this is not complete yet, we will probably come back to this later
 Stores raw IP addresses associated with authors (captured via iframe).
 
 - `id` INTEGER PRIMARY KEY
