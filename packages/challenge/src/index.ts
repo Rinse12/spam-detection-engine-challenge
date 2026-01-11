@@ -106,34 +106,6 @@ const parseOptions = (settings: SubplebbitChallengeSetting): ParsedOptions => {
   return parsed.data;
 };
 
-const getPublicationFromRequest = (
-  challengeRequestMessage: DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor
-) => {
-  // TODO need to type this up properly
-  const publicationKeys = [
-    "comment",
-    "vote",
-    "commentEdit",
-    "commentModeration",
-    "subplebbitEdit",
-  ] as const;
-  for (const key of publicationKeys) {
-    const maybePublication = challengeRequestMessage[key];
-    if (maybePublication) return maybePublication;
-  }
-  throw Error(
-    "Can't find publication. Are you sure this challenge is up to date and can detect all publications?"
-  );
-};
-
-const readResponseText = async (response: Response) => {
-  try {
-    return await response.text();
-  } catch {
-    return "";
-  }
-};
-
 const postJson = async (url: string, body: unknown): Promise<unknown> => {
   const response = await fetch(url, {
     method: "POST",
@@ -144,19 +116,26 @@ const postJson = async (url: string, body: unknown): Promise<unknown> => {
     body: JSON.stringify(body),
   });
 
+  let responseBody: unknown;
+  try {
+    responseBody = (await response.json()) as unknown;
+  } catch {
+    responseBody = undefined;
+  }
+
   if (!response.ok) {
-    const responseText = await readResponseText(response);
-    const details = responseText ? `: ${responseText}` : "";
+    const details =
+      responseBody !== undefined ? `: ${JSON.stringify(responseBody)}` : "";
     throw new Error(
       `Spam detection server error (${response.status})${details}`
     );
   }
 
-  try {
-    return (await response.json()) as unknown;
-  } catch (error) {
+  if (responseBody === undefined) {
     throw new Error("Invalid JSON response from spam detection server");
   }
+
+  return responseBody;
 };
 
 const parseWithSchema = <T>(
@@ -233,22 +212,6 @@ const getChallenge = async (
   );
   const riskScore = evaluateResponse.riskScore;
 
-  if (!Number.isFinite(riskScore)) {
-    throw new Error("Spam detection server returned invalid riskScore");
-  }
-  if (
-    typeof evaluateResponse.challengeId !== "string" ||
-    !evaluateResponse.challengeId
-  ) {
-    throw new Error("Spam detection server returned invalid challengeId");
-  }
-  if (
-    typeof evaluateResponse.challengeUrl !== "string" ||
-    !evaluateResponse.challengeUrl
-  ) {
-    throw new Error("Spam detection server returned invalid challengeUrl");
-  }
-
   if (riskScore < options.autoAcceptThreshold) {
     return { success: true };
   }
@@ -259,6 +222,7 @@ const getChallenge = async (
       : "";
     return {
       success: false,
+      // TODO find a better error message
       error: `Rejected by spam detection engine (riskScore ${formatRiskScore(
         riskScore
       )}).${explanation}`,
@@ -283,13 +247,10 @@ const getChallenge = async (
       "verify"
     );
 
-    if (typeof verifyResponse.success !== "boolean") {
-      throw new Error("Spam detection server returned invalid verify response");
-    }
-
     if (!verifyResponse.success) {
       return {
         success: false,
+        // TODO find a better error message
         error: verifyResponse.error || "Challenge verification failed.",
       };
     }
