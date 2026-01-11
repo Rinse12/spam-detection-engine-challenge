@@ -3,7 +3,7 @@
  * Uses better-sqlite3 with SQLite.
  */
 
-// TODO need to handle cases where spam engine receives publications
+// TODO need to handle cases where spam engine receives publications with unrecognized fields. We should strip those unrecognized fields away before storing
 export const SCHEMA_SQL = `
 -- Comments table - stores comment publications
 CREATE TABLE IF NOT EXISTS comments (
