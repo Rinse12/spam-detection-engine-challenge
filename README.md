@@ -8,6 +8,7 @@ A centralized spam detection service that evaluates publications and provides ri
 2. **Challenge Package** (`@plebbit/spam-detection-challenge`) - npm package for subplebbit integration
 
 **Important:**
+
 - The HTTP server must import and use schemas from `plebbit-js` to validate incoming challenge requests. This ensures type compatibility with `DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor`.
 - The HTTP server must verify that the publication in the ChallengeRequest is correctly signed by the author.
 
@@ -43,30 +44,32 @@ Evaluate publication risk. The server tracks author history internally, so no co
 > **TODO:** The request must be signed by the subplebbit to prevent abuse (e.g., someone unrelated to the sub querying the engine to doxx users). Details of the signing mechanism to be figured out.
 
 **Request:**
+
 ```typescript
 // The request body IS the DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor from plebbit-js
 // subplebbitAddress is already included in the publication
 // Request must be signed by the subplebbit (see TODO above)
-DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor
+DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor;
 ```
 
 **Response:**
+
 ```typescript
 {
-  riskScore: number;           // 0.0 to 1.0
+  riskScore: number; // 0.0 to 1.0
   riskFactors: {
-    authorReputation: number;  // Based on solved challenges, publication history
-    contentRisk: number;       // Spam patterns, suspicious links
-    velocityRisk: number;      // Rate of publications in time window
-    accountAge: number;        // Based on firstCommentTimestamp
-    karmaScore: number;        // Based on postScore + replyScore
-  };
-  explanation: string;         // Human-readable reasoning for the score
+    authorReputation: number; // Based on solved challenges, publication history
+    contentRisk: number; // Spam patterns, suspicious links
+    velocityRisk: number; // Rate of publications in time window
+    accountAge: number; // Based on firstCommentTimestamp
+    karmaScore: number; // Based on postScore + replyScore
+  }
+  explanation: string; // Human-readable reasoning for the score
 
   // Pre-generated challenge URL - sub can use this if it decides to challenge
   challengeId: string;
-  challengeUrl: string;        // Full URL: https://spam.plebbit.org/api/v1/iframe/{challengeId}
-  challengeExpiresAt: number;  // Unix timestamp, 1 hour from creation
+  challengeUrl: string; // Full URL: https://spam.plebbit.org/api/v1/iframe/{challengeId}
+  challengeExpiresAt: number; // Unix timestamp, 1 hour from creation
 }
 ```
 
@@ -79,16 +82,18 @@ Called by the subplebbit's challenge code to verify a token submitted by the aut
 **Request must be signed by the subplebbit** (same signing mechanism as /evaluate).
 
 **Request:**
+
 ```typescript
 {
   challengeId: string;
-  token: string;               // Token from iframe, submitted by author in challengeAnswer
-  authorAddress: string;       // To verify token was issued for this author
+  token: string; // Token from iframe, submitted by author in challengeAnswer
+  authorAddress: string; // To verify token was issued for this author
   // + subplebbit signature (mechanism TBD)
 }
 ```
 
 **Response:**
+
 ```typescript
 {
   success: boolean;
@@ -174,21 +179,23 @@ Serves the iframe challenge page (e.g., Cloudflare Turnstile). When the user sol
 
 Weighted combination (0-1 scale):
 
-| Factor            | Weight (no IP) | Weight (with IP) | Calculation                                                      |
-| ----------------- | -------------- | ---------------- | ---------------------------------------------------------------- |
-| Author Reputation | 0.30           | 0.25             | Solved challenges (-), publication history                       |
-| Content Risk      | 0.20           | 0.15             | Spam patterns, suspicious links, URL shorteners                  |
-| Velocity Risk     | 0.15           | 0.10             | Rate of publications per time window (e.g., 10 posts/hour = high)|
-| Account Age       | 0.20           | 0.15             | Based on firstCommentTimestamp from plebbit-js                   |
-| Karma Score       | 0.15           | 0.10             | Based on postScore + replyScore from plebbit-js                  |
-| IP Risk           | —              | 0.25             | VPN/proxy/Tor detection, datacenter IP, multi-author IP          |
+| Factor            | Weight (no IP) | Weight (with IP) | Calculation                                                       |
+| ----------------- | -------------- | ---------------- | ----------------------------------------------------------------- |
+| Author Reputation | 0.30           | 0.25             | Solved challenges (-), publication history                        |
+| Content Risk      | 0.20           | 0.15             | Spam patterns, suspicious links, URL shorteners                   |
+| Velocity Risk     | 0.15           | 0.10             | Rate of publications per time window (e.g., 10 posts/hour = high) |
+| Account Age       | 0.20           | 0.15             | Based on firstCommentTimestamp from plebbit-js                    |
+| Karma Score       | 0.15           | 0.10             | Based on postScore + replyScore from plebbit-js                   |
+| IP Risk           | —              | 0.25             | VPN/proxy/Tor detection, datacenter IP, multi-author IP           |
 
 **Velocity Risk** explained: Measures how frequently an author is publishing. For example:
+
 - 1-2 posts/hour: normal (low risk)
 - 5-10 posts/hour: suspicious (medium risk)
 - 20+ posts/hour: likely spam/bot (high risk)
 
 **Thresholds (configurable per sub):**
+
 - `riskScore < autoAcceptThreshold` → Auto-accept
 - `autoAcceptThreshold <= riskScore < autoRejectThreshold` → Challenge
 - `riskScore >= autoRejectThreshold` → Auto-reject
@@ -196,6 +203,7 @@ Weighted combination (0-1 scale):
 ## Token Verification
 
 When a user completes the iframe challenge:
+
 1. The iframe page (served by the spam detection server) generates a JWT
 2. The JWT is signed by the server's private key
 3. The JWT contains: `challengeId`, `authorAddress`, `completedAt`, `expiresAt`
@@ -210,7 +218,9 @@ When a user completes the iframe challenge:
 **Tables:**
 
 ### `comments`
+
 Stores comment publications for analysis and rate limiting.
+
 - `id` INTEGER PRIMARY KEY
 - `author_address` TEXT NOT NULL
 - `subplebbit_address` TEXT NOT NULL
@@ -222,7 +232,9 @@ Stores comment publications for analysis and rate limiting.
 - `created_at` INTEGER NOT NULL
 
 ### `votes`
+
 Stores vote publications.
+
 - `id` INTEGER PRIMARY KEY
 - `author_address` TEXT NOT NULL
 - `subplebbit_address` TEXT NOT NULL
@@ -232,7 +244,9 @@ Stores vote publications.
 - `created_at` INTEGER NOT NULL
 
 ### `comment_edits`
+
 Stores comment edit publications.
+
 - `id` INTEGER PRIMARY KEY
 - `author_address` TEXT NOT NULL
 - `subplebbit_address` TEXT NOT NULL
@@ -241,7 +255,9 @@ Stores comment edit publications.
 - `created_at` INTEGER NOT NULL
 
 ### `comment_moderations`
+
 Stores comment moderation publications.
+
 - `id` INTEGER PRIMARY KEY
 - `author_address` TEXT NOT NULL
 - `subplebbit_address` TEXT NOT NULL
@@ -250,7 +266,9 @@ Stores comment moderation publications.
 - `created_at` INTEGER NOT NULL
 
 ### `challenge_sessions` (ephemeral)
+
 Tracks pending challenges. **Automatically purged after 1 hour.**
+
 - `id` INTEGER PRIMARY KEY
 - `challenge_id` TEXT NOT NULL UNIQUE
 - `author_address` TEXT NOT NULL
@@ -261,7 +279,9 @@ Tracks pending challenges. **Automatically purged after 1 hour.**
 - `created_at` INTEGER NOT NULL
 
 ### `ip_records`
+
 Stores raw IP addresses associated with authors (captured via iframe).
+
 - `id` INTEGER PRIMARY KEY
 - `ip_address` TEXT NOT NULL
 - `author_address` TEXT NOT NULL
@@ -301,17 +321,17 @@ Implements plebbit-js `ChallengeFileFactory`:
 
 ### Configuration Options (Challenge Package)
 
-| Option                  | Default                           | Description                                                       |
-| ----------------------- | --------------------------------- | ----------------------------------------------------------------- |
-| `serverUrl`             | `https://spam.plebbit.org/api/v1` | URL of the spam detection server                                  |
-| `autoAcceptThreshold`   | `0.2`                             | Auto-accept publications below this risk score                    |
-| `autoRejectThreshold`   | `0.8`                             | Auto-reject publications above this risk score                    |
-| `countryBlacklist`      | `""`                              | Comma-separated ISO 3166-1 alpha-2 country codes to block (e.g., `"RU,CN,KP"`) |
-| `maxIpRisk`             | `1.0`                             | Reject if ipRisk from /verify exceeds this threshold              |
-| `blockVpn`              | `false`                           | Reject publications from VPN IPs                                  |
-| `blockProxy`            | `false`                           | Reject publications from proxy IPs                                |
-| `blockTor`              | `false`                           | Reject publications from Tor exit nodes                           |
-| `blockDatacenter`       | `false`                           | Reject publications from datacenter IPs                           |
+| Option                | Default                           | Description                                                                    |
+| --------------------- | --------------------------------- | ------------------------------------------------------------------------------ |
+| `serverUrl`           | `https://spam.plebbit.org/api/v1` | URL of the spam detection server                                               |
+| `autoAcceptThreshold` | `0.2`                             | Auto-accept publications below this risk score                                 |
+| `autoRejectThreshold` | `0.8`                             | Auto-reject publications above this risk score                                 |
+| `countryBlacklist`    | `""`                              | Comma-separated ISO 3166-1 alpha-2 country codes to block (e.g., `"RU,CN,KP"`) |
+| `maxIpRisk`           | `1.0`                             | Reject if ipRisk from /verify exceeds this threshold                           |
+| `blockVpn`            | `false`                           | Reject publications from VPN IPs                                               |
+| `blockProxy`          | `false`                           | Reject publications from proxy IPs                                             |
+| `blockTor`            | `false`                           | Reject publications from Tor exit nodes                                        |
+| `blockDatacenter`     | `false`                           | Reject publications from datacenter IPs                                        |
 
 **Post-challenge filtering:** After a user completes a challenge, the `/verify` response includes IP intelligence data. The challenge code uses the above options to reject publications even after successful challenge completion (e.g., if the user is from a blacklisted country or using a VPN).
 
@@ -320,6 +340,7 @@ Implements plebbit-js `ChallengeFileFactory`:
 ### Server Configuration (separate from challenge)
 
 These settings are configured on the HTTP server, not in the challenge package:
+
 - `iframeProvider`: Which CAPTCHA provider to use (turnstile, hcaptcha, self-hosted)
 - `contentAnalysis`: Whether to analyze publication content for spam patterns
 
@@ -339,6 +360,13 @@ These settings are configured on the HTTP server, not in the challenge package:
 - All data is visible to the server operator
 - Open source for auditability
 - Explanation field shows reasoning for scores
+
+## Known Limitations
+
+- IP intelligence fields are best-effort estimates and can be wrong (e.g., VPNs, residential IPs, or misclassification)
+- Treat IP intelligence as informational and use it only for rejection decisions
+- IP intelligence fields are optional and may be removed from the engine response in the future; challenge code only applies IP filtering options when they are present
+- IP-based options are intentionally rejection-only; we do not support IP-derived auto-approval (e.g., a country whitelist), because it is easy to game and can be used to flood a community
 
 ## Implementation Steps
 
