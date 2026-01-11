@@ -217,7 +217,7 @@ When a user completes the iframe challenge:
 
 **Tables:**
 
-Author columns store the full `author` object from each publication (for example, `DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor.comment.author`).
+Author columns store the full `author` object from each publication (for example, `DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor.comment.author`). `riskScore` is computed on the fly and is not stored in the database.
 
 ### `comments`
 
@@ -229,9 +229,18 @@ Stores comment publications for analysis and rate limiting.
 - `parentCid` TEXT (null for posts, set for replies)
 - `content` TEXT
 - `link` TEXT
+- `linkWidth` INTEGER
+- `linkHeight` INTEGER
+- `postCid` TEXT NOT NULL
+- `signature` TEXT NOT NULL
+- `title` TEXT
 - `timestamp` INTEGER NOT NULL
-- `riskScore` REAL
-- `createdAt` INTEGER NOT NULL
+- `linkHtmlTagName` TEXT
+- `flair` TEXT
+- `spoiler` INTEGER (BOOLEAN 0/1)
+- `protocolVersion` TEXT NOT NULL
+- `nsfw` INTEGER (BOOLEAN 0/1)
+- `receivedAt` INTEGER NOT NULL
 
 ### `votes`
 
@@ -241,9 +250,11 @@ Stores vote publications.
 - `author` TEXT NOT NULL
 - `subplebbitAddress` TEXT NOT NULL
 - `commentCid` TEXT NOT NULL
+- `signature` TEXT NOT NULL
+- `protocolVersion` TEXT NOT NULL
 - `vote` INTEGER NOT NULL (-1, 0 or 1)
 - `timestamp` INTEGER NOT NULL
-- `createdAt` INTEGER NOT NULL
+- `receivedAt` INTEGER NOT NULL
 
 ### `commentEdits`
 
@@ -253,8 +264,16 @@ Stores comment edit publications.
 - `author` TEXT NOT NULL
 - `subplebbitAddress` TEXT NOT NULL
 - `commentCid` TEXT NOT NULL
+- `signature` TEXT NOT NULL
+- `protocolVersion` TEXT NOT NULL
+- `content` TEXT
+- `reason` TEXT
+- `deleted` INTEGER (BOOLEAN 0/1)
+- `flair` TEXT
+- `spoiler` INTEGER (BOOLEAN 0/1)
+- `nsfw` INTEGER (BOOLEAN 0/1)
 - `timestamp` INTEGER NOT NULL
-- `createdAt` INTEGER NOT NULL
+- `receivedAt` INTEGER NOT NULL
 
 ### `commentModerations`
 
@@ -264,8 +283,11 @@ Stores comment moderation publications.
 - `author` TEXT NOT NULL
 - `subplebbitAddress` TEXT NOT NULL
 - `commentCid` TEXT NOT NULL
+- `commentModeration` TEXT NOT NULL
+- `signature` TEXT NOT NULL
+- `protocolVersion` TEXT NOT NULL
 - `timestamp` INTEGER NOT NULL
-- `createdAt` INTEGER NOT NULL
+- `receivedAt` INTEGER NOT NULL
 
 ### `challengeSessions` (ephemeral)
 
@@ -288,10 +310,10 @@ Stores raw IP addresses associated with authors (captured via iframe).
 - `ipAddress` TEXT NOT NULL
 - `author` TEXT NOT NULL
 - `challengeId` TEXT
-- `isVpn` INTEGER
-- `isProxy` INTEGER
-- `isTor` INTEGER
-- `isDatacenter` INTEGER
+- `isVpn` INTEGER (BOOLEAN 0/1)
+- `isProxy` INTEGER (BOOLEAN 0/1)
+- `isTor` INTEGER (BOOLEAN 0/1)
+- `isDatacenter` INTEGER (BOOLEAN 0/1)
 - `countryCode` TEXT
 - `firstSeenAt` INTEGER NOT NULL
 - `lastSeenAt` INTEGER NOT NULL
@@ -330,10 +352,10 @@ Implements plebbit-js `ChallengeFileFactory`:
 | `autoRejectThreshold` | `0.8`                             | Auto-reject publications above this risk score                                 |
 | `countryBlacklist`    | `""`                              | Comma-separated ISO 3166-1 alpha-2 country codes to block (e.g., `"RU,CN,KP"`) |
 | `maxIpRisk`           | `1.0`                             | Reject if ipRisk from /verify exceeds this threshold                           |
-| `blockVpn`            | `false`                           | Reject publications from VPN IPs (`true`/`false` only)                          |
-| `blockProxy`          | `false`                           | Reject publications from proxy IPs (`true`/`false` only)                        |
-| `blockTor`            | `false`                           | Reject publications from Tor exit nodes (`true`/`false` only)                   |
-| `blockDatacenter`     | `false`                           | Reject publications from datacenter IPs (`true`/`false` only)                   |
+| `blockVpn`            | `false`                           | Reject publications from VPN IPs (`true`/`false` only)                         |
+| `blockProxy`          | `false`                           | Reject publications from proxy IPs (`true`/`false` only)                       |
+| `blockTor`            | `false`                           | Reject publications from Tor exit nodes (`true`/`false` only)                  |
+| `blockDatacenter`     | `false`                           | Reject publications from datacenter IPs (`true`/`false` only)                  |
 
 **Post-challenge filtering:** After a user completes a challenge, the `/verify` response includes IP intelligence data. The challenge code uses the above options to reject publications even after successful challenge completion (e.g., if the user is from a blacklisted country or using a VPN).
 
