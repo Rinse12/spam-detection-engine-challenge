@@ -6,6 +6,6 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run -w @plebbit/spam-detection-shared build && npm run -w @plebbit/spam-detection-challenge build"
+    "build": "npm run -w @plebbit/spam-detection-shared build && npm run -w @plebbit/spam-detection-server build && npm run -w @plebbit/spam-detection-challenge build"
   }
 }
