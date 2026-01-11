@@ -5,27 +5,16 @@ import type {
   SubplebbitChallengeSetting,
 } from "@plebbit/plebbit-js/dist/node/subplebbit/types.js";
 import type { DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor } from "@plebbit/plebbit-js/dist/node/pubsub-messages/types.js";
-import {
-  EvaluateResponseSchema,
-  VerifyResponseSchema,
-} from "@plebbit/spam-detection-shared";
 import type {
   EvaluateResponse,
   VerifyResponse,
 } from "@plebbit/spam-detection-shared";
-
-// TODO type below and parsing should be all a zod schema
-type ParsedOptions = {
-  serverUrl: string;
-  autoAcceptThreshold: number;
-  autoRejectThreshold: number;
-  countryBlacklist: Set<string>;
-  maxIpRisk: number;
-  blockVpn: boolean;
-  blockProxy: boolean;
-  blockTor: boolean;
-  blockDatacenter: boolean;
-};
+import {
+  EvaluateResponseSchema,
+  IsoCountryCodeSchema,
+  VerifyResponseSchema,
+} from "@plebbit/spam-detection-shared";
+import { z } from "zod";
 
 const DEFAULT_SERVER_URL = "https://spam.plebbit.org/api/v1"; // TODO once we have a server we will change this url
 
@@ -107,86 +96,107 @@ const description: ChallengeFileInput["description"] =
 
 const normalizeServerUrl = (url: string) => url.replace(/\/+$/, "");
 
-const parseNumberOption = (
-  value: string | undefined,
-  fallback: number,
-  label: string
-) => {
-  if (value === undefined || value === "") return fallback;
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) {
-    throw new Error(`Invalid ${label} option '${value}'`);
-  }
-  return parsed;
-};
+const numberOptionSchema = (label: string, fallback: number) =>
+  z.string().optional().transform((value, ctx) => {
+    const normalized = value?.trim();
+    if (!normalized) return fallback;
+    const parsed = Number(normalized);
+    if (!Number.isFinite(parsed)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Invalid ${label} option '${value}'`,
+      });
+      return z.NEVER;
+    }
+    return parsed;
+  });
 
-const parseBooleanOption = (value: string | undefined) => {
-  if (!value) return false;
-  return ["true", "1", "yes", "y"].includes(value.trim().toLowerCase());
-};
+const booleanOptionSchema = z.string().optional().transform((value) => {
+  const normalized = value?.trim().toLowerCase();
+  if (!normalized) return false;
+  return ["true", "1", "yes", "y"].includes(normalized);
+});
 
-const parseCountryBlacklist = (value: string | undefined) => {
-  // TODO this needs to be parsed and validated to be Comma-separated ISO 3166-1 alpha-2
-  if (!value) return new Set<string>();
-  return new Set(
-    value
+const countryBlacklistSchema = z
+  .string()
+  .optional()
+  .transform((value, ctx) => {
+    if (!value) return new Set<string>();
+    const entries = value
       .split(",")
-      .map((entry) => entry.trim().toUpperCase())
-      .filter(Boolean)
-  );
-};
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+    const codes = new Set<string>();
+    for (const entry of entries) {
+      const parsed = IsoCountryCodeSchema.safeParse(entry);
+      if (!parsed.success) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Unknown ISO 3166-1 alpha-2 country code '${entry}' in countryBlacklist`,
+        });
+        return z.NEVER;
+      }
+      codes.add(parsed.data);
+    }
+    return codes;
+  });
+
+const OptionsSchema = z
+  .object({
+    serverUrl: z.string().optional().transform((value, ctx) => {
+      const normalizedInput = value?.trim();
+      const raw = normalizedInput ? normalizedInput : DEFAULT_SERVER_URL;
+      const normalized = normalizeServerUrl(raw);
+      if (!normalized) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Server URL option is required",
+        });
+        return z.NEVER;
+      }
+      return normalized;
+    }),
+    autoAcceptThreshold: numberOptionSchema("autoAcceptThreshold", 0.2).refine(
+      (value) => value >= 0 && value <= 1,
+      { message: "autoAcceptThreshold must be between 0 and 1" }
+    ),
+    autoRejectThreshold: numberOptionSchema("autoRejectThreshold", 0.8).refine(
+      (value) => value >= 0 && value <= 1,
+      { message: "autoRejectThreshold must be between 0 and 1" }
+    ),
+    countryBlacklist: countryBlacklistSchema,
+    maxIpRisk: numberOptionSchema("maxIpRisk", 1.0).refine(
+      (value) => value >= 0 && value <= 1,
+      { message: "maxIpRisk must be between 0 and 1" }
+    ),
+    blockVpn: booleanOptionSchema,
+    blockProxy: booleanOptionSchema,
+    blockTor: booleanOptionSchema,
+    blockDatacenter: booleanOptionSchema,
+  })
+  .superRefine((data, ctx) => {
+    if (data.autoAcceptThreshold > data.autoRejectThreshold) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "autoAcceptThreshold must be less than or equal to autoRejectThreshold",
+        path: ["autoAcceptThreshold"],
+      });
+    }
+  });
+
+type ParsedOptions = z.infer<typeof OptionsSchema>;
 
 const parseOptions = (settings: SubplebbitChallengeSetting): ParsedOptions => {
   const rawOptions = settings?.options || {};
-  const serverUrl = normalizeServerUrl(
-    rawOptions.serverUrl || DEFAULT_SERVER_URL
-  );
-  if (!serverUrl) {
-    throw new Error("Server URL option is required");
+  const parsed = OptionsSchema.safeParse(rawOptions);
+  if (!parsed.success) {
+    const message = parsed.error.issues
+      .map((issue) => issue.message)
+      .join("; ");
+    throw new Error(`Invalid challenge options: ${message}`);
   }
-  const autoAcceptThreshold = parseNumberOption(
-    rawOptions.autoAcceptThreshold,
-    0.2,
-    "autoAcceptThreshold"
-  );
-  const autoRejectThreshold = parseNumberOption(
-    rawOptions.autoRejectThreshold,
-    0.8,
-    "autoRejectThreshold"
-  );
-  const maxIpRisk = parseNumberOption(rawOptions.maxIpRisk, 1.0, "maxIpRisk");
-  const countryBlacklist = parseCountryBlacklist(rawOptions.countryBlacklist);
-  const blockVpn = parseBooleanOption(rawOptions.blockVpn);
-  const blockProxy = parseBooleanOption(rawOptions.blockProxy);
-  const blockTor = parseBooleanOption(rawOptions.blockTor);
-  const blockDatacenter = parseBooleanOption(rawOptions.blockDatacenter);
-
-  if (autoAcceptThreshold < 0 || autoAcceptThreshold > 1) {
-    throw new Error("autoAcceptThreshold must be between 0 and 1");
-  }
-  if (autoRejectThreshold < 0 || autoRejectThreshold > 1) {
-    throw new Error("autoRejectThreshold must be between 0 and 1");
-  }
-  if (maxIpRisk < 0 || maxIpRisk > 1) {
-    throw new Error("maxIpRisk must be between 0 and 1");
-  }
-  if (autoAcceptThreshold > autoRejectThreshold) {
-    throw new Error(
-      "autoAcceptThreshold must be less than or equal to autoRejectThreshold"
-    );
-  }
-
-  return {
-    serverUrl,
-    autoAcceptThreshold,
-    autoRejectThreshold,
-    countryBlacklist,
-    maxIpRisk,
-    blockVpn,
-    blockProxy,
-    blockTor,
-    blockDatacenter,
-  };
+  return parsed.data;
 };
 
 const getPublicationFromRequest = (

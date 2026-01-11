@@ -25,7 +25,8 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@plebbit/spam-detection-shared": "file:../shared"
+    "@plebbit/spam-detection-shared": "file:../shared",
+    "zod": "^3.23.8"
   },
   "peerDependencies": {
     "@plebbit/plebbit-js": ">=0.0.0"
