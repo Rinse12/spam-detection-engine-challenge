@@ -8,6 +8,7 @@ export interface RouteOptions {
   db: SpamDetectionDatabase;
   baseUrl: string;
   turnstileSiteKey?: string;
+  ipInfoToken?: string;
 }
 
 /**
@@ -17,12 +18,12 @@ export function registerRoutes(
   fastify: FastifyInstance,
   options: RouteOptions
 ): void {
-  const { db, baseUrl, turnstileSiteKey } = options;
+  const { db, baseUrl, turnstileSiteKey, ipInfoToken } = options;
 
   // Register individual routes
   registerEvaluateRoute(fastify, { db, baseUrl });
   registerVerifyRoute(fastify, { db });
-  registerIframeRoute(fastify, { db, turnstileSiteKey });
+  registerIframeRoute(fastify, { db, turnstileSiteKey, ipInfoToken });
 
   // Health check endpoint
   fastify.get("/health", async () => {

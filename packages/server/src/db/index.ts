@@ -22,6 +22,7 @@ export interface IpRecord {
   isTor: number;
   isDatacenter: number;
   countryCode: string | null;
+  intelUpdatedAt: number | null;
   firstSeenAt: number;
   lastSeenAt: number;
 }
@@ -185,6 +186,7 @@ export class SpamDetectionDatabase {
     isTor?: boolean;
     isDatacenter?: boolean;
     countryCode?: string;
+    intelUpdatedAt?: number;
   }): IpRecord {
     const now = Math.floor(Date.now() / 1000);
 
@@ -204,6 +206,7 @@ export class SpamDetectionDatabase {
           isTor = COALESCE(@isTor, isTor),
           isDatacenter = COALESCE(@isDatacenter, isDatacenter),
           countryCode = COALESCE(@countryCode, countryCode),
+          intelUpdatedAt = COALESCE(@intelUpdatedAt, intelUpdatedAt),
           lastSeenAt = @lastSeenAt
         WHERE ipAddress = @ipAddress AND author = @author
       `);
@@ -222,6 +225,7 @@ export class SpamDetectionDatabase {
               : 0
             : null,
         countryCode: params.countryCode ?? null,
+        intelUpdatedAt: params.intelUpdatedAt ?? null,
         lastSeenAt: now,
       });
 
@@ -229,8 +233,8 @@ export class SpamDetectionDatabase {
     } else {
       // Insert new record
       const stmt = this.db.prepare(`
-        INSERT INTO ipRecords (ipAddress, author, challengeId, isVpn, isProxy, isTor, isDatacenter, countryCode)
-        VALUES (@ipAddress, @author, @challengeId, @isVpn, @isProxy, @isTor, @isDatacenter, @countryCode)
+        INSERT INTO ipRecords (ipAddress, author, challengeId, isVpn, isProxy, isTor, isDatacenter, countryCode, intelUpdatedAt)
+        VALUES (@ipAddress, @author, @challengeId, @isVpn, @isProxy, @isTor, @isDatacenter, @countryCode, @intelUpdatedAt)
       `);
 
       const result = stmt.run({
@@ -242,6 +246,7 @@ export class SpamDetectionDatabase {
         isTor: params.isTor ? 1 : 0,
         isDatacenter: params.isDatacenter ? 1 : 0,
         countryCode: params.countryCode ?? null,
+        intelUpdatedAt: params.intelUpdatedAt ?? null,
       });
 
       return this.getIpRecordById(result.lastInsertRowid as number)!;

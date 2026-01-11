@@ -309,6 +309,7 @@ Stores raw IP addresses associated with authors (captured via iframe).
 - `isTor` INTEGER (BOOLEAN 0/1)
 - `isDatacenter` INTEGER (BOOLEAN 0/1)
 - `countryCode` TEXT
+- `intelUpdatedAt` INTEGER
 - `firstSeenAt` INTEGER NOT NULL
 - `lastSeenAt` INTEGER NOT NULL
 
@@ -365,6 +366,7 @@ These settings are configured on the HTTP server, not in the challenge package:
 
 - `iframeProvider`: Which CAPTCHA provider to use (turnstile, hcaptcha, self-hosted)
 - `contentAnalysis`: Whether to analyze publication content for spam patterns
+- `ipInfoToken`: IPinfo token for IP intelligence lookups (env `IPINFO_TOKEN`)
 
 ## Key Design Decisions
 
@@ -373,12 +375,14 @@ These settings are configured on the HTTP server, not in the challenge package:
 - **Primary Challenge Provider:** Cloudflare Turnstile (free, privacy-friendly)
 - **Error Handling:** Always throw on server errors (no silent failures)
 - **IP Storage:** Raw IPs stored (not hashed) for accurate analysis
+- **IP Intelligence:** IPinfo (external HTTP API, best-effort)
 - **Ephemeral Sessions:** Challenge sessions auto-purge after 1 hour
 
 ## Privacy Considerations
 
 - Raw IPs are stored for spam detection purposes
 - Content analysis is performed on the server
+- IP intelligence lookups are sent to IPinfo when enabled
 - All data is visible to the server operator
 - Open source for auditability
 - Explanation field shows reasoning for scores

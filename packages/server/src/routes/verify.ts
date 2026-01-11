@@ -29,7 +29,9 @@ export function registerVerifyRoute(
         reply.status(400);
         return {
           success: false,
-          error: `Invalid request body: ${parseResult.error.issues.map((issue) => issue.message).join(", ")}`,
+          error: `Invalid request body: ${parseResult.error.issues
+            .map((issue) => issue.message)
+            .join(", ")}`,
         };
       }
 
@@ -84,7 +86,7 @@ export function registerVerifyRoute(
       db.updateChallengeSessionStatus(challengeId, "completed", now);
 
       // Get IP record if available
-      const ipRecord = db.getIpRecordByChallengeId(challengeId);
+      const ipRecord = db.getIpRecordByChallengeId(challengeId); // TODO shouldn't it always be defined since /verify is called after iframe?
 
       // Build response with IP intelligence data if available
       const response: VerifyResponse = {

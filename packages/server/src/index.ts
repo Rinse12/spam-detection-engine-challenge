@@ -15,6 +15,8 @@ export interface ServerConfig {
   turnstileSiteKey?: string;
   /** Cloudflare Turnstile secret key */
   turnstileSecretKey?: string;
+  /** IPinfo token for IP intelligence lookups */
+  ipInfoToken?: string;
   /** Enable request logging. Default: true */
   logging?: boolean;
 }
@@ -36,6 +38,7 @@ export function createServer(config: ServerConfig = {}): SpamDetectionServer {
     baseUrl = `http://localhost:${port}`,
     databasePath = ":memory:",
     turnstileSiteKey,
+    ipInfoToken,
     logging = true,
   } = config;
 
@@ -63,6 +66,7 @@ export function createServer(config: ServerConfig = {}): SpamDetectionServer {
     db,
     baseUrl,
     turnstileSiteKey,
+    ipInfoToken,
   });
 
   // Error handler
@@ -115,6 +119,7 @@ if (isMainModule) {
     databasePath: process.env.DATABASE_PATH ?? "spam_detection.db",
     turnstileSiteKey: process.env.TURNSTILE_SITE_KEY,
     turnstileSecretKey: process.env.TURNSTILE_SECRET_KEY,
+    ipInfoToken: process.env.IPINFO_TOKEN,
     logging: process.env.LOG_LEVEL !== "silent",
   });
 

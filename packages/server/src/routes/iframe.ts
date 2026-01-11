@@ -1,10 +1,12 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import type { SpamDetectionDatabase } from "../db/index.js";
 import { IframeParamsSchema, type IframeParams } from "./schemas.js";
+import { refreshIpIntelIfNeeded } from "../ip-intel/index.js";
 
 export interface IframeRouteOptions {
   db: SpamDetectionDatabase;
   turnstileSiteKey?: string;
+  ipInfoToken?: string;
 }
 
 /**
@@ -14,7 +16,7 @@ export function registerIframeRoute(
   fastify: FastifyInstance,
   options: IframeRouteOptions
 ): void {
-  const { db, turnstileSiteKey } = options;
+  const { db, turnstileSiteKey, ipInfoToken } = options;
 
   fastify.get(
     "/api/v1/iframe/:challengeId",
@@ -69,6 +71,17 @@ export function registerIframeRoute(
           author: session.author,
           challengeId,
         });
+
+        if (ipInfoToken) {
+          void refreshIpIntelIfNeeded({
+            db,
+            ipAddress: clientIp,
+            author: session.author,
+            token: ipInfoToken,
+          }).catch((error) => {
+            request.log.warn({ err: error }, "Failed to refresh IP intelligence");
+          });
+        }
       }
 
       // Serve the iframe HTML

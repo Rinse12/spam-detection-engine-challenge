@@ -111,6 +111,7 @@ CREATE TABLE IF NOT EXISTS ipRecords (
   isTor INTEGER DEFAULT 0,
   isDatacenter INTEGER DEFAULT 0,
   countryCode TEXT,
+  intelUpdatedAt INTEGER,
   firstSeenAt INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
   lastSeenAt INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
 );
