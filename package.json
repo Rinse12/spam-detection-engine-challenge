@@ -1,0 +1,11 @@
+{
+  "name": "spam-detection-engine",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm run -w @plebbit/spam-detection-shared build && npm run -w @plebbit/spam-detection-challenge build"
+  }
+}

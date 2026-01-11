@@ -1,0 +1,37 @@
+{
+  "name": "@plebbit/spam-detection-challenge",
+  "version": "0.0.0",
+  "description": "Plebbit spam detection challenge implementation",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "package.json"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@plebbit/spam-detection-shared": "file:../shared"
+  },
+  "peerDependencies": {
+    "@plebbit/plebbit-js": ">=0.0.0"
+  },
+  "devDependencies": {
+    "@plebbit/plebbit-js": "https://github.com/plebbit/plebbit-js#3a70ec2b97a4fe2ed53f7746d69e9ec6a00dc324",
+    "typescript": "^5.6.3"
+  }
+}
