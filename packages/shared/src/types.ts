@@ -3,7 +3,6 @@ import { z } from "zod";
 
 const ISO_COUNTRY_CODE_REGEX = /^[A-Z]{2}$/;
 
-
 const isIsoCountryCode = (value: string) =>
   ISO_COUNTRY_CODE_REGEX.test(value) && countries.isValid(value);
 
@@ -16,17 +15,17 @@ export const IsoCountryCodeSchema = z
   });
 
 export const EvaluateResponseSchema = z.object({
-  riskScore: z.number(),
+  riskScore: z.number(), // TODO should be between 0 and 1
   explanation: z.string().optional(),
-  challengeId: z.string(),
-  challengeUrl: z.string(),
-  challengeExpiresAt: z.number().optional(),
+  challengeId: z.string(), // TODO validate to be a proper challenge ID
+  challengeUrl: z.string(), // TODO validate to be a proper URL
+  challengeExpiresAt: z.number().optional(), // TODO validate to be a proper timestamp
 });
 
 export const VerifyResponseSchema = z.object({
   success: z.boolean(),
   error: z.string().optional(),
-  ipRisk: z.number().optional(),
+  ipRisk: z.number().optional(), // TODO should be between 0 and 1
   ipAddressCountry: IsoCountryCodeSchema.optional(),
   challengeType: z.string().optional(),
   ipTypeEstimation: z.string().optional(),

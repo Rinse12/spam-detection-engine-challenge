@@ -118,7 +118,7 @@ export const createOptionsSchema = (
       .object({
         serverUrl: z.preprocess(
           normalizeServerUrlInput,
-          z.string().url().refine(isHttpUrl, {
+          z.url().refine(isHttpUrl, {
             message: "Server URL must use http or https",
           })
         ),

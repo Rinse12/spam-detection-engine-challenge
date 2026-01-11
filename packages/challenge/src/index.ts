@@ -119,28 +119,11 @@ const getPublicationFromRequest = (
   ] as const;
   for (const key of publicationKeys) {
     const maybePublication = challengeRequestMessage[key];
-    if (maybePublication && typeof maybePublication === "object") {
-      return maybePublication as { author?: { address?: string } };
-    }
+    if (maybePublication) return maybePublication;
   }
-  const genericPublication = (
-    challengeRequestMessage as { publication?: unknown }
-  ).publication;
-  if (genericPublication && typeof genericPublication === "object") {
-    return genericPublication as { author?: { address?: string } };
-  }
-  return undefined; // TODO it should not return undefined, there's no sceneario where publication is undefined
-};
-
-const getAuthorAddress = (
-  challengeRequestMessage: DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor
-) => {
-  const publication = getPublicationFromRequest(challengeRequestMessage);
-  const authorAddress = publication?.author?.address;
-  if (typeof authorAddress === "string" && authorAddress.length > 0) {
-    return authorAddress;
-  }
-  return undefined;
+  throw Error(
+    "Can't find publication. Are you sure this challenge is up to date and can detect all publications?"
+  );
 };
 
 const readResponseText = async (response: Response) => {
@@ -242,10 +225,6 @@ const getChallenge = async (
   _challengeIndex: number
 ): Promise<ChallengeInput | ChallengeResultInput> => {
   const options = parseOptions(subplebbitChallengeSettings);
-  const authorAddress = getAuthorAddress(challengeRequestMessage);
-  if (!authorAddress) {
-    throw new Error("Author address is required for spam detection challenge");
-  }
 
   const evaluateResponse = parseWithSchema<EvaluateResponse>(
     EvaluateResponseSchema,
@@ -253,7 +232,7 @@ const getChallenge = async (
     "evaluate"
   );
   const riskScore = evaluateResponse.riskScore;
-  
+
   if (!Number.isFinite(riskScore)) {
     throw new Error("Spam detection server returned invalid riskScore");
   }
@@ -300,7 +279,6 @@ const getChallenge = async (
       await postJson(`${options.serverUrl}/challenge/verify`, {
         challengeId,
         token,
-        authorAddress,
       }),
       "verify"
     );
