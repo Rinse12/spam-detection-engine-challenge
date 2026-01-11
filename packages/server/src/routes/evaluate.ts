@@ -57,14 +57,6 @@ export function registerEvaluateRoute(
         throw invalidError;
       }
 
-      if (!publication.author?.address || !publication.subplebbitAddress) {
-        const invalidError = new Error(
-          "Invalid request body: missing required fields"
-        );
-        (invalidError as { statusCode?: number }).statusCode = 400;
-        throw invalidError;
-      }
-
       const author = publication.author.address;
       const subplebbitAddress = publication.subplebbitAddress;
 
