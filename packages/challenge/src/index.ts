@@ -11,14 +11,13 @@ import type {
 } from "@plebbit/spam-detection-shared";
 import {
   EvaluateResponseSchema,
-  IsoCountryCodeSchema,
   VerifyResponseSchema,
 } from "@plebbit/spam-detection-shared";
-import { z } from "zod";
+import { createOptionsSchema, type ParsedOptions } from "./schema.js";
 
 const DEFAULT_SERVER_URL = "https://spam.plebbit.org/api/v1"; // TODO once we have a server we will change this url
 
-const optionInputs = <NonNullable<ChallengeFileInput["optionInputs"]>>[
+const optionInputs = [
   {
     option: "serverUrl",
     label: "Server URL",
@@ -87,109 +86,17 @@ const optionInputs = <NonNullable<ChallengeFileInput["optionInputs"]>>[
       "Reject publications from datacenter IPs (estimation only, not 100% accurate)",
     placeholder: "true",
   },
-];
+] as const satisfies NonNullable<ChallengeFileInput["optionInputs"]>;
+
+const OptionsSchema = createOptionsSchema(optionInputs);
 
 const type: ChallengeInput["type"] = "url/iframe";
 
 const description: ChallengeFileInput["description"] =
   "Validate publications using the Plebbit spam detection engine.";
 
-const normalizeServerUrl = (url: string) => url.replace(/\/+$/, "");
-
-const numberOptionSchema = (label: string, fallback: number) =>
-  z.string().optional().transform((value, ctx) => {
-    const normalized = value?.trim();
-    if (!normalized) return fallback;
-    const parsed = Number(normalized);
-    if (!Number.isFinite(parsed)) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: `Invalid ${label} option '${value}'`,
-      });
-      return z.NEVER;
-    }
-    return parsed;
-  });
-
-const booleanOptionSchema = z.string().optional().transform((value) => {
-  const normalized = value?.trim().toLowerCase();
-  if (!normalized) return false;
-  return ["true", "1", "yes", "y"].includes(normalized);
-});
-
-const countryBlacklistSchema = z
-  .string()
-  .optional()
-  .transform((value, ctx) => {
-    if (!value) return new Set<string>();
-    const entries = value
-      .split(",")
-      .map((entry) => entry.trim())
-      .filter(Boolean);
-    const codes = new Set<string>();
-    for (const entry of entries) {
-      const parsed = IsoCountryCodeSchema.safeParse(entry);
-      if (!parsed.success) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: `Unknown ISO 3166-1 alpha-2 country code '${entry}' in countryBlacklist`,
-        });
-        return z.NEVER;
-      }
-      codes.add(parsed.data);
-    }
-    return codes;
-  });
-
-const OptionsSchema = z
-  .object({
-    serverUrl: z.string().optional().transform((value, ctx) => {
-      const normalizedInput = value?.trim();
-      const raw = normalizedInput ? normalizedInput : DEFAULT_SERVER_URL;
-      const normalized = normalizeServerUrl(raw);
-      if (!normalized) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "Server URL option is required",
-        });
-        return z.NEVER;
-      }
-      return normalized;
-    }),
-    autoAcceptThreshold: numberOptionSchema("autoAcceptThreshold", 0.2).refine(
-      (value) => value >= 0 && value <= 1,
-      { message: "autoAcceptThreshold must be between 0 and 1" }
-    ),
-    autoRejectThreshold: numberOptionSchema("autoRejectThreshold", 0.8).refine(
-      (value) => value >= 0 && value <= 1,
-      { message: "autoRejectThreshold must be between 0 and 1" }
-    ),
-    countryBlacklist: countryBlacklistSchema,
-    maxIpRisk: numberOptionSchema("maxIpRisk", 1.0).refine(
-      (value) => value >= 0 && value <= 1,
-      { message: "maxIpRisk must be between 0 and 1" }
-    ),
-    blockVpn: booleanOptionSchema,
-    blockProxy: booleanOptionSchema,
-    blockTor: booleanOptionSchema,
-    blockDatacenter: booleanOptionSchema,
-  })
-  .superRefine((data, ctx) => {
-    if (data.autoAcceptThreshold > data.autoRejectThreshold) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message:
-          "autoAcceptThreshold must be less than or equal to autoRejectThreshold",
-        path: ["autoAcceptThreshold"],
-      });
-    }
-  });
-
-type ParsedOptions = z.infer<typeof OptionsSchema>;
-
 const parseOptions = (settings: SubplebbitChallengeSetting): ParsedOptions => {
-  const rawOptions = settings?.options || {};
-  const parsed = OptionsSchema.safeParse(rawOptions);
+  const parsed = OptionsSchema.safeParse(settings?.options);
   if (!parsed.success) {
     const message = parsed.error.issues
       .map((issue) => issue.message)
@@ -346,6 +253,7 @@ const getChallenge = async (
     "evaluate"
   );
   const riskScore = evaluateResponse.riskScore;
+  
   if (!Number.isFinite(riskScore)) {
     throw new Error("Spam detection server returned invalid riskScore");
   }

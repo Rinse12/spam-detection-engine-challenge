@@ -325,15 +325,15 @@ Implements plebbit-js `ChallengeFileFactory`:
 
 | Option                | Default                           | Description                                                                    |
 | --------------------- | --------------------------------- | ------------------------------------------------------------------------------ |
-| `serverUrl`           | `https://spam.plebbit.org/api/v1` | URL of the spam detection server                                               |
+| `serverUrl`           | `https://spam.plebbit.org/api/v1` | URL of the spam detection server (must be http/https)                          |
 | `autoAcceptThreshold` | `0.2`                             | Auto-accept publications below this risk score                                 |
 | `autoRejectThreshold` | `0.8`                             | Auto-reject publications above this risk score                                 |
 | `countryBlacklist`    | `""`                              | Comma-separated ISO 3166-1 alpha-2 country codes to block (e.g., `"RU,CN,KP"`) |
 | `maxIpRisk`           | `1.0`                             | Reject if ipRisk from /verify exceeds this threshold                           |
-| `blockVpn`            | `false`                           | Reject publications from VPN IPs                                               |
-| `blockProxy`          | `false`                           | Reject publications from proxy IPs                                             |
-| `blockTor`            | `false`                           | Reject publications from Tor exit nodes                                        |
-| `blockDatacenter`     | `false`                           | Reject publications from datacenter IPs                                        |
+| `blockVpn`            | `false`                           | Reject publications from VPN IPs (`true`/`false` only)                          |
+| `blockProxy`          | `false`                           | Reject publications from proxy IPs (`true`/`false` only)                        |
+| `blockTor`            | `false`                           | Reject publications from Tor exit nodes (`true`/`false` only)                   |
+| `blockDatacenter`     | `false`                           | Reject publications from datacenter IPs (`true`/`false` only)                   |
 
 **Post-challenge filtering:** After a user completes a challenge, the `/verify` response includes IP intelligence data. The challenge code uses the above options to reject publications even after successful challenge completion (e.g., if the user is from a blacklisted country or using a VPN).
 
