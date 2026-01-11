@@ -25,11 +25,12 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@plebbit/spam-detection-shared": "file:../shared",
     "@plebbit/plebbit-js": "https://github.com/plebbit/plebbit-js#3a70ec2b97a4fe2ed53f7746d69e9ec6a00dc324",
+    "@plebbit/spam-detection-shared": "file:../shared",
     "zod": "4.3.5"
   },
   "devDependencies": {
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "vitest": "4.0.16"
   }
 }
