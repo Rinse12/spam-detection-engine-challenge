@@ -217,82 +217,84 @@ When a user completes the iframe challenge:
 
 **Tables:**
 
+Author columns store the full `author` object from each publication (for example, `DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor.comment.author`).
+
 ### `comments`
 
 Stores comment publications for analysis and rate limiting.
 
 - `id` INTEGER PRIMARY KEY
-- `author_address` TEXT NOT NULL
-- `subplebbit_address` TEXT NOT NULL
-- `parent_cid` TEXT (null for posts, set for replies)
+- `author` TEXT NOT NULL
+- `subplebbitAddress` TEXT NOT NULL
+- `parentCid` TEXT (null for posts, set for replies)
 - `content` TEXT
 - `link` TEXT
 - `timestamp` INTEGER NOT NULL
-- `risk_score` REAL
-- `created_at` INTEGER NOT NULL
+- `riskScore` REAL
+- `createdAt` INTEGER NOT NULL
 
 ### `votes`
 
 Stores vote publications.
 
 - `id` INTEGER PRIMARY KEY
-- `author_address` TEXT NOT NULL
-- `subplebbit_address` TEXT NOT NULL
-- `comment_cid` TEXT NOT NULL
-- `vote` INTEGER NOT NULL (-1 or 1)
+- `author` TEXT NOT NULL
+- `subplebbitAddress` TEXT NOT NULL
+- `commentCid` TEXT NOT NULL
+- `vote` INTEGER NOT NULL (-1, 0 or 1)
 - `timestamp` INTEGER NOT NULL
-- `created_at` INTEGER NOT NULL
+- `createdAt` INTEGER NOT NULL
 
-### `comment_edits`
+### `commentEdits`
 
 Stores comment edit publications.
 
 - `id` INTEGER PRIMARY KEY
-- `author_address` TEXT NOT NULL
-- `subplebbit_address` TEXT NOT NULL
-- `comment_cid` TEXT NOT NULL
+- `author` TEXT NOT NULL
+- `subplebbitAddress` TEXT NOT NULL
+- `commentCid` TEXT NOT NULL
 - `timestamp` INTEGER NOT NULL
-- `created_at` INTEGER NOT NULL
+- `createdAt` INTEGER NOT NULL
 
-### `comment_moderations`
+### `commentModerations`
 
 Stores comment moderation publications.
 
 - `id` INTEGER PRIMARY KEY
-- `author_address` TEXT NOT NULL
-- `subplebbit_address` TEXT NOT NULL
-- `comment_cid` TEXT NOT NULL
+- `author` TEXT NOT NULL
+- `subplebbitAddress` TEXT NOT NULL
+- `commentCid` TEXT NOT NULL
 - `timestamp` INTEGER NOT NULL
-- `created_at` INTEGER NOT NULL
+- `createdAt` INTEGER NOT NULL
 
-### `challenge_sessions` (ephemeral)
+### `challengeSessions` (ephemeral)
 
 Tracks pending challenges. **Automatically purged after 1 hour.**
 
 - `id` INTEGER PRIMARY KEY
-- `challenge_id` TEXT NOT NULL UNIQUE
-- `author_address` TEXT NOT NULL
-- `subplebbit_address` TEXT NOT NULL
+- `challengeId` TEXT NOT NULL UNIQUE
+- `author` TEXT NOT NULL
+- `subplebbitAddress` TEXT NOT NULL
 - `status` TEXT DEFAULT 'pending' (pending, completed, failed)
-- `completed_at` INTEGER
-- `expires_at` INTEGER NOT NULL
-- `created_at` INTEGER NOT NULL
+- `completedAt` INTEGER
+- `expiresAt` INTEGER NOT NULL
+- `createdAt` INTEGER NOT NULL
 
-### `ip_records`
+### `ipRecords`
 
 Stores raw IP addresses associated with authors (captured via iframe).
 
 - `id` INTEGER PRIMARY KEY
-- `ip_address` TEXT NOT NULL
-- `author_address` TEXT NOT NULL
-- `challenge_id` TEXT
-- `is_vpn` INTEGER
-- `is_proxy` INTEGER
-- `is_tor` INTEGER
-- `is_datacenter` INTEGER
-- `country_code` TEXT
-- `first_seen_at` INTEGER NOT NULL
-- `last_seen_at` INTEGER NOT NULL
+- `ipAddress` TEXT NOT NULL
+- `author` TEXT NOT NULL
+- `challengeId` TEXT
+- `isVpn` INTEGER
+- `isProxy` INTEGER
+- `isTor` INTEGER
+- `isDatacenter` INTEGER
+- `countryCode` TEXT
+- `firstSeenAt` INTEGER NOT NULL
+- `lastSeenAt` INTEGER NOT NULL
 
 ## Challenge Code (npm package)
 
