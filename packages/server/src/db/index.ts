@@ -564,6 +564,125 @@ export class SpamDetectionDatabase {
     // ============================================
 
     /**
+     * Get the latest karma (postScore + replyScore) per subplebbit for an author.
+     * Only counts the most recent karma from each subplebbit to avoid summing duplicates.
+     * Returns a map of subplebbitAddress -> { postScore, replyScore, receivedAt }
+     */
+    getAuthorKarmaBySubplebbit(authorAddress: string): Map<string, { postScore: number; replyScore: number; receivedAt: number }> {
+        const karmaMap = new Map<string, { postScore: number; replyScore: number; receivedAt: number }>();
+
+        // Helper to update karma map with newer data only
+        const updateKarmaMap = (
+            subplebbitAddress: string,
+            postScore: number,
+            replyScore: number,
+            receivedAt: number
+        ) => {
+            const existing = karmaMap.get(subplebbitAddress);
+            if (!existing || receivedAt > existing.receivedAt) {
+                karmaMap.set(subplebbitAddress, { postScore, replyScore, receivedAt });
+            }
+        };
+
+        // Query comments for karma data
+        const commentRows = this.db
+            .prepare(
+                `SELECT
+                    subplebbitAddress,
+                    COALESCE(json_extract(author, '$.subplebbit.postScore'), 0) as postScore,
+                    COALESCE(json_extract(author, '$.subplebbit.replyScore'), 0) as replyScore,
+                    receivedAt
+                 FROM comments
+                 WHERE json_extract(author, '$.address') = ?
+                 ORDER BY receivedAt DESC`
+            )
+            .all(authorAddress) as Array<{ subplebbitAddress: string; postScore: number; replyScore: number; receivedAt: number }>;
+
+        for (const row of commentRows) {
+            updateKarmaMap(row.subplebbitAddress, row.postScore, row.replyScore, row.receivedAt);
+        }
+
+        // Query votes for karma data
+        const voteRows = this.db
+            .prepare(
+                `SELECT
+                    subplebbitAddress,
+                    COALESCE(json_extract(author, '$.subplebbit.postScore'), 0) as postScore,
+                    COALESCE(json_extract(author, '$.subplebbit.replyScore'), 0) as replyScore,
+                    receivedAt
+                 FROM votes
+                 WHERE json_extract(author, '$.address') = ?
+                 ORDER BY receivedAt DESC`
+            )
+            .all(authorAddress) as Array<{ subplebbitAddress: string; postScore: number; replyScore: number; receivedAt: number }>;
+
+        for (const row of voteRows) {
+            updateKarmaMap(row.subplebbitAddress, row.postScore, row.replyScore, row.receivedAt);
+        }
+
+        // Query comment edits for karma data
+        const editRows = this.db
+            .prepare(
+                `SELECT
+                    subplebbitAddress,
+                    COALESCE(json_extract(author, '$.subplebbit.postScore'), 0) as postScore,
+                    COALESCE(json_extract(author, '$.subplebbit.replyScore'), 0) as replyScore,
+                    receivedAt
+                 FROM commentEdits
+                 WHERE json_extract(author, '$.address') = ?
+                 ORDER BY receivedAt DESC`
+            )
+            .all(authorAddress) as Array<{ subplebbitAddress: string; postScore: number; replyScore: number; receivedAt: number }>;
+
+        for (const row of editRows) {
+            updateKarmaMap(row.subplebbitAddress, row.postScore, row.replyScore, row.receivedAt);
+        }
+
+        // Query comment moderations for karma data
+        const moderationRows = this.db
+            .prepare(
+                `SELECT
+                    subplebbitAddress,
+                    COALESCE(json_extract(author, '$.subplebbit.postScore'), 0) as postScore,
+                    COALESCE(json_extract(author, '$.subplebbit.replyScore'), 0) as replyScore,
+                    receivedAt
+                 FROM commentModerations
+                 WHERE json_extract(author, '$.address') = ?
+                 ORDER BY receivedAt DESC`
+            )
+            .all(authorAddress) as Array<{ subplebbitAddress: string; postScore: number; replyScore: number; receivedAt: number }>;
+
+        for (const row of moderationRows) {
+            updateKarmaMap(row.subplebbitAddress, row.postScore, row.replyScore, row.receivedAt);
+        }
+
+        return karmaMap;
+    }
+
+    /**
+     * Get the total aggregated karma for an author across all subplebbits in our database.
+     * Only counts the latest karma from each subplebbit to avoid summing duplicates.
+     * Returns { totalPostScore, totalReplyScore, subplebbitCount }
+     */
+    getAuthorAggregatedKarma(authorAddress: string): { totalPostScore: number; totalReplyScore: number; subplebbitCount: number } {
+        const karmaMap = this.getAuthorKarmaBySubplebbit(authorAddress);
+
+        let totalPostScore = 0;
+        let totalReplyScore = 0;
+
+        for (const karma of karmaMap.values()) {
+            totalPostScore += karma.postScore;
+            totalReplyScore += karma.replyScore;
+        }
+
+        return {
+            totalPostScore,
+            totalReplyScore,
+            subplebbitCount: karmaMap.size
+        };
+    }
+
+    /**
      * Get the earliest receivedAt timestamp for an author across all publication types.
      * This represents when we first saw this author in our own database.
      * Returns undefined if the author has no publications in our database.

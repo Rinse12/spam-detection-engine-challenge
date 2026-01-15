@@ -48,7 +48,21 @@ This dual-source approach ensures we capture the earliest known activity even wh
 
 ### 2. Karma Score (Weight: 13% without IP, 8% with IP)
 
-Evaluates the author's accumulated karma (`postScore + replyScore`) from `author.subplebbit`.
+Evaluates the author's accumulated karma (`postScore + replyScore`) using a weighted combination of:
+
+1. **Current subplebbit karma** (70% weight): From `author.subplebbit` (TRUSTED)
+2. **Other subplebbits karma** (30% weight): Aggregated from the spam detection database
+
+This dual-source approach gives priority to the author's reputation in the current subplebbit while still considering their cross-community reputation. A user who is problematic in one subplebbit won't automatically get a pass just because they have good karma elsewhere.
+
+**Karma aggregation from database:**
+- Only the **latest** karma per subplebbit is counted (avoids summing duplicates)
+- Karma is extracted from stored publications (comments, votes, edits, moderations)
+- The current subplebbit's karma from the challenge request is always used (most recent and direct from subplebbit)
+
+**Weighted calculation:**
+- If no other subs in DB: `totalKarma = currentSubKarma`
+- If other subs exist: `totalKarma = (currentSubKarma × 0.7) + (otherSubsKarma × 0.3)`
 
 | Total Karma | Risk Score | Description                       |
 | ----------- | ---------- | --------------------------------- |
@@ -59,7 +73,7 @@ Evaluates the author's accumulated karma (`postScore + replyScore`) from `author
 | >= -10      | 0.70       | Negative karma                    |
 | < -10       | 0.90       | Very negative karma (problematic) |
 
-**Rationale**: Karma reflects community trust. High karma indicates valued contributions; negative karma indicates problematic behavior.
+**Rationale**: Karma reflects community trust. High karma indicates valued contributions; negative karma indicates problematic behavior. Weighting current sub karma higher ensures that an author's local reputation takes precedence over their global reputation.
 
 ### 3. Author Reputation (Weight: 25% without IP, 20% with IP)
 
@@ -212,7 +226,6 @@ Publications between these thresholds trigger a challenge (e.g., CAPTCHA).
 
 ## Future Improvements
 
-- Cross-subplebbit reputation aggregation
 - Challenge completion history tracking
 - Machine learning-based content analysis
 - Moderation action history integration
