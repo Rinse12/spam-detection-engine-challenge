@@ -10,3 +10,4 @@
 - keep in mind that subplebbit.address can be a domain, and in that case if we need to get its public key we need to resolve it using plebbit-js library
 - In general there should not be a need for dynamic imports, static imports should work
 - No need to plan migration strategy for existing data. Assume we have no data on DB right now
+- When you make updates to how risk score is calculated you need to update README.md when you do a git commit as well
