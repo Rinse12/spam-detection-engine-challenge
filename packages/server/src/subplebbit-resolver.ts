@@ -35,7 +35,7 @@ export const resolveSubplebbitPublicKey = async (subplebbitAddress: string, pleb
     }
 
     const plebbit = plebbitInstance;
-    const subplebbit = await plebbit.getSubplebbit(subplebbitAddress);
+    const subplebbit = await plebbit.getSubplebbit({ address: subplebbitAddress });
     const publicKey = subplebbit.signature?.publicKey;
     if (!publicKey) {
         throw new Error("Subplebbit signature public key is unavailable");

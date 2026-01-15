@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { RefinementCtx } from "zod";
+import type { DecryptedChallengeRequest } from "@plebbit/plebbit-js/dist/node/pubsub-messages/types.js";
 import {
     DecryptedChallengeRequestSchema,
     JsonSignatureSchema,
@@ -8,33 +9,35 @@ import {
     derivePublicationFromChallengeRequest
 } from "../plebbit-js-internals.js";
 
-const ChallengeRequestWithSubplebbitAuthorSchema = DecryptedChallengeRequestSchema.superRefine((value: unknown, ctx: RefinementCtx) => {
-    try {
-        const publication = derivePublicationFromChallengeRequest(value);
-        const subplebbitAuthor = publication?.author?.subplebbit;
+const ChallengeRequestWithSubplebbitAuthorSchema = DecryptedChallengeRequestSchema.superRefine(
+    (value: DecryptedChallengeRequest, ctx: RefinementCtx) => {
+        try {
+            const publication = derivePublicationFromChallengeRequest(value);
+            const subplebbitAuthor = (publication?.author as { subplebbit?: unknown })?.subplebbit;
 
-        if (!subplebbitAuthor) {
+            if (!subplebbitAuthor) {
+                ctx.addIssue({
+                    code: z.ZodIssueCode.custom,
+                    message: "Missing subplebbit author data"
+                });
+                return;
+            }
+
+            const subplebbitResult = SubplebbitAuthorSchema.safeParse(subplebbitAuthor);
+            if (!subplebbitResult.success) {
+                ctx.addIssue({
+                    code: z.ZodIssueCode.custom,
+                    message: "Invalid subplebbit author data"
+                });
+            }
+        } catch (error) {
             ctx.addIssue({
                 code: z.ZodIssueCode.custom,
-                message: "Missing subplebbit author data"
-            });
-            return;
-        }
-
-        const subplebbitResult = SubplebbitAuthorSchema.safeParse(subplebbitAuthor);
-        if (!subplebbitResult.success) {
-            ctx.addIssue({
-                code: z.ZodIssueCode.custom,
-                message: "Invalid subplebbit author data"
+                message: "Invalid challenge request: missing publication"
             });
         }
-    } catch (error) {
-        ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: "Invalid challenge request: missing publication"
-        });
     }
-});
+);
 
 export const EvaluateRequestSchema = z
     .object({

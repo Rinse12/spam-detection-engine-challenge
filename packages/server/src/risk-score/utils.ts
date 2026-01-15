@@ -1,4 +1,9 @@
-import type { DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor } from "@plebbit/plebbit-js/dist/node/pubsub-messages/types.js";
+import type {
+    DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor,
+    PublicationWithSubplebbitAuthorFromDecryptedChallengeRequest
+} from "@plebbit/plebbit-js/dist/node/pubsub-messages/types.js";
+import type { AuthorTypeWithCommentUpdate } from "@plebbit/plebbit-js/dist/node/types.js";
+import { derivePublicationFromChallengeRequest } from "../plebbit-js-internals.js";
 
 /**
  * Extract the publication from a decrypted challenge request.
@@ -11,34 +16,20 @@ import type { DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor } from "@
  *
  * This helper returns the publication object regardless of type.
  */
-export function getPublicationFromChallengeRequest(challengeRequest: DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor): {
-    author: DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor["comment"] extends { author: infer A } ? A : never;
-    subplebbitAddress: string;
-    timestamp?: number;
-    content?: string;
-    link?: string;
-    title?: string;
-} {
-    // The challenge request contains one of these publication types
-    const publication =
-        challengeRequest.comment ??
-        challengeRequest.vote ??
-        challengeRequest.commentEdit ??
-        challengeRequest.commentModeration ??
-        challengeRequest.subplebbitEdit;
-
-    if (!publication) {
-        throw new Error("No publication found in challenge request");
-    }
-
-    return publication as ReturnType<typeof getPublicationFromChallengeRequest>;
+export function getPublicationFromChallengeRequest(
+    challengeRequest: DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor
+): PublicationWithSubplebbitAuthorFromDecryptedChallengeRequest {
+    return derivePublicationFromChallengeRequest(challengeRequest);
 }
 
 /**
  * Get the author from a challenge request.
  */
-export function getAuthorFromChallengeRequest(challengeRequest: DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor) {
+export function getAuthorFromChallengeRequest(
+    challengeRequest: DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor
+): AuthorTypeWithCommentUpdate {
     const publication = getPublicationFromChallengeRequest(challengeRequest);
+
     return publication.author;
 }
 
@@ -91,10 +82,7 @@ export interface WalletInfo {
  * Note: author.wallets and author.avatar are user-provided but the signatures
  * are verified by plebbit-js, proving wallet ownership.
  */
-export function getWalletAddresses(author: {
-    wallets?: Record<string, { address: string; timestamp: number; signature: { signature: string; type: string } }>;
-    avatar?: { chainTicker: string; address: string; id: string; timestamp: number; signature: { signature: string; type: string } };
-}): WalletInfo[] {
+export function getWalletAddresses(author: Pick<AuthorTypeWithCommentUpdate, "wallets" | "avatar">): WalletInfo[] {
     const wallets: WalletInfo[] = [];
 
     // Extract from author.wallets (keyed by chain ticker)

@@ -1,6 +1,7 @@
 import path from "path";
 import { createRequire } from "module";
 import { pathToFileURL } from "url";
+import type { derivePublicationFromChallengeRequest as derivePublicationFromChallengeRequestType } from "@plebbit/plebbit-js/dist/node/util.js";
 
 const require = createRequire(import.meta.url);
 const plebbitEntry = require.resolve("@plebbit/plebbit-js");
@@ -13,8 +14,10 @@ const utilUrl = pathToFileURL(path.join(plebbitRoot, "dist/node/util.js")).href;
 const [
     { DecryptedChallengeRequestSchema },
     { JsonSignatureSchema, PlebbitTimestampSchema, SubplebbitAuthorSchema },
-    { derivePublicationFromChallengeRequest, isStringDomain }
+    { derivePublicationFromChallengeRequest: _derivePublicationFromChallengeRequest, isStringDomain }
 ] = await Promise.all([import(pubsubSchemaUrl), import(schemaUrl), import(utilUrl)]);
+
+const derivePublicationFromChallengeRequest = _derivePublicationFromChallengeRequest as typeof derivePublicationFromChallengeRequestType;
 
 export {
     DecryptedChallengeRequestSchema,

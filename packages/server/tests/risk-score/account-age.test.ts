@@ -129,7 +129,9 @@ describe("calculateAccountAge", () => {
             });
 
             // Manually set receivedAt to simulate old record
-            db.getDb().prepare("UPDATE challengeSessions SET receivedChallengeRequestAt = ? WHERE challengeId = ?").run(dbFirstSeen, challengeId);
+            db.getDb()
+                .prepare("UPDATE challengeSessions SET receivedChallengeRequestAt = ? WHERE challengeId = ?")
+                .run(dbFirstSeen, challengeId);
 
             db.insertComment({
                 challengeId,

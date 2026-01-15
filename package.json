@@ -15,5 +15,8 @@
         "husky": "^9.1.7",
         "prettier": "^3.8.0",
         "typescript": "5.9.3"
+    },
+    "dependencies": {
+        "@plebbit/plebbit-js": "file:../plebbit-js"
     }
 }

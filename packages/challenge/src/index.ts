@@ -2,10 +2,8 @@ import type {
     ChallengeFileInput,
     ChallengeInput,
     ChallengeResultInput,
-    SubplebbitChallengeSetting
+    GetChallengeArgs
 } from "@plebbit/plebbit-js/dist/node/subplebbit/types.js";
-import type { DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor } from "@plebbit/plebbit-js/dist/node/pubsub-messages/types.js";
-import type { LocalSubplebbit } from "@plebbit/plebbit-js/dist/node/runtime/node/subplebbit/local-subplebbit.js";
 import { signBufferEd25519 } from "./plebbit-js-signer.js";
 import type { EvaluateResponse, VerifyResponse } from "@easy-community-spam-blocker/shared";
 import { EvaluateResponseSchema, VerifyResponseSchema } from "@easy-community-spam-blocker/shared";
@@ -87,7 +85,7 @@ const type: ChallengeInput["type"] = "url/iframe";
 
 const description: ChallengeFileInput["description"] = "Validate publications using EasyCommunitySpamBlocker.";
 
-const parseOptions = (settings: SubplebbitChallengeSetting): ParsedOptions => {
+const parseOptions = (settings: GetChallengeArgs["challengeSettings"]): ParsedOptions => {
     const parsed = OptionsSchema.safeParse(settings?.options);
     if (!parsed.success) {
         const message = parsed.error.issues.map((issue) => issue.message).join("; ");
@@ -206,13 +204,9 @@ const getPostChallengeRejection = (verifyResponse: VerifyResponse, options: Pars
     return undefined;
 };
 
-const getChallenge = async (
-    subplebbitChallengeSettings: SubplebbitChallengeSetting,
-    challengeRequestMessage: DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor,
-    _challengeIndex: number,
-    subplebbit: LocalSubplebbit
-): Promise<ChallengeInput | ChallengeResultInput> => {
-    const options = parseOptions(subplebbitChallengeSettings);
+const getChallenge = async (args: GetChallengeArgs): Promise<ChallengeInput | ChallengeResultInput> => {
+    const { challengeSettings, challengeRequestMessage, subplebbit } = args;
+    const options = parseOptions(challengeSettings);
     const signer = subplebbit?.signer;
 
     if (!signer) {
@@ -290,7 +284,7 @@ const getChallenge = async (
     return { challenge: challengeUrl, verify, type };
 };
 
-function ChallengeFileFactory(subplebbitChallengeSettings: SubplebbitChallengeSetting): ChallengeFileInput {
+function ChallengeFileFactory(subplebbitChallengeSettings: GetChallengeArgs["challengeSettings"]): ChallengeFileInput {
     return { getChallenge, optionInputs, type, description };
 }
 
