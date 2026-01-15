@@ -1024,11 +1024,7 @@ export class SpamDetectionDatabase {
      * @param params.sinceTimestamp - Only count links posted after this timestamp
      * @returns Object with count of posts and unique authors
      */
-    findLinksByOthers(params: {
-        authorAddress: string;
-        link: string;
-        sinceTimestamp: number;
-    }): { count: number; uniqueAuthors: number } {
+    findLinksByOthers(params: { authorAddress: string; link: string; sinceTimestamp: number }): { count: number; uniqueAuthors: number } {
         const { authorAddress, link, sinceTimestamp } = params;
 
         const result = this.db

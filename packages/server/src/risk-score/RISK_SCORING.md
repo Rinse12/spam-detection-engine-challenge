@@ -137,28 +137,28 @@ Analyzes comment content and title for spam indicators by querying the database 
 
 Analyzes `comment.link` (the dedicated link field for link posts) for spam indicators. This is separate from URLs found in `comment.content`. **Only applies to comments (posts and replies) that have a link** - returns neutral score (0.5) for other publications or comments without links.
 
-| Indicator                                          | Score Impact | Description                           |
-| -------------------------------------------------- | ------------ | ------------------------------------- |
-| **Same Author - Duplicate Links**                  |              |                                       |
-| 5+ posts with same link from author in 24h         | +0.40        | Heavy link spam                       |
-| 3-4 posts with same link from author in 24h        | +0.25        | Moderate link spam                    |
-| 1-2 posts with same link from author in 24h        | +0.15        | Possible duplicate posting            |
-| **Other Authors - Duplicate Links (Coordinated)**  |              |                                       |
-| 10+ posts with same link from other authors        | +0.50        | Likely coordinated spam campaign      |
-| 5-9 posts with same link from other authors        | +0.35        | Possible coordinated spam             |
-| 2-4 posts with same link from other authors        | +0.20        | Link seen from multiple authors       |
-| 1 post with same link from another author          | +0.10        | Link seen from another author         |
-| **Domain Spam (Same Author)**                      |              |                                       |
-| 10+ links to same domain from author in 24h        | +0.25        | Domain-focused spam                   |
-| 5-9 links to same domain from author in 24h        | +0.15        | Elevated domain promotion             |
-| **Suspicious URL Patterns**                        |              |                                       |
-| Uses URL shortener (bit.ly, tinyurl, etc.)         | +0.15        | Link obfuscation                      |
-| Uses IP address instead of domain                  | +0.20        | Suspicious direct IP link             |
-| Unusually long URL (>500 chars)                    | +0.10        | Possible obfuscation                  |
-| Excessive query parameters (>5)                    | +0.05        | Possible tracking/affiliate link      |
-| Invalid URL format                                 | +0.10        | Malformed link                        |
+| Indicator                                         | Score Impact | Description                      |
+| ------------------------------------------------- | ------------ | -------------------------------- |
+| **Same Author - Duplicate Links**                 |              |                                  |
+| 5+ posts with same link from author in 24h        | +0.40        | Heavy link spam                  |
+| 3-4 posts with same link from author in 24h       | +0.25        | Moderate link spam               |
+| 1-2 posts with same link from author in 24h       | +0.15        | Possible duplicate posting       |
+| **Other Authors - Duplicate Links (Coordinated)** |              |                                  |
+| 10+ posts with same link from other authors       | +0.50        | Likely coordinated spam campaign |
+| 5-9 posts with same link from other authors       | +0.35        | Possible coordinated spam        |
+| 2-4 posts with same link from other authors       | +0.20        | Link seen from multiple authors  |
+| 1 post with same link from another author         | +0.10        | Link seen from another author    |
+| **Domain Spam (Same Author)**                     |              |                                  |
+| 10+ links to same domain from author in 24h       | +0.25        | Domain-focused spam              |
+| 5-9 links to same domain from author in 24h       | +0.15        | Elevated domain promotion        |
+| **Suspicious URL Patterns**                       |              |                                  |
+| Uses URL shortener (bit.ly, tinyurl, etc.)        | +0.15        | Link obfuscation                 |
+| Uses IP address instead of domain                 | +0.20        | Suspicious direct IP link        |
+| Unusually long URL (>500 chars)                   | +0.10        | Possible obfuscation             |
+| Excessive query parameters (>5)                   | +0.05        | Possible tracking/affiliate link |
+| Invalid URL format                                | +0.10        | Malformed link                   |
 
-**Note**: The base score for comments with links starts at 0.2 (low risk). Non-comment publications or comments without links receive a neutral score of 0.5. URL normalization removes tracking parameters (utm_*, fbclid, etc.) before comparison.
+**Note**: The base score for comments with links starts at 0.2 (low risk). Non-comment publications or comments without links receive a neutral score of 0.5. URL normalization removes tracking parameters (utm\_\*, fbclid, etc.) before comparison.
 
 ### 6. Velocity Risk (Weight: 10% without IP, 7% with IP)
 

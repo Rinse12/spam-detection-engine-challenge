@@ -245,10 +245,14 @@ export function calculateCommentUrlRisk(ctx: RiskContext, weight: number): RiskF
 
         if (otherAuthorsResult.count >= 10) {
             score += 0.5;
-            issues.push(`${otherAuthorsResult.count} posts with same link from ${otherAuthorsResult.uniqueAuthors} other authors (likely coordinated spam)`);
+            issues.push(
+                `${otherAuthorsResult.count} posts with same link from ${otherAuthorsResult.uniqueAuthors} other authors (likely coordinated spam)`
+            );
         } else if (otherAuthorsResult.count >= 5) {
             score += 0.35;
-            issues.push(`${otherAuthorsResult.count} posts with same link from ${otherAuthorsResult.uniqueAuthors} other authors (possible coordinated spam)`);
+            issues.push(
+                `${otherAuthorsResult.count} posts with same link from ${otherAuthorsResult.uniqueAuthors} other authors (possible coordinated spam)`
+            );
         } else if (otherAuthorsResult.count >= 2) {
             score += 0.2;
             issues.push(`${otherAuthorsResult.count} posts with same link from other authors`);

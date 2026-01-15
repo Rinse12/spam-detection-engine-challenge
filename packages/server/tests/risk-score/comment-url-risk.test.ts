@@ -108,11 +108,7 @@ describe("calculateCommentUrlRisk", () => {
 
     describe("unique links", () => {
         it("should return low risk score for unique link", () => {
-            const challengeRequest = createMockChallengeRequest(
-                "author1",
-                "https://example.com/unique-article",
-                "Check out this article"
-            );
+            const challengeRequest = createMockChallengeRequest("author1", "https://example.com/unique-article", "Check out this article");
 
             const ctx: RiskContext = {
                 challengeRequest,
@@ -336,10 +332,7 @@ describe("calculateCommentUrlRisk", () => {
         });
 
         it("should detect excessive query parameters", () => {
-            const challengeRequest = createMockChallengeRequest(
-                "author1",
-                "https://example.com/page?a=1&b=2&c=3&d=4&e=5&f=6&g=7"
-            );
+            const challengeRequest = createMockChallengeRequest("author1", "https://example.com/page?a=1&b=2&c=3&d=4&e=5&f=6&g=7");
 
             const ctx: RiskContext = {
                 challengeRequest,
