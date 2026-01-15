@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createDatabase } from "../src/db/index.js";
-import { DEFAULT_TTL_SECONDS, refreshIpIntelIfNeeded } from "../src/ip-intel/index.js";
+import { refreshIpIntelIfNeeded } from "../src/ip-intel/index.js";
 
 describe("IP intelligence", () => {
     let db: ReturnType<typeof createDatabase>;
     let originalFetch: typeof fetch;
+    const subplebbitPublicKey = "test-public-key";
 
     beforeEach(() => {
         db = createDatabase(":memory:");
@@ -17,11 +18,20 @@ describe("IP intelligence", () => {
         vi.restoreAllMocks();
     });
 
-    it("stores ipinfo results and updates intelUpdatedAt", async () => {
-        db.upsertIpRecord({
+    it("stores ipinfo results and updates timestamp", async () => {
+        // First create a challenge session
+        db.insertChallengeSession({
+            challengeId: "challenge",
+            subplebbitPublicKey,
+            expiresAt: Math.floor(Date.now() / 1000) + 3600
+        });
+
+        // Then create an IP record
+        const now = Math.floor(Date.now() / 1000);
+        db.insertIpRecord({
+            challengeId: "challenge",
             ipAddress: "1.1.1.1",
-            author: "author",
-            challengeId: "challenge"
+            timestamp: now
         });
 
         const fetchMock = vi.fn().mockResolvedValue(
@@ -37,20 +47,16 @@ describe("IP intelligence", () => {
 
         await refreshIpIntelIfNeeded({
             db,
-            ipAddress: "1.1.1.1",
-            author: "author",
-            token: "test-token",
-            now: 1000,
-            ttlSeconds: DEFAULT_TTL_SECONDS
+            challengeId: "challenge",
+            token: "test-token"
         });
 
-        const record = db.getIpRecordByIpAndAuthor("1.1.1.1", "author");
+        const record = db.getIpRecordByChallengeId("challenge");
         expect(record?.countryCode).toBe("DE");
         expect(record?.isVpn).toBe(1);
         expect(record?.isProxy).toBe(0);
         expect(record?.isTor).toBe(1);
         expect(record?.isDatacenter).toBe(0);
-        expect(record?.intelUpdatedAt).toBe(1000);
 
         expect(fetchMock).toHaveBeenCalledTimes(1);
         const url = String(fetchMock.mock.calls[0]?.[0]);
@@ -58,12 +64,21 @@ describe("IP intelligence", () => {
         expect(url).toContain("token=test-token");
     });
 
-    it("skips lookup when cached", async () => {
-        db.upsertIpRecord({
+    it("skips lookup when intel data already exists", async () => {
+        // First create a challenge session
+        db.insertChallengeSession({
+            challengeId: "challenge2",
+            subplebbitPublicKey,
+            expiresAt: Math.floor(Date.now() / 1000) + 3600
+        });
+
+        // Create an IP record with intel data already populated
+        const now = Math.floor(Date.now() / 1000);
+        db.insertIpRecord({
+            challengeId: "challenge2",
             ipAddress: "2.2.2.2",
-            author: "author",
-            challengeId: "challenge",
-            intelUpdatedAt: 1000
+            isVpn: false,
+            timestamp: now
         });
 
         const fetchMock = vi.fn();
@@ -71,13 +86,11 @@ describe("IP intelligence", () => {
 
         await refreshIpIntelIfNeeded({
             db,
-            ipAddress: "2.2.2.2",
-            author: "author",
-            token: "test-token",
-            now: 1060,
-            ttlSeconds: DEFAULT_TTL_SECONDS
+            challengeId: "challenge2",
+            token: "test-token"
         });
 
+        // Should not call fetch because intel data already exists
         expect(fetchMock).not.toHaveBeenCalled();
     });
 });

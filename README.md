@@ -231,15 +231,15 @@ Author columns store the full `author` object from each publication (for example
 
 Stores comment publications for analysis and rate limiting.
 
-- `id` INTEGER PRIMARY KEY
-- `author` TEXT NOT NULL
+- `challengeId` TEXT PRIMARY KEY (foreign key of challengeSessions)
+- `author` TEXT NOT NULL -- is actually a JSON
 - `subplebbitAddress` TEXT NOT NULL
 - `parentCid` TEXT (null for posts, set for replies)
 - `content` TEXT
 - `link` TEXT
 - `linkWidth` INTEGER
 - `linkHeight` INTEGER
-- `postCid` TEXT NOT NULL
+- `postCid` TEXT
 - `signature` TEXT NOT NULL
 - `title` TEXT
 - `timestamp` INTEGER NOT NULL
@@ -254,8 +254,8 @@ Stores comment publications for analysis and rate limiting.
 
 Stores vote publications.
 
-- `id` INTEGER PRIMARY KEY
-- `author` TEXT NOT NULL
+- `challengeId` TEXT PRIMARY KEY (foreign key of challengeSessions)
+- `author` TEXT NOT NULL -- is actually a json
 - `subplebbitAddress` TEXT NOT NULL
 - `commentCid` TEXT NOT NULL
 - `signature` TEXT NOT NULL
@@ -268,8 +268,8 @@ Stores vote publications.
 
 Stores comment edit publications.
 
-- `id` INTEGER PRIMARY KEY
-- `author` TEXT NOT NULL
+- `challengeId` TEXT PRIMARY KEY (foreign key of challengeSessions)
+- `author` TEXT NOT NULL -- is actually a json
 - `subplebbitAddress` TEXT NOT NULL
 - `commentCid` TEXT NOT NULL
 - `signature` TEXT NOT NULL
@@ -287,50 +287,40 @@ Stores comment edit publications.
 
 Stores comment moderation publications.
 
-- `id` INTEGER PRIMARY KEY
-- `author` TEXT NOT NULL
+- `challengeId` TEXT PRIMARY KEY (foreign key of challengeSessions)
+- `author` TEXT NOT NULL -- is actually a json
 - `subplebbitAddress` TEXT NOT NULL
 - `commentCid` TEXT NOT NULL
-- `commentModeration` TEXT NOT NULL
+- `commentModeration` TEXT
 - `signature` TEXT NOT NULL
-- `protocolVersion` TEXT NOT NULL
+- `protocolVersion` TEXT
 - `timestamp` INTEGER NOT NULL
 - `receivedAt` INTEGER NOT NULL
 
 ### `challengeSessions` (ephemeral)
 
-#### TODO this is not complete yet, we will probably come back to this later
-
 Tracks pending challenges. **Automatically purged after 1 hour.**.
 
-- `id` INTEGER PRIMARY KEY
-- `challengeId` TEXT NOT NULL UNIQUE
-- `author` TEXT NOT NULL
-- `subplebbitAddress` TEXT NOT NULL
+- `challengeId` TEXT PRIMARY KEY -- UUID v4
 - `subplebbitPublicKey` TEXT
 - `status` TEXT DEFAULT 'pending' (pending, completed, failed)
 - `completedAt` INTEGER
 - `expiresAt` INTEGER NOT NULL
 - `createdAt` INTEGER NOT NULL
+- `authorAccessedIframeAt` INTEGER -- when did the author access the iframe?
 
 ### `ipRecords`
 
-#### TODO this is not complete yet, we will probably come back to this later
+Stores raw IP addresses associated with authors (captured via iframe). One record per challenge.
 
-Stores raw IP addresses associated with authors (captured via iframe).
-
-- `id` INTEGER PRIMARY KEY
-- `ipAddress` TEXT NOT NULL
-- `author` TEXT NOT NULL
-- `challengeId` TEXT
+- `challengeId` TEXT NOT NULL (foreign key to challengeSessions.challengeId) PRIMARY KEY
+- `ipAddress` TEXT NOT NULL -- ip address string representation
 - `isVpn` INTEGER (BOOLEAN 0/1)
 - `isProxy` INTEGER (BOOLEAN 0/1)
 - `isTor` INTEGER (BOOLEAN 0/1)
 - `isDatacenter` INTEGER (BOOLEAN 0/1)
-- `countryCode` TEXT
-- `intelUpdatedAt` INTEGER
-- `firstSeenAt` INTEGER NOT NULL
-- `lastSeenAt` INTEGER NOT NULL
+- `countryCode` TEXT -- ISO 3166-1 alpha-2 country codes
+- `timestamp` INTEGER NOT NULL -- when did we query the ip provider
 
 ## Challenge Code (npm package)
 

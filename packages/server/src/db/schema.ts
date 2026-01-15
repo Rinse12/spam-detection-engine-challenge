@@ -5,9 +5,22 @@
 
 // TODO need to handle cases where spam engine receives publications with unrecognized fields. We should strip those unrecognized fields away before storing
 export const SCHEMA_SQL = `
+-- Challenge sessions table (ephemeral) - stores pending challenges
+CREATE TABLE IF NOT EXISTS challengeSessions (
+  challengeId TEXT PRIMARY KEY,
+  subplebbitPublicKey TEXT,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'completed', 'failed')),
+  completedAt INTEGER,
+  expiresAt INTEGER NOT NULL,
+  createdAt INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+  authorAccessedIframeAt INTEGER
+);
+
+CREATE INDEX IF NOT EXISTS idx_challengeSessions_expiresAt ON challengeSessions(expiresAt);
+
 -- Comments table - stores comment publications
 CREATE TABLE IF NOT EXISTS comments (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  challengeId TEXT PRIMARY KEY,
   author TEXT NOT NULL,
   subplebbitAddress TEXT NOT NULL,
   parentCid TEXT,
@@ -22,9 +35,10 @@ CREATE TABLE IF NOT EXISTS comments (
   linkHtmlTagName TEXT,
   flair TEXT,
   spoiler INTEGER,
-  protocolVersion TEXT,
+  protocolVersion TEXT NOT NULL,
   nsfw INTEGER,
-  receivedAt INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+  receivedAt INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+  FOREIGN KEY (challengeId) REFERENCES challengeSessions(challengeId)
 );
 
 CREATE INDEX IF NOT EXISTS idx_comments_author ON comments(author);
@@ -33,15 +47,16 @@ CREATE INDEX IF NOT EXISTS idx_comments_timestamp ON comments(timestamp);
 
 -- Votes table - stores vote publications
 CREATE TABLE IF NOT EXISTS votes (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  challengeId TEXT PRIMARY KEY,
   author TEXT NOT NULL,
   subplebbitAddress TEXT NOT NULL,
   commentCid TEXT NOT NULL,
   signature TEXT NOT NULL,
-  protocolVersion TEXT,
+  protocolVersion TEXT NOT NULL,
   vote INTEGER NOT NULL,
   timestamp INTEGER NOT NULL,
-  receivedAt INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+  receivedAt INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+  FOREIGN KEY (challengeId) REFERENCES challengeSessions(challengeId)
 );
 
 CREATE INDEX IF NOT EXISTS idx_votes_author ON votes(author);
@@ -49,12 +64,12 @@ CREATE INDEX IF NOT EXISTS idx_votes_commentCid ON votes(commentCid);
 
 -- Comment edits table - stores comment edit publications
 CREATE TABLE IF NOT EXISTS commentEdits (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  challengeId TEXT PRIMARY KEY,
   author TEXT NOT NULL,
   subplebbitAddress TEXT NOT NULL,
   commentCid TEXT NOT NULL,
   signature TEXT NOT NULL,
-  protocolVersion TEXT,
+  protocolVersion TEXT NOT NULL,
   content TEXT,
   reason TEXT,
   deleted INTEGER,
@@ -62,7 +77,8 @@ CREATE TABLE IF NOT EXISTS commentEdits (
   spoiler INTEGER,
   nsfw INTEGER,
   timestamp INTEGER NOT NULL,
-  receivedAt INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+  receivedAt INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+  FOREIGN KEY (challengeId) REFERENCES challengeSessions(challengeId)
 );
 
 CREATE INDEX IF NOT EXISTS idx_commentEdits_author ON commentEdits(author);
@@ -70,7 +86,7 @@ CREATE INDEX IF NOT EXISTS idx_commentEdits_commentCid ON commentEdits(commentCi
 
 -- Comment moderations table - stores comment moderation publications
 CREATE TABLE IF NOT EXISTS commentModerations (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  challengeId TEXT PRIMARY KEY,
   author TEXT NOT NULL,
   subplebbitAddress TEXT NOT NULL,
   commentCid TEXT NOT NULL,
@@ -78,46 +94,25 @@ CREATE TABLE IF NOT EXISTS commentModerations (
   signature TEXT NOT NULL,
   protocolVersion TEXT,
   timestamp INTEGER NOT NULL,
-  receivedAt INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+  receivedAt INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+  FOREIGN KEY (challengeId) REFERENCES challengeSessions(challengeId)
 );
 
 CREATE INDEX IF NOT EXISTS idx_commentModerations_author ON commentModerations(author);
 CREATE INDEX IF NOT EXISTS idx_commentModerations_commentCid ON commentModerations(commentCid);
 
--- Challenge sessions table (ephemeral) - stores pending challenges
-CREATE TABLE IF NOT EXISTS challengeSessions (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  challengeId TEXT NOT NULL UNIQUE,
-  author TEXT NOT NULL,
-  subplebbitAddress TEXT NOT NULL,
-  subplebbitPublicKey TEXT, -- Ed25519 public key of the subplebbit that created this session
-  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'completed', 'failed')),
-  completedAt INTEGER,
-  expiresAt INTEGER NOT NULL,
-  createdAt INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
-);
-
-CREATE INDEX IF NOT EXISTS idx_challengeSessions_challengeId ON challengeSessions(challengeId);
-CREATE INDEX IF NOT EXISTS idx_challengeSessions_expiresAt ON challengeSessions(expiresAt);
-CREATE INDEX IF NOT EXISTS idx_challengeSessions_author ON challengeSessions(author);
-
--- IP records table (ephemeral) - stores IP addresses associated with authors
+-- IP records table - stores IP addresses associated with challenges
 CREATE TABLE IF NOT EXISTS ipRecords (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  challengeId TEXT PRIMARY KEY,
   ipAddress TEXT NOT NULL,
-  author TEXT NOT NULL,
-  challengeId TEXT NOT NULL,
-  isVpn INTEGER DEFAULT 0,
-  isProxy INTEGER DEFAULT 0,
-  isTor INTEGER DEFAULT 0,
-  isDatacenter INTEGER DEFAULT 0,
+  isVpn INTEGER,
+  isProxy INTEGER,
+  isTor INTEGER,
+  isDatacenter INTEGER,
   countryCode TEXT,
-  intelUpdatedAt INTEGER,
-  firstSeenAt INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
-  lastSeenAt INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+  timestamp INTEGER NOT NULL,
+  FOREIGN KEY (challengeId) REFERENCES challengeSessions(challengeId)
 );
 
 CREATE INDEX IF NOT EXISTS idx_ipRecords_ipAddress ON ipRecords(ipAddress);
-CREATE INDEX IF NOT EXISTS idx_ipRecords_author ON ipRecords(author);
-CREATE INDEX IF NOT EXISTS idx_ipRecords_challengeId ON ipRecords(challengeId);
 `;

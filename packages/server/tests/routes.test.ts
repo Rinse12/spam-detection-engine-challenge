@@ -218,8 +218,6 @@ describe("API Routes", () => {
             const session = server.db.getChallengeSessionByChallengeId(body.challengeId);
 
             expect(session).toBeDefined();
-            expect(session?.author).toBe("12D3KooWTestAddress");
-            expect(session?.subplebbitAddress).toBe("test-sub.eth");
             expect(session?.subplebbitPublicKey).toBe(testSigner.publicKey);
             expect(session?.status).toBe("pending");
         });

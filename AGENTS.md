@@ -9,3 +9,4 @@
 - DO NOT DUPLICATE PLEBBIT-js schemas or types, just import them from plebbit-js
 - keep in mind that subplebbit.address can be a domain, and in that case if we need to get its public key we need to resolve it using plebbit-js library
 - In general there should not be a need for dynamic imports, static imports should work
+- No need to plan migration strategy for existing data. Assume we have no data on DB right now

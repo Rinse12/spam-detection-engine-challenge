@@ -17,24 +17,20 @@ describe("SpamDetectionDatabase", () => {
         it("should create and retrieve a challenge session", () => {
             const session = db.insertChallengeSession({
                 challengeId: "test-challenge-123",
-                author: "12D3KooW...",
-                subplebbitAddress: "my-sub.eth",
                 subplebbitPublicKey,
                 expiresAt: Math.floor(Date.now() / 1000) + 3600
             });
 
             expect(session).toBeDefined();
             expect(session.challengeId).toBe("test-challenge-123");
-            expect(session.author).toBe("12D3KooW...");
-            expect(session.subplebbitAddress).toBe("my-sub.eth");
+            expect(session.subplebbitPublicKey).toBe(subplebbitPublicKey);
             expect(session.status).toBe("pending");
+            expect(session.authorAccessedIframeAt).toBeNull();
         });
 
         it("should retrieve session by challenge ID", () => {
             db.insertChallengeSession({
                 challengeId: "test-challenge-456",
-                author: "12D3KooW...",
-                subplebbitAddress: "my-sub.eth",
                 subplebbitPublicKey,
                 expiresAt: Math.floor(Date.now() / 1000) + 3600
             });
@@ -52,8 +48,6 @@ describe("SpamDetectionDatabase", () => {
         it("should update challenge session status", () => {
             db.insertChallengeSession({
                 challengeId: "test-challenge-789",
-                author: "12D3KooW...",
-                subplebbitAddress: "my-sub.eth",
                 subplebbitPublicKey,
                 expiresAt: Math.floor(Date.now() / 1000) + 3600
             });
@@ -68,63 +62,20 @@ describe("SpamDetectionDatabase", () => {
             expect(session?.completedAt).toBe(now);
         });
 
-        it("should get sessions by author", () => {
+        it("should update iframe access timestamp", () => {
             db.insertChallengeSession({
-                challengeId: "challenge-1",
-                author: "author-123",
-                subplebbitAddress: "sub-1.eth",
+                challengeId: "iframe-test",
                 subplebbitPublicKey,
                 expiresAt: Math.floor(Date.now() / 1000) + 3600
             });
 
-            db.insertChallengeSession({
-                challengeId: "challenge-2",
-                author: "author-123",
-                subplebbitAddress: "sub-2.eth",
-                subplebbitPublicKey,
-                expiresAt: Math.floor(Date.now() / 1000) + 3600
-            });
+            const now = Math.floor(Date.now() / 1000);
+            const updated = db.updateChallengeSessionIframeAccess("iframe-test", now);
 
-            db.insertChallengeSession({
-                challengeId: "challenge-3",
-                author: "other-author",
-                subplebbitAddress: "sub-1.eth",
-                subplebbitPublicKey,
-                expiresAt: Math.floor(Date.now() / 1000) + 3600
-            });
+            expect(updated).toBe(true);
 
-            const sessions = db.getChallengeSessionsByAuthor("author-123");
-            expect(sessions).toHaveLength(2);
-        });
-
-        it("should count pending sessions by author", () => {
-            db.insertChallengeSession({
-                challengeId: "pending-1",
-                author: "author-456",
-                subplebbitAddress: "sub.eth",
-                subplebbitPublicKey,
-                expiresAt: Math.floor(Date.now() / 1000) + 3600
-            });
-
-            db.insertChallengeSession({
-                challengeId: "pending-2",
-                author: "author-456",
-                subplebbitAddress: "sub.eth",
-                subplebbitPublicKey,
-                expiresAt: Math.floor(Date.now() / 1000) + 3600
-            });
-
-            db.insertChallengeSession({
-                challengeId: "completed-1",
-                author: "author-456",
-                subplebbitAddress: "sub.eth",
-                subplebbitPublicKey,
-                expiresAt: Math.floor(Date.now() / 1000) + 3600
-            });
-            db.updateChallengeSessionStatus("completed-1", "completed");
-
-            const count = db.countPendingChallengeSessionsByAuthor("author-456");
-            expect(count).toBe(2);
+            const session = db.getChallengeSessionByChallengeId("iframe-test");
+            expect(session?.authorAccessedIframeAt).toBe(now);
         });
 
         it("should purge expired sessions", () => {
@@ -133,16 +84,12 @@ describe("SpamDetectionDatabase", () => {
 
             db.insertChallengeSession({
                 challengeId: "expired-session",
-                author: "author",
-                subplebbitAddress: "sub.eth",
                 subplebbitPublicKey,
                 expiresAt: pastTime
             });
 
             db.insertChallengeSession({
                 challengeId: "valid-session",
-                author: "author",
-                subplebbitAddress: "sub.eth",
                 subplebbitPublicKey,
                 expiresAt: futureTime
             });
@@ -157,47 +104,42 @@ describe("SpamDetectionDatabase", () => {
 
     describe("IP records", () => {
         it("should create an IP record", () => {
-            const record = db.upsertIpRecord({
-                ipAddress: "192.168.1.1",
-                author: "12D3KooW...",
+            // First create a challenge session (required for foreign key)
+            db.insertChallengeSession({
                 challengeId: "challenge-123",
-                countryCode: "US"
+                subplebbitPublicKey,
+                expiresAt: Math.floor(Date.now() / 1000) + 3600
+            });
+
+            const now = Math.floor(Date.now() / 1000);
+            const record = db.insertIpRecord({
+                challengeId: "challenge-123",
+                ipAddress: "192.168.1.1",
+                countryCode: "US",
+                timestamp: now
             });
 
             expect(record).toBeDefined();
+            expect(record.challengeId).toBe("challenge-123");
             expect(record.ipAddress).toBe("192.168.1.1");
-            expect(record.author).toBe("12D3KooW...");
             expect(record.countryCode).toBe("US");
-            expect(record.isVpn).toBe(0);
-        });
-
-        it("should update existing IP record on upsert", () => {
-            db.upsertIpRecord({
-                ipAddress: "10.0.0.1",
-                author: "author-1",
-                challengeId: "challenge-1",
-                isVpn: false
-            });
-
-            const updated = db.upsertIpRecord({
-                ipAddress: "10.0.0.1",
-                author: "author-1",
-                challengeId: "challenge-2",
-                isVpn: true,
-                countryCode: "DE"
-            });
-
-            expect(updated.isVpn).toBe(1);
-            expect(updated.countryCode).toBe("DE");
-            expect(updated.challengeId).toBe("challenge-2");
+            expect(record.isVpn).toBeNull();
+            expect(record.timestamp).toBe(now);
         });
 
         it("should retrieve IP record by challenge ID", () => {
-            db.upsertIpRecord({
-                ipAddress: "172.16.0.1",
-                author: "author-x",
+            db.insertChallengeSession({
                 challengeId: "lookup-challenge",
-                isTor: true
+                subplebbitPublicKey,
+                expiresAt: Math.floor(Date.now() / 1000) + 3600
+            });
+
+            const now = Math.floor(Date.now() / 1000);
+            db.insertIpRecord({
+                challengeId: "lookup-challenge",
+                ipAddress: "172.16.0.1",
+                isTor: true,
+                timestamp: now
             });
 
             const record = db.getIpRecordByChallengeId("lookup-challenge");
@@ -206,44 +148,57 @@ describe("SpamDetectionDatabase", () => {
             expect(record?.isTor).toBe(1);
         });
 
-        it("should get IP records by author", () => {
-            db.upsertIpRecord({
-                ipAddress: "1.1.1.1",
-                author: "multi-ip-author",
-                challengeId: "c1"
-            });
-
-            db.upsertIpRecord({
-                ipAddress: "2.2.2.2",
-                author: "multi-ip-author",
-                challengeId: "c2"
-            });
-
-            db.upsertIpRecord({
-                ipAddress: "3.3.3.3",
-                author: "other-author",
-                challengeId: "c3"
-            });
-
-            const records = db.getIpRecordsByAuthor("multi-ip-author");
-            expect(records).toHaveLength(2);
-        });
-
         it("should store IP type flags correctly", () => {
-            const record = db.upsertIpRecord({
+            db.insertChallengeSession({
+                challengeId: "flags-challenge",
+                subplebbitPublicKey,
+                expiresAt: Math.floor(Date.now() / 1000) + 3600
+            });
+
+            const now = Math.floor(Date.now() / 1000);
+            const record = db.insertIpRecord({
+                challengeId: "flags-challenge",
                 ipAddress: "8.8.8.8",
-                author: "author",
-                challengeId: "ch",
                 isVpn: true,
                 isProxy: true,
                 isTor: false,
-                isDatacenter: true
+                isDatacenter: true,
+                timestamp: now
             });
 
             expect(record.isVpn).toBe(1);
             expect(record.isProxy).toBe(1);
             expect(record.isTor).toBe(0);
             expect(record.isDatacenter).toBe(1);
+        });
+
+        it("should update IP intelligence data", () => {
+            db.insertChallengeSession({
+                challengeId: "intel-challenge",
+                subplebbitPublicKey,
+                expiresAt: Math.floor(Date.now() / 1000) + 3600
+            });
+
+            const now = Math.floor(Date.now() / 1000);
+            db.insertIpRecord({
+                challengeId: "intel-challenge",
+                ipAddress: "10.0.0.1",
+                timestamp: now
+            });
+
+            const laterTime = now + 60;
+            const updated = db.updateIpRecordIntelligence("intel-challenge", {
+                isVpn: true,
+                countryCode: "DE",
+                timestamp: laterTime
+            });
+
+            expect(updated).toBe(true);
+
+            const record = db.getIpRecordByChallengeId("intel-challenge");
+            expect(record?.isVpn).toBe(1);
+            expect(record?.countryCode).toBe("DE");
+            expect(record?.timestamp).toBe(laterTime);
         });
     });
 });

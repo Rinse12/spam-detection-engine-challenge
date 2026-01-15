@@ -2,31 +2,27 @@ import Database from "better-sqlite3";
 import { SCHEMA_SQL } from "./schema.js";
 
 export interface ChallengeSession {
-    id: number;
     challengeId: string;
-    author: string;
-    subplebbitAddress: string;
     /** Ed25519 public key of the subplebbit that created this session. Used to verify the same subplebbit completes the challenge. */
     subplebbitPublicKey: string | null;
     status: "pending" | "completed" | "failed";
     completedAt: number | null;
     expiresAt: number;
     createdAt: number;
+    /** When the author accessed the iframe */
+    authorAccessedIframeAt: number | null;
 }
 
 export interface IpRecord {
-    id: number;
-    ipAddress: string;
-    author: string;
     challengeId: string;
-    isVpn: number;
-    isProxy: number;
-    isTor: number;
-    isDatacenter: number;
+    ipAddress: string;
+    isVpn: number | null;
+    isProxy: number | null;
+    isTor: number | null;
+    isDatacenter: number | null;
     countryCode: string | null;
-    intelUpdatedAt: number | null;
-    firstSeenAt: number;
-    lastSeenAt: number;
+    /** When we queried the IP provider */
+    timestamp: number;
 }
 
 export interface DatabaseConfig {
@@ -53,7 +49,6 @@ export class SpamDetectionDatabase {
 
         // Initialize schema
         this.db.exec(SCHEMA_SQL);
-        this.ensureChallengeSessionSchema();
     }
 
     /**
@@ -74,21 +69,11 @@ export class SpamDetectionDatabase {
     // Challenge Session Methods
     // ============================================
 
-    private ensureChallengeSessionSchema(): void {
-        const columns = this.db.prepare("PRAGMA table_info(challengeSessions)").all() as Array<{ name: string }>;
-        const hasSubplebbitPublicKey = columns.some((column) => column.name === "subplebbitPublicKey");
-        if (!hasSubplebbitPublicKey) {
-            this.db.exec("ALTER TABLE challengeSessions ADD COLUMN subplebbitPublicKey TEXT");
-        }
-    }
-
     /**
      * Insert a new challenge session.
      */
     insertChallengeSession(params: {
         challengeId: string;
-        author: string;
-        subplebbitAddress: string;
         /** Ed25519 public key of the subplebbit */
         subplebbitPublicKey: string;
         expiresAt: number;
@@ -96,33 +81,19 @@ export class SpamDetectionDatabase {
         const stmt = this.db.prepare(`
       INSERT INTO challengeSessions (
         challengeId,
-        author,
-        subplebbitAddress,
         subplebbitPublicKey,
         expiresAt
       )
       VALUES (
         @challengeId,
-        @author,
-        @subplebbitAddress,
         @subplebbitPublicKey,
         @expiresAt
       )
     `);
 
-        const result = stmt.run(params);
+        stmt.run(params);
 
-        return this.getChallengeSessionById(result.lastInsertRowid as number)!;
-    }
-
-    /**
-     * Get a challenge session by its ID.
-     */
-    getChallengeSessionById(id: number): ChallengeSession | undefined {
-        const stmt = this.db.prepare(`
-      SELECT * FROM challengeSessions WHERE id = ?
-    `);
-        return stmt.get(id) as ChallengeSession | undefined;
+        return this.getChallengeSessionByChallengeId(params.challengeId)!;
     }
 
     /**
@@ -155,6 +126,24 @@ export class SpamDetectionDatabase {
     }
 
     /**
+     * Update when the author accessed the iframe.
+     */
+    updateChallengeSessionIframeAccess(challengeId: string, authorAccessedIframeAt: number): boolean {
+        const stmt = this.db.prepare(`
+      UPDATE challengeSessions
+      SET authorAccessedIframeAt = @authorAccessedIframeAt
+      WHERE challengeId = @challengeId
+    `);
+
+        const result = stmt.run({
+            challengeId,
+            authorAccessedIframeAt
+        });
+
+        return result.changes > 0;
+    }
+
+    /**
      * Delete expired challenge sessions.
      * Returns the number of deleted sessions.
      */
@@ -167,121 +156,40 @@ export class SpamDetectionDatabase {
         return result.changes;
     }
 
-    /**
-     * Get challenge sessions by author.
-     */
-    getChallengeSessionsByAuthor(author: string): ChallengeSession[] {
-        const stmt = this.db.prepare(`
-      SELECT * FROM challengeSessions WHERE author = ? ORDER BY createdAt DESC
-    `);
-        return stmt.all(author) as ChallengeSession[];
-    }
-
-    /**
-     * Count pending challenge sessions for an author (for rate limiting).
-     */
-    countPendingChallengeSessionsByAuthor(author: string): number {
-        const stmt = this.db.prepare(`
-      SELECT COUNT(*) as count FROM challengeSessions
-      WHERE author = ? AND status = 'pending'
-    `);
-        const result = stmt.get(author) as { count: number };
-        return result.count;
-    }
-
     // ============================================
     // IP Record Methods
     // ============================================
 
     /**
-     * Create or update an IP record.
+     * Insert an IP record for a challenge.
      */
-    upsertIpRecord(params: {
-        ipAddress: string;
-        author: string;
+    insertIpRecord(params: {
         challengeId: string;
+        ipAddress: string;
         isVpn?: boolean;
         isProxy?: boolean;
         isTor?: boolean;
         isDatacenter?: boolean;
         countryCode?: string;
-        intelUpdatedAt?: number;
+        timestamp: number;
     }): IpRecord {
-        const now = Math.floor(Date.now() / 1000);
-
-        // Check if record exists
-        const existing = this.getIpRecordByIpAndAuthor(params.ipAddress, params.author);
-
-        if (existing) {
-            // Update existing record
-            const stmt = this.db.prepare(`
-        UPDATE ipRecords SET
-          challengeId = @challengeId,
-          isVpn = COALESCE(@isVpn, isVpn),
-          isProxy = COALESCE(@isProxy, isProxy),
-          isTor = COALESCE(@isTor, isTor),
-          isDatacenter = COALESCE(@isDatacenter, isDatacenter),
-          countryCode = COALESCE(@countryCode, countryCode),
-          intelUpdatedAt = COALESCE(@intelUpdatedAt, intelUpdatedAt),
-          lastSeenAt = @lastSeenAt
-        WHERE ipAddress = @ipAddress AND author = @author
-      `);
-
-            stmt.run({
-                ipAddress: params.ipAddress,
-                author: params.author,
-                challengeId: params.challengeId,
-                isVpn: params.isVpn !== undefined ? (params.isVpn ? 1 : 0) : null,
-                isProxy: params.isProxy !== undefined ? (params.isProxy ? 1 : 0) : null,
-                isTor: params.isTor !== undefined ? (params.isTor ? 1 : 0) : null,
-                isDatacenter: params.isDatacenter !== undefined ? (params.isDatacenter ? 1 : 0) : null,
-                countryCode: params.countryCode ?? null,
-                intelUpdatedAt: params.intelUpdatedAt ?? null,
-                lastSeenAt: now
-            });
-
-            return this.getIpRecordByIpAndAuthor(params.ipAddress, params.author)!;
-        } else {
-            // Insert new record
-            const stmt = this.db.prepare(`
-        INSERT INTO ipRecords (ipAddress, author, challengeId, isVpn, isProxy, isTor, isDatacenter, countryCode, intelUpdatedAt)
-        VALUES (@ipAddress, @author, @challengeId, @isVpn, @isProxy, @isTor, @isDatacenter, @countryCode, @intelUpdatedAt)
-      `);
-
-            const result = stmt.run({
-                ipAddress: params.ipAddress,
-                author: params.author,
-                challengeId: params.challengeId,
-                isVpn: params.isVpn ? 1 : 0,
-                isProxy: params.isProxy ? 1 : 0,
-                isTor: params.isTor ? 1 : 0,
-                isDatacenter: params.isDatacenter ? 1 : 0,
-                countryCode: params.countryCode ?? null,
-                intelUpdatedAt: params.intelUpdatedAt ?? null
-            });
-
-            return this.getIpRecordById(result.lastInsertRowid as number)!;
-        }
-    }
-
-    /**
-     * Get an IP record by its ID.
-     */
-    getIpRecordById(id: number): IpRecord | undefined {
         const stmt = this.db.prepare(`
-      SELECT * FROM ipRecords WHERE id = ?
+      INSERT INTO ipRecords (challengeId, ipAddress, isVpn, isProxy, isTor, isDatacenter, countryCode, timestamp)
+      VALUES (@challengeId, @ipAddress, @isVpn, @isProxy, @isTor, @isDatacenter, @countryCode, @timestamp)
     `);
-        return stmt.get(id) as IpRecord | undefined;
-    }
 
-    /**
-     * Get an IP record by IP address and author.
-     */
-    getIpRecordByIpAndAuthor(ipAddress: string, author: string): IpRecord | undefined {
-        const stmt = this.db.prepare(`
-      SELECT * FROM ipRecords WHERE ipAddress = ? AND author = ?
-    `);
-        return stmt.get(ipAddress, author) as IpRecord | undefined;
+        stmt.run({
+            challengeId: params.challengeId,
+            ipAddress: params.ipAddress,
+            isVpn: params.isVpn !== undefined ? (params.isVpn ? 1 : 0) : null,
+            isProxy: params.isProxy !== undefined ? (params.isProxy ? 1 : 0) : null,
+            isTor: params.isTor !== undefined ? (params.isTor ? 1 : 0) : null,
+            isDatacenter: params.isDatacenter !== undefined ? (params.isDatacenter ? 1 : 0) : null,
+            countryCode: params.countryCode ?? null,
+            timestamp: params.timestamp
+        });
+
+        return this.getIpRecordByChallengeId(params.challengeId)!;
     }
 
     /**
@@ -295,26 +203,41 @@ export class SpamDetectionDatabase {
     }
 
     /**
-     * Get all IP records for an author.
+     * Update IP intelligence data for an existing IP record.
      */
-    getIpRecordsByAuthor(author: string): IpRecord[] {
+    updateIpRecordIntelligence(
+        challengeId: string,
+        params: {
+            isVpn?: boolean;
+            isProxy?: boolean;
+            isTor?: boolean;
+            isDatacenter?: boolean;
+            countryCode?: string;
+            timestamp: number;
+        }
+    ): boolean {
         const stmt = this.db.prepare(`
-      SELECT * FROM ipRecords WHERE author = ? ORDER BY lastSeenAt DESC
+      UPDATE ipRecords SET
+        isVpn = COALESCE(@isVpn, isVpn),
+        isProxy = COALESCE(@isProxy, isProxy),
+        isTor = COALESCE(@isTor, isTor),
+        isDatacenter = COALESCE(@isDatacenter, isDatacenter),
+        countryCode = COALESCE(@countryCode, countryCode),
+        timestamp = @timestamp
+      WHERE challengeId = @challengeId
     `);
-        return stmt.all(author) as IpRecord[];
-    }
 
-    /**
-     * Delete old IP records (older than the specified number of days).
-     * Returns the number of deleted records.
-     */
-    purgeOldIpRecords(olderThanDays: number = 30): number {
-        const cutoff = Math.floor(Date.now() / 1000) - olderThanDays * 24 * 60 * 60;
-        const stmt = this.db.prepare(`
-      DELETE FROM ipRecords WHERE lastSeenAt < ?
-    `);
-        const result = stmt.run(cutoff);
-        return result.changes;
+        const result = stmt.run({
+            challengeId,
+            isVpn: params.isVpn !== undefined ? (params.isVpn ? 1 : 0) : null,
+            isProxy: params.isProxy !== undefined ? (params.isProxy ? 1 : 0) : null,
+            isTor: params.isTor !== undefined ? (params.isTor ? 1 : 0) : null,
+            isDatacenter: params.isDatacenter !== undefined ? (params.isDatacenter ? 1 : 0) : null,
+            countryCode: params.countryCode ?? null,
+            timestamp: params.timestamp
+        });
+
+        return result.changes > 0;
     }
 }
 

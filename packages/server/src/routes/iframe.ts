@@ -56,22 +56,20 @@ export function registerIframeRoute(fastify: FastifyInstance, options: IframeRou
             // Get client IP for IP record
             const clientIp = getClientIp(request); // TODO why string | undefined? Shouldn't it always be defined?
 
-            // Store IP record
+            // Store IP record and update iframe access time
+            db.updateChallengeSessionIframeAccess(challengeId, now);
 
             if (clientIp) {
-                // TODO why remove old ip records?
-                // We would be losing old ip records which is an important context
-                db.upsertIpRecord({
+                db.insertIpRecord({
+                    challengeId,
                     ipAddress: clientIp,
-                    author: session.author,
-                    challengeId
+                    timestamp: now
                 });
 
                 if (ipInfoToken) {
                     void refreshIpIntelIfNeeded({
                         db,
-                        ipAddress: clientIp,
-                        author: session.author,
+                        challengeId,
                         token: ipInfoToken
                     }).catch((error) => {
                         request.log.warn({ err: error }, "Failed to refresh IP intelligence");

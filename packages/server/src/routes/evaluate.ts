@@ -98,8 +98,6 @@ export function registerEvaluateRoute(fastify: FastifyInstance, options: Evaluat
             // Create challenge session in database
             db.insertChallengeSession({
                 challengeId,
-                author: authorAddress,
-                subplebbitAddress,
                 subplebbitPublicKey,
                 expiresAt
             });

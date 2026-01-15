@@ -159,22 +159,40 @@ function verifyToken(token: string, challengeId: string): boolean {
 /**
  * Get IP type estimation from IP record.
  */
-function getIpTypeEstimation(ipRecord: { isVpn: number; isProxy: number; isTor: number; isDatacenter: number }): string {
+function getIpTypeEstimation(ipRecord: {
+    isVpn: number | null;
+    isProxy: number | null;
+    isTor: number | null;
+    isDatacenter: number | null;
+}): string {
     if (ipRecord.isTor) return "tor";
     if (ipRecord.isVpn) return "vpn";
     if (ipRecord.isProxy) return "proxy";
     if (ipRecord.isDatacenter) return "datacenter";
+    // If all fields are null, we don't know the type
+    if (ipRecord.isVpn === null && ipRecord.isProxy === null && ipRecord.isTor === null && ipRecord.isDatacenter === null) {
+        return "unknown";
+    }
     return "residential";
 }
 
 /**
  * Calculate IP risk based on IP type.
  */
-function calculateIpRisk(ipRecord: { isVpn: number; isProxy: number; isTor: number; isDatacenter: number }): number {
+function calculateIpRisk(ipRecord: {
+    isVpn: number | null;
+    isProxy: number | null;
+    isTor: number | null;
+    isDatacenter: number | null;
+}): number {
     // Higher risk for anonymization services
     if (ipRecord.isTor) return 0.9;
     if (ipRecord.isVpn) return 0.6;
     if (ipRecord.isProxy) return 0.7;
     if (ipRecord.isDatacenter) return 0.5;
+    // If all fields are null, return moderate risk (unknown)
+    if (ipRecord.isVpn === null && ipRecord.isProxy === null && ipRecord.isTor === null && ipRecord.isDatacenter === null) {
+        return 0.3;
+    }
     return 0.1; // Residential IPs are low risk
 }
