@@ -10,6 +10,7 @@ import { EvaluateRequestSchema, type EvaluateRequest } from "./schemas.js";
 import { derivePublicationFromChallengeRequest, isStringDomain } from "../plebbit-js-internals.js";
 import { randomUUID } from "crypto";
 import { verifySignedRequest } from "../security/request-signature.js";
+import { resolveSubplebbitPublicKey } from "../subplebbit-resolver.js";
 
 const CHALLENGE_EXPIRY_SECONDS = 3600; // 1 hour
 const MAX_REQUEST_SKEW_SECONDS = 5 * 60;
@@ -17,14 +18,13 @@ const MAX_REQUEST_SKEW_SECONDS = 5 * 60;
 export interface EvaluateRouteOptions {
     db: SpamDetectionDatabase;
     baseUrl: string;
-    resolveSubplebbitPublicKey: (subplebbitAddress: string) => Promise<string>;
 }
 
 /**
  * Register the /api/v1/evaluate route.
  */
 export function registerEvaluateRoute(fastify: FastifyInstance, options: EvaluateRouteOptions): void {
-    const { db, baseUrl, resolveSubplebbitPublicKey } = options;
+    const { db, baseUrl } = options;
 
     fastify.post(
         "/api/v1/evaluate",
@@ -68,7 +68,8 @@ export function registerEvaluateRoute(fastify: FastifyInstance, options: Evaluat
                 // subplebbit address is a domain
                 let resolvedPublicKey: string;
                 try {
-                    resolvedPublicKey = await resolveSubplebbitPublicKey(subplebbitAddress);
+                    const plebbit = await fastify.getPlebbitInstance();
+                    resolvedPublicKey = await resolveSubplebbitPublicKey(subplebbitAddress, plebbit);
                 } catch (error) {
                     const resolveError = new Error("Unable to resolve subplebbit signature");
                     (resolveError as { statusCode?: number }).statusCode = 401;

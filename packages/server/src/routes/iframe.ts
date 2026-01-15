@@ -59,7 +59,8 @@ export function registerIframeRoute(fastify: FastifyInstance, options: IframeRou
             // Store IP record
 
             if (clientIp) {
-                // why remove old ip records?
+                // TODO why remove old ip records?
+                // We would be losing old ip records which is an important context
                 db.upsertIpRecord({
                     ipAddress: clientIp,
                     author: session.author,

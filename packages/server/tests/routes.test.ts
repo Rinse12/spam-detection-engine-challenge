@@ -1,8 +1,9 @@
-import { describe, it, expect, beforeAll, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from "vitest";
 import { createServer, type SpamDetectionServer } from "../src/index.js";
 import * as cborg from "cborg";
 import { toString as uint8ArrayToString } from "uint8arrays/to-string";
 import { signBufferEd25519, getPublicKeyFromPrivateKey } from "../src/plebbit-js-signer.js";
+import { resetPlebbitLoaderForTest, setPlebbitLoaderForTest } from "../src/subplebbit-resolver.js";
 
 const baseTimestamp = Math.floor(Date.now() / 1000);
 const baseSignature = {
@@ -151,18 +152,23 @@ describe("API Routes", () => {
     let server: SpamDetectionServer;
 
     beforeEach(async () => {
+        const getSubplebbit = vi.fn().mockResolvedValue({ signature: { publicKey: testSigner.publicKey } });
+        setPlebbitLoaderForTest(async () => ({
+            getSubplebbit,
+            destroy: vi.fn().mockResolvedValue(undefined)
+        }));
         server = createServer({
             port: 0, // Random available port
             logging: false,
             databasePath: ":memory:",
-            baseUrl: "http://localhost:3000",
-            resolveSubplebbitPublicKey: async () => testSigner.publicKey
+            baseUrl: "http://localhost:3000"
         });
         await server.fastify.ready();
     });
 
     afterEach(async () => {
         await server.stop();
+        resetPlebbitLoaderForTest();
     });
 
     describe("GET /health", () => {

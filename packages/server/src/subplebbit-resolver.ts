@@ -14,7 +14,7 @@ const defaultLoader: PlebbitLoader = () => Plebbit();
 
 let plebbitLoader: PlebbitLoader = defaultLoader;
 
-const getPlebbitInstance = () => {
+export const getPlebbitInstance = (): Promise<PlebbitInstance> => {
     if (!plebbitPromise) {
         plebbitPromise = plebbitLoader();
     }
@@ -27,14 +27,14 @@ export const initPlebbitInstance = (): void => {
     }
 };
 
-export const resolveSubplebbitPublicKey = async (subplebbitAddress: string): Promise<string> => {
+export const resolveSubplebbitPublicKey = async (subplebbitAddress: string, plebbitInstance: PlebbitInstance): Promise<string> => {
     const now = Date.now();
     const cached = subplebbitCache.get(subplebbitAddress);
     if (cached && cached.expiresAt > now) {
         return cached.publicKey;
     }
 
-    const plebbit = await getPlebbitInstance();
+    const plebbit = plebbitInstance;
     const subplebbit = await plebbit.getSubplebbit(subplebbitAddress);
     const publicKey = subplebbit.signature?.publicKey;
     if (!publicKey) {

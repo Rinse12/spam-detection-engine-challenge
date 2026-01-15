@@ -1,11 +1,11 @@
 import Fastify, { type FastifyInstance, type FastifyError } from "fastify";
 import { SpamDetectionDatabase, createDatabase } from "./db/index.js";
 import { registerRoutes } from "./routes/index.js";
-import { destroyPlebbitInstance, initPlebbitInstance, resolveSubplebbitPublicKey } from "./subplebbit-resolver.js";
+import { destroyPlebbitInstance, getPlebbitInstance, initPlebbitInstance } from "./subplebbit-resolver.js";
 
 export interface ServerConfig {
     /** Port to listen on. Default: 3000 */
-    port?: number;
+    port?: number; // TODO should be required wihtout defaults
     /** Host to bind to. Default: "0.0.0.0" */
     host?: string;
     /** Base URL for generating challenge URLs. Default: "http://localhost:3000" */
@@ -20,9 +20,6 @@ export interface ServerConfig {
     ipInfoToken?: string;
     /** Enable request logging. Default: true */
     logging?: boolean;
-    /** Override subplebbit resolver (useful for tests). */
-    // TODO need to re-think about this
-    resolveSubplebbitPublicKey?: (subplebbitAddress: string) => Promise<string>;
 }
 
 export interface SpamDetectionServer {
@@ -43,8 +40,7 @@ export function createServer(config: ServerConfig): SpamDetectionServer {
         databasePath,
         turnstileSiteKey,
         ipInfoToken,
-        logging = true,
-        resolveSubplebbitPublicKey: resolveSubplebbitPublicKeyOverride
+        logging = true
     } = config;
 
     if (!databasePath) {
@@ -67,6 +63,8 @@ export function createServer(config: ServerConfig): SpamDetectionServer {
             : false
     });
 
+    fastify.decorate("getPlebbitInstance", getPlebbitInstance);
+
     // Create database
     const db = createDatabase(databasePath);
 
@@ -75,13 +73,10 @@ export function createServer(config: ServerConfig): SpamDetectionServer {
         db,
         baseUrl,
         turnstileSiteKey,
-        ipInfoToken,
-        resolveSubplebbitPublicKey: resolveSubplebbitPublicKeyOverride ?? resolveSubplebbitPublicKey
+        ipInfoToken
     });
 
-    if (!resolveSubplebbitPublicKeyOverride) {
-        initPlebbitInstance();
-    }
+    initPlebbitInstance();
 
     // Error handler
     fastify.setErrorHandler((error: FastifyError, request, reply) => {
@@ -106,9 +101,7 @@ export function createServer(config: ServerConfig): SpamDetectionServer {
         async stop(): Promise<void> {
             await fastify.close();
             db.close();
-            if (!resolveSubplebbitPublicKeyOverride) {
-                await destroyPlebbitInstance();
-            }
+            await destroyPlebbitInstance();
         }
     };
 }
