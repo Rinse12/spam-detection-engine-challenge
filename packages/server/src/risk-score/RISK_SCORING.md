@@ -99,37 +99,37 @@ Analyzes comment content and title for spam indicators by querying the database 
 1. SQL substring matching (LIKE) to find candidate matches
 2. Jaccard similarity on word sets to calculate actual similarity (threshold: 60%)
 
-| Indicator                                          | Score Impact | Description                              |
-| -------------------------------------------------- | ------------ | ---------------------------------------- |
-| **Same Author - Content Duplicates**               |              |                                          |
-| 5+ duplicate comments from same author in 24h      | +0.35        | Heavy self-spamming                      |
-| 3-4 duplicate comments from same author in 24h     | +0.25        | Moderate self-spamming                   |
-| 1-2 duplicate comments from same author in 24h     | +0.15        | Possible duplicate posting               |
-| **Same Author - Similar Content**                  |              |                                          |
-| 3+ similar comments from same author in 24h        | +0.20        | Similar content spamming                 |
-| 1-2 similar comments from same author in 24h       | +0.10        | Possible template spam                   |
-| **Other Authors - Content Duplicates**             |              |                                          |
-| 5+ identical comments from other authors           | +0.40        | Coordinated spam campaign                |
-| 2-4 identical comments from other authors          | +0.25        | Possible coordinated activity            |
-| 1 identical comment from another author            | +0.10        | Content seen from another author         |
-| **Other Authors - Similar Content**                |              |                                          |
-| 3+ similar comments from other authors             | +0.20        | Similar content from multiple accounts   |
-| 1-2 similar comments from other authors            | +0.08        | Similar content seen elsewhere           |
-| **Same Author - Title Duplicates**                 |              |                                          |
-| 3+ posts with same title from author in 24h        | +0.30        | Title spam                               |
-| 1-2 posts with same title from author in 24h       | +0.15        | Possible duplicate posting               |
-| **Same Author - Similar Titles**                   |              |                                          |
-| 2+ posts with similar title from author in 24h     | +0.15        | Similar title spamming                   |
-| **Other Authors - Title Duplicates**               |              |                                          |
-| 3+ posts with same title from other authors        | +0.25        | Coordinated title spam                   |
-| 1-2 posts with same title from another author      | +0.10        | Title seen from another author           |
-| **Other Authors - Similar Titles**                 |              |                                          |
-| 2+ posts with similar title from other authors     | +0.10        | Similar titles from multiple accounts    |
-| **Static Content Analysis**                        |              |                                          |
-| 5+ URLs in content                                 | +0.15        | Excessive link dropping                  |
-| 3-4 URLs in content                                | +0.08        | Elevated link count                      |
-| Excessive capitalization (>50% caps)               | +0.08        | SHOUTING (spam indicator)                |
-| Repetitive patterns (repeated chars/words)         | +0.10        | Bot-like behavior                        |
+| Indicator                                      | Score Impact | Description                            |
+| ---------------------------------------------- | ------------ | -------------------------------------- |
+| **Same Author - Content Duplicates**           |              |                                        |
+| 5+ duplicate comments from same author in 24h  | +0.35        | Heavy self-spamming                    |
+| 3-4 duplicate comments from same author in 24h | +0.25        | Moderate self-spamming                 |
+| 1-2 duplicate comments from same author in 24h | +0.15        | Possible duplicate posting             |
+| **Same Author - Similar Content**              |              |                                        |
+| 3+ similar comments from same author in 24h    | +0.20        | Similar content spamming               |
+| 1-2 similar comments from same author in 24h   | +0.10        | Possible template spam                 |
+| **Other Authors - Content Duplicates**         |              |                                        |
+| 5+ identical comments from other authors       | +0.40        | Coordinated spam campaign              |
+| 2-4 identical comments from other authors      | +0.25        | Possible coordinated activity          |
+| 1 identical comment from another author        | +0.10        | Content seen from another author       |
+| **Other Authors - Similar Content**            |              |                                        |
+| 3+ similar comments from other authors         | +0.20        | Similar content from multiple accounts |
+| 1-2 similar comments from other authors        | +0.08        | Similar content seen elsewhere         |
+| **Same Author - Title Duplicates**             |              |                                        |
+| 3+ posts with same title from author in 24h    | +0.30        | Title spam                             |
+| 1-2 posts with same title from author in 24h   | +0.15        | Possible duplicate posting             |
+| **Same Author - Similar Titles**               |              |                                        |
+| 2+ posts with similar title from author in 24h | +0.15        | Similar title spamming                 |
+| **Other Authors - Title Duplicates**           |              |                                        |
+| 3+ posts with same title from other authors    | +0.25        | Coordinated title spam                 |
+| 1-2 posts with same title from another author  | +0.10        | Title seen from another author         |
+| **Other Authors - Similar Titles**             |              |                                        |
+| 2+ posts with similar title from other authors | +0.10        | Similar titles from multiple accounts  |
+| **Static Content Analysis**                    |              |                                        |
+| 5+ URLs in content                             | +0.15        | Excessive link dropping                |
+| 3-4 URLs in content                            | +0.08        | Elevated link count                    |
+| Excessive capitalization (>50% caps)           | +0.08        | SHOUTING (spam indicator)              |
+| Repetitive patterns (repeated chars/words)     | +0.10        | Bot-like behavior                      |
 
 **Note**: The base score for comments starts at 0.2 (low risk). Non-comment publications receive a neutral score of 0.5.
 
