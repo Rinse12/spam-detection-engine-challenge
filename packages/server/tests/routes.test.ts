@@ -244,6 +244,16 @@ describe("API Routes", () => {
         });
 
         it("should return higher risk score for new author", async () => {
+            // First get the established author's score
+            const establishedRequest = await createEvaluatePayload({});
+            const establishedResponse = await server.fastify.inject({
+                method: "POST",
+                url: "/api/v1/evaluate",
+                payload: establishedRequest
+            });
+            const establishedBody = establishedResponse.json();
+
+            // Then get the new author's score
             const newAuthorRequest = await createEvaluatePayload({
                 authorOverrides: { address: "12D3KooWNewAccount" },
                 subplebbitOverrides: { firstCommentTimestamp: baseTimestamp - 3600 }
@@ -256,7 +266,8 @@ describe("API Routes", () => {
             });
 
             const body = response.json();
-            expect(body.riskScore).toBeGreaterThan(0.5); // Should be above neutral
+            // New author should have higher risk than established author
+            expect(body.riskScore).toBeGreaterThan(establishedBody.riskScore);
         });
 
         it("should return 400 for missing subplebbit author data", async () => {

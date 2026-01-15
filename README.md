@@ -213,26 +213,13 @@ Called by the iframe after the user completes a challenge. Validates the challen
          └─────────────────────────┘                          │
 ```
 
-## Risk Score Formula
+## Risk Score
 
-> **Note:** This section is rough and will likely change significantly as we gather real-world data and refine the algorithm.
+The risk score is a value between 0.0 and 1.0 that indicates the likelihood a publication is spam or malicious. It's calculated as a weighted combination of multiple factors including account age, karma, author reputation, content analysis, velocity, and IP intelligence.
 
-Weighted combination (0-1 scale):
+For detailed documentation on how risk scoring works, including all factors, weights, and scoring logic, see:
 
-| Factor            | Weight (no IP) | Weight (with IP) | Calculation                                                       |
-| ----------------- | -------------- | ---------------- | ----------------------------------------------------------------- |
-| Author Reputation | 0.30           | 0.25             | Solved challenges (-), publication history                        |
-| Content Risk      | 0.20           | 0.15             | Spam patterns, suspicious links, URL shorteners                   |
-| Velocity Risk     | 0.15           | 0.10             | Rate of publications per time window (e.g., 10 posts/hour = high) |
-| Account Age       | 0.20           | 0.15             | Based on firstCommentTimestamp from plebbit-js                    |
-| Karma Score       | 0.15           | 0.10             | Based on postScore + replyScore from plebbit-js                   |
-| IP Risk           | —              | 0.25             | VPN/proxy/Tor detection, datacenter IP, multi-author IP           |
-
-**Velocity Risk** explained: Measures how frequently an author is publishing. For example:
-
-- 1-2 posts/hour: normal (low risk)
-- 5-10 posts/hour: suspicious (medium risk)
-- 20+ posts/hour: likely spam/bot (high risk)
+**[Risk Scoring Documentation](packages/server/src/risk-score/RISK_SCORING.md)**
 
 **Thresholds (configurable per sub):**
 

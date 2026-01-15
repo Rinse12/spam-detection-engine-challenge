@@ -239,6 +239,64 @@ export class SpamDetectionDatabase {
 
         return result.changes > 0;
     }
+
+    // ============================================
+    // Risk Score Query Methods
+    // ============================================
+
+    /**
+     * Count publications by author address within a time window.
+     * Searches across comments, votes, commentEdits, and commentModerations.
+     * The author column stores JSON, so we extract the address field.
+     */
+    countPublicationsByAuthor(authorAddress: string, sinceTimestamp: number): number {
+        // Query each publication type and sum the counts
+        // Using json_extract to get the address from the JSON author field
+        const commentCount = this.db
+            .prepare(
+                `SELECT COUNT(*) as count FROM comments
+         WHERE json_extract(author, '$.address') = ? AND receivedAt >= ?`
+            )
+            .get(authorAddress, sinceTimestamp) as { count: number };
+
+        const voteCount = this.db
+            .prepare(
+                `SELECT COUNT(*) as count FROM votes
+         WHERE json_extract(author, '$.address') = ? AND receivedAt >= ?`
+            )
+            .get(authorAddress, sinceTimestamp) as { count: number };
+
+        const editCount = this.db
+            .prepare(
+                `SELECT COUNT(*) as count FROM commentEdits
+         WHERE json_extract(author, '$.address') = ? AND receivedAt >= ?`
+            )
+            .get(authorAddress, sinceTimestamp) as { count: number };
+
+        const moderationCount = this.db
+            .prepare(
+                `SELECT COUNT(*) as count FROM commentModerations
+         WHERE json_extract(author, '$.address') = ? AND receivedAt >= ?`
+            )
+            .get(authorAddress, sinceTimestamp) as { count: number };
+
+        return commentCount.count + voteCount.count + editCount.count + moderationCount.count;
+    }
+
+    /**
+     * Count publications by author in the last hour and last 24 hours.
+     * Returns both counts for velocity calculation.
+     */
+    getAuthorVelocityStats(authorAddress: string): { lastHour: number; last24Hours: number } {
+        const now = Math.floor(Date.now() / 1000);
+        const oneHourAgo = now - 3600;
+        const oneDayAgo = now - 86400;
+
+        return {
+            lastHour: this.countPublicationsByAuthor(authorAddress, oneHourAgo),
+            last24Hours: this.countPublicationsByAuthor(authorAddress, oneDayAgo)
+        };
+    }
 }
 
 /**
