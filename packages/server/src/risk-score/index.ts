@@ -9,6 +9,7 @@ import {
     calculateIpRisk,
     calculateKarma,
     calculateVelocity,
+    calculateWalletVelocity,
     type IpIntelligence
 } from "./factors/index.js";
 
@@ -40,6 +41,7 @@ export interface CalculateRiskScoreOptions {
  * - Author Reputation: Whether the author has verified history
  * - Content Risk: Analysis of suspicious patterns in content
  * - Velocity Risk: How frequently the author is publishing
+ * - Wallet Velocity: Publication rate per wallet address (detects coordinated spam)
  * - IP Risk: Analysis of IP type (VPN, Tor, proxy, datacenter)
  *
  * When IP information is available, weights are redistributed to include
@@ -70,6 +72,7 @@ export function calculateRiskScore(options: CalculateRiskScoreOptions): RiskScor
         calculateAuthorReputation(ctx, weights.authorReputation),
         calculateContentRisk(ctx, weights.contentRisk),
         calculateVelocity(ctx, weights.velocityRisk),
+        calculateWalletVelocity(ctx, weights.walletVelocity),
         calculateIpRisk(ipIntelligence, weights.ipRisk)
     ];
 

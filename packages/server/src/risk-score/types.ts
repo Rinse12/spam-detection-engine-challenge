@@ -52,6 +52,7 @@ export interface WeightConfig {
     accountAge: number;
     karmaScore: number;
     ipRisk: number;
+    walletVelocity: number;
 }
 
 /**
@@ -59,12 +60,13 @@ export interface WeightConfig {
  * Total: 1.0
  */
 export const WEIGHTS_NO_IP: WeightConfig = {
-    authorReputation: 0.3,
-    contentRisk: 0.2,
-    velocityRisk: 0.15,
-    accountAge: 0.2,
-    karmaScore: 0.15,
-    ipRisk: 0
+    authorReputation: 0.25,
+    contentRisk: 0.18,
+    velocityRisk: 0.12,
+    accountAge: 0.17,
+    karmaScore: 0.13,
+    ipRisk: 0,
+    walletVelocity: 0.15
 };
 
 /**
@@ -72,10 +74,11 @@ export const WEIGHTS_NO_IP: WeightConfig = {
  * Total: 1.0
  */
 export const WEIGHTS_WITH_IP: WeightConfig = {
-    authorReputation: 0.25,
-    contentRisk: 0.15,
-    velocityRisk: 0.1,
-    accountAge: 0.15,
-    karmaScore: 0.1,
-    ipRisk: 0.25
+    authorReputation: 0.2,
+    contentRisk: 0.12,
+    velocityRisk: 0.08,
+    accountAge: 0.12,
+    karmaScore: 0.08,
+    ipRisk: 0.25,
+    walletVelocity: 0.15
 };

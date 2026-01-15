@@ -45,6 +45,7 @@ export function calculateAccountAge(ctx: RiskContext, weight: number): RiskFacto
     const author = getAuthorFromChallengeRequest(challengeRequest);
     const subplebbitAuthor = author.subplebbit;
 
+    // TODO we should account for our own db history as well, not just author.subplebbit. Use the older between the two
     // No first comment timestamp means new account or first interaction
     if (!subplebbitAuthor?.firstCommentTimestamp) {
         return {

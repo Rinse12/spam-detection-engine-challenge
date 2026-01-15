@@ -41,6 +41,8 @@ const SCORES = {
  */
 export function calculateKarma(ctx: RiskContext, weight: number): RiskFactor {
     const author = getAuthorFromChallengeRequest(ctx.challengeRequest);
+    // TODO should sum all karma we have of this author from our DB as well
+
     const subplebbitAuthor = author.subplebbit;
 
     const postScore = subplebbitAuthor?.postScore ?? 0;

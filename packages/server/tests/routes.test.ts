@@ -244,8 +244,15 @@ describe("API Routes", () => {
         });
 
         it("should return higher risk score for new author", async () => {
-            // First get the established author's score
-            const establishedRequest = await createEvaluatePayload({});
+            // First get the established author's score (100 days old with positive karma)
+            const establishedRequest = await createEvaluatePayload({
+                authorOverrides: { address: "12D3KooWEstablished2" },
+                subplebbitOverrides: {
+                    firstCommentTimestamp: baseTimestamp - 100 * 86400, // 100 days ago
+                    postScore: 50,
+                    replyScore: 20
+                }
+            });
             const establishedResponse = await server.fastify.inject({
                 method: "POST",
                 url: "/api/v1/evaluate",
@@ -253,10 +260,14 @@ describe("API Routes", () => {
             });
             const establishedBody = establishedResponse.json();
 
-            // Then get the new author's score
+            // Then get the new author's score (very new user with minimal history)
             const newAuthorRequest = await createEvaluatePayload({
                 authorOverrides: { address: "12D3KooWNewAccount" },
-                subplebbitOverrides: { firstCommentTimestamp: baseTimestamp - 3600 }
+                subplebbitOverrides: {
+                    firstCommentTimestamp: baseTimestamp - 60, // Just 1 minute ago (very new)
+                    postScore: -5, // Negative karma
+                    replyScore: 0
+                }
             });
 
             const response = await server.fastify.inject({

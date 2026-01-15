@@ -105,6 +105,31 @@ export function registerEvaluateRoute(fastify: FastifyInstance, options: Evaluat
                 db
             });
 
+            // Store publication in database for velocity tracking
+            const typedChallengeRequest = challengeRequest as DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor;
+            if (typedChallengeRequest.comment) {
+                db.insertComment({
+                    challengeId,
+                    publication: typedChallengeRequest.comment
+                });
+            } else if (typedChallengeRequest.vote) {
+                db.insertVote({
+                    challengeId,
+                    publication: typedChallengeRequest.vote
+                });
+            } else if (typedChallengeRequest.commentEdit) {
+                db.insertCommentEdit({
+                    challengeId,
+                    publication: typedChallengeRequest.commentEdit
+                });
+            } else if (typedChallengeRequest.commentModeration) {
+                db.insertCommentModeration({
+                    challengeId,
+                    publication: typedChallengeRequest.commentModeration
+                });
+            }
+            // Note: subplebbitEdit is not stored as it's not relevant for velocity tracking
+
             // Build response
             const response: EvaluateResponse = {
                 riskScore: riskScoreResult.score,
