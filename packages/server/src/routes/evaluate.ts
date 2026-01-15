@@ -78,14 +78,17 @@ export function registerEvaluateRoute(
         throw invalidError;
       }
 
-      const author = publication.author.address;
+      const authorAddress = publication.author.address;
       const subplebbitAddress = publication.subplebbitAddress;
-      const signerPublicKey = signature.publicKey;
+      const subplebbitPublicKey = signature.publicKey;
 
-      if (isStringDomain(subplebbitAddress)) {
+      if (subplebbitAddress.includes(".")) {
+        // subplebbit address is a domain
         let resolvedPublicKey: string;
         try {
-          resolvedPublicKey = await resolveSubplebbitPublicKey(subplebbitAddress);
+          resolvedPublicKey = await resolveSubplebbitPublicKey(
+            subplebbitAddress
+          );
         } catch (error) {
           const resolveError = new Error(
             "Unable to resolve subplebbit signature"
@@ -93,7 +96,7 @@ export function registerEvaluateRoute(
           (resolveError as { statusCode?: number }).statusCode = 401;
           throw resolveError;
         }
-        if (resolvedPublicKey !== signerPublicKey) {
+        if (resolvedPublicKey !== subplebbitPublicKey) {
           const mismatchError = new Error(
             "Request signature does not match subplebbit"
           );
@@ -101,8 +104,9 @@ export function registerEvaluateRoute(
           throw mismatchError;
         }
       } else {
-        const signerAddress =
-          await getPlebbitAddressFromPublicKey(signerPublicKey);
+        const signerAddress = await getPlebbitAddressFromPublicKey(
+          subplebbitPublicKey
+        );
         if (signerAddress !== subplebbitAddress) {
           const mismatchError = new Error(
             "Request signature does not match subplebbit"
@@ -119,11 +123,11 @@ export function registerEvaluateRoute(
       const expiresAt = now + CHALLENGE_EXPIRY_SECONDS;
 
       // Create challenge session in database
-      db.createChallengeSession({
+      db.insertChallengeSession({
         challengeId,
-        author,
+        author: authorAddress,
         subplebbitAddress,
-        signerPublicKey,
+        subplebbitPublicKey,
         expiresAt,
       });
 

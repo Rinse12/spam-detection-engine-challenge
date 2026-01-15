@@ -6,7 +6,8 @@ export interface ChallengeSession {
   challengeId: string;
   author: string;
   subplebbitAddress: string;
-  signerPublicKey: string | null; // TODO why do we need to store it?
+  /** Ed25519 public key of the subplebbit that created this session. Used to verify the same subplebbit completes the challenge. */
+  subplebbitPublicKey: string | null;
   status: "pending" | "completed" | "failed";
   completedAt: number | null;
   expiresAt: number;
@@ -77,24 +78,25 @@ export class SpamDetectionDatabase {
     const columns = this.db
       .prepare("PRAGMA table_info(challengeSessions)")
       .all() as Array<{ name: string }>;
-    const hasSignerPublicKey = columns.some(
-      (column) => column.name === "signerPublicKey"
+    const hasSubplebbitPublicKey = columns.some(
+      (column) => column.name === "subplebbitPublicKey"
     );
-    if (!hasSignerPublicKey) {
+    if (!hasSubplebbitPublicKey) {
       this.db.exec(
-        "ALTER TABLE challengeSessions ADD COLUMN signerPublicKey TEXT"
+        "ALTER TABLE challengeSessions ADD COLUMN subplebbitPublicKey TEXT"
       );
     }
   }
 
   /**
-   * Create a new challenge session.
+   * Insert a new challenge session.
    */
-  createChallengeSession(params: {
+  insertChallengeSession(params: {
     challengeId: string;
     author: string;
     subplebbitAddress: string;
-    signerPublicKey: string;
+    /** Ed25519 public key of the subplebbit */
+    subplebbitPublicKey: string;
     expiresAt: number;
   }): ChallengeSession {
     const stmt = this.db.prepare(`
@@ -102,14 +104,14 @@ export class SpamDetectionDatabase {
         challengeId,
         author,
         subplebbitAddress,
-        signerPublicKey,
+        subplebbitPublicKey,
         expiresAt
       )
       VALUES (
         @challengeId,
         @author,
         @subplebbitAddress,
-        @signerPublicKey,
+        @subplebbitPublicKey,
         @expiresAt
       )
     `);

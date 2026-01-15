@@ -90,7 +90,7 @@ CREATE TABLE IF NOT EXISTS challengeSessions (
   challengeId TEXT NOT NULL UNIQUE,
   author TEXT NOT NULL,
   subplebbitAddress TEXT NOT NULL,
-  signerPublicKey TEXT,
+  subplebbitPublicKey TEXT, -- Ed25519 public key of the subplebbit that created this session
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'completed', 'failed')),
   completedAt INTEGER,
   expiresAt INTEGER NOT NULL,

@@ -93,7 +93,7 @@ export function registerVerifyRoute(
         };
       }
 
-      if (!session.signerPublicKey) {
+      if (!session.subplebbitPublicKey) {
         reply.status(401);
         return {
           success: false,
@@ -101,7 +101,7 @@ export function registerVerifyRoute(
         };
       }
 
-      if (session.signerPublicKey !== signature.publicKey) {
+      if (session.subplebbitPublicKey !== signature.publicKey) {
         reply.status(401);
         return {
           success: false,

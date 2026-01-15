@@ -237,7 +237,7 @@ describe("API Routes", () => {
       expect(session).toBeDefined();
       expect(session?.author).toBe("12D3KooWTestAddress");
       expect(session?.subplebbitAddress).toBe("test-sub.eth");
-      expect(session?.signerPublicKey).toBe(testSigner.publicKey);
+      expect(session?.subplebbitPublicKey).toBe(testSigner.publicKey);
       expect(session?.status).toBe("pending");
     });
 

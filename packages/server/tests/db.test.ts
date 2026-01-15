@@ -3,7 +3,7 @@ import { SpamDetectionDatabase, createDatabase } from "../src/db/index.js";
 
 describe("SpamDetectionDatabase", () => {
   let db: SpamDetectionDatabase;
-  const signerPublicKey = "test-public-key";
+  const subplebbitPublicKey = "test-public-key";
 
   beforeEach(() => {
     db = createDatabase(":memory:");
@@ -15,11 +15,11 @@ describe("SpamDetectionDatabase", () => {
 
   describe("challenge sessions", () => {
     it("should create and retrieve a challenge session", () => {
-      const session = db.createChallengeSession({
+      const session = db.insertChallengeSession({
         challengeId: "test-challenge-123",
         author: "12D3KooW...",
         subplebbitAddress: "my-sub.eth",
-        signerPublicKey,
+        subplebbitPublicKey,
         expiresAt: Math.floor(Date.now() / 1000) + 3600,
       });
 
@@ -31,11 +31,11 @@ describe("SpamDetectionDatabase", () => {
     });
 
     it("should retrieve session by challenge ID", () => {
-      db.createChallengeSession({
+      db.insertChallengeSession({
         challengeId: "test-challenge-456",
         author: "12D3KooW...",
         subplebbitAddress: "my-sub.eth",
-        signerPublicKey,
+        subplebbitPublicKey,
         expiresAt: Math.floor(Date.now() / 1000) + 3600,
       });
 
@@ -45,17 +45,18 @@ describe("SpamDetectionDatabase", () => {
     });
 
     it("should return undefined for non-existent challenge ID", () => {
-      const session =
-        db.getChallengeSessionByChallengeId("non-existent-challenge");
+      const session = db.getChallengeSessionByChallengeId(
+        "non-existent-challenge"
+      );
       expect(session).toBeUndefined();
     });
 
     it("should update challenge session status", () => {
-      db.createChallengeSession({
+      db.insertChallengeSession({
         challengeId: "test-challenge-789",
         author: "12D3KooW...",
         subplebbitAddress: "my-sub.eth",
-        signerPublicKey,
+        subplebbitPublicKey,
         expiresAt: Math.floor(Date.now() / 1000) + 3600,
       });
 
@@ -74,27 +75,27 @@ describe("SpamDetectionDatabase", () => {
     });
 
     it("should get sessions by author", () => {
-      db.createChallengeSession({
+      db.insertChallengeSession({
         challengeId: "challenge-1",
         author: "author-123",
         subplebbitAddress: "sub-1.eth",
-        signerPublicKey,
+        subplebbitPublicKey,
         expiresAt: Math.floor(Date.now() / 1000) + 3600,
       });
 
-      db.createChallengeSession({
+      db.insertChallengeSession({
         challengeId: "challenge-2",
         author: "author-123",
         subplebbitAddress: "sub-2.eth",
-        signerPublicKey,
+        subplebbitPublicKey,
         expiresAt: Math.floor(Date.now() / 1000) + 3600,
       });
 
-      db.createChallengeSession({
+      db.insertChallengeSession({
         challengeId: "challenge-3",
         author: "other-author",
         subplebbitAddress: "sub-1.eth",
-        signerPublicKey,
+        subplebbitPublicKey,
         expiresAt: Math.floor(Date.now() / 1000) + 3600,
       });
 
@@ -103,27 +104,27 @@ describe("SpamDetectionDatabase", () => {
     });
 
     it("should count pending sessions by author", () => {
-      db.createChallengeSession({
+      db.insertChallengeSession({
         challengeId: "pending-1",
         author: "author-456",
         subplebbitAddress: "sub.eth",
-        signerPublicKey,
+        subplebbitPublicKey,
         expiresAt: Math.floor(Date.now() / 1000) + 3600,
       });
 
-      db.createChallengeSession({
+      db.insertChallengeSession({
         challengeId: "pending-2",
         author: "author-456",
         subplebbitAddress: "sub.eth",
-        signerPublicKey,
+        subplebbitPublicKey,
         expiresAt: Math.floor(Date.now() / 1000) + 3600,
       });
 
-      db.createChallengeSession({
+      db.insertChallengeSession({
         challengeId: "completed-1",
         author: "author-456",
         subplebbitAddress: "sub.eth",
-        signerPublicKey,
+        subplebbitPublicKey,
         expiresAt: Math.floor(Date.now() / 1000) + 3600,
       });
       db.updateChallengeSessionStatus("completed-1", "completed");
@@ -136,19 +137,19 @@ describe("SpamDetectionDatabase", () => {
       const pastTime = Math.floor(Date.now() / 1000) - 3600; // 1 hour ago
       const futureTime = Math.floor(Date.now() / 1000) + 3600; // 1 hour from now
 
-      db.createChallengeSession({
+      db.insertChallengeSession({
         challengeId: "expired-session",
         author: "author",
         subplebbitAddress: "sub.eth",
-        signerPublicKey,
+        subplebbitPublicKey,
         expiresAt: pastTime,
       });
 
-      db.createChallengeSession({
+      db.insertChallengeSession({
         challengeId: "valid-session",
         author: "author",
         subplebbitAddress: "sub.eth",
-        signerPublicKey,
+        subplebbitPublicKey,
         expiresAt: futureTime,
       });
 
