@@ -316,9 +316,9 @@ Stores comment moderation publications.
 - `timestamp` INTEGER NOT NULL
 - `receivedAt` INTEGER NOT NULL
 
-### `challengeSessions` (ephemeral)
+### `challengeSessions`
 
-Tracks pending challenges. **Automatically purged after 1 hour.**.
+Tracks challenge sessions. Sessions are kept permanently for historical analysis.
 
 - `challengeId` TEXT PRIMARY KEY -- UUID v4
 - `subplebbitPublicKey` TEXT

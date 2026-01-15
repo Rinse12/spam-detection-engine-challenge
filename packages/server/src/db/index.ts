@@ -143,19 +143,6 @@ export class SpamDetectionDatabase {
         return result.changes > 0;
     }
 
-    /**
-     * Delete expired challenge sessions.
-     * Returns the number of deleted sessions.
-     */
-    purgeExpiredChallengeSessions(): number {
-        const now = Math.floor(Date.now() / 1000);
-        const stmt = this.db.prepare(`
-      DELETE FROM challengeSessions WHERE expiresAt < ?
-    `);
-        const result = stmt.run(now);
-        return result.changes;
-    }
-
     // ============================================
     // IP Record Methods
     // ============================================

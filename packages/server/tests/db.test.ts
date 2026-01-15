@@ -78,28 +78,6 @@ describe("SpamDetectionDatabase", () => {
             expect(session?.authorAccessedIframeAt).toBe(now);
         });
 
-        it("should purge expired sessions", () => {
-            const pastTime = Math.floor(Date.now() / 1000) - 3600; // 1 hour ago
-            const futureTime = Math.floor(Date.now() / 1000) + 3600; // 1 hour from now
-
-            db.insertChallengeSession({
-                challengeId: "expired-session",
-                subplebbitPublicKey,
-                expiresAt: pastTime
-            });
-
-            db.insertChallengeSession({
-                challengeId: "valid-session",
-                subplebbitPublicKey,
-                expiresAt: futureTime
-            });
-
-            const purged = db.purgeExpiredChallengeSessions();
-            expect(purged).toBe(1);
-
-            expect(db.getChallengeSessionByChallengeId("expired-session")).toBeUndefined();
-            expect(db.getChallengeSessionByChallengeId("valid-session")).toBeDefined();
-        });
     });
 
     describe("IP records", () => {
