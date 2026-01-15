@@ -104,10 +104,10 @@ export function registerEvaluateRoute(
           throw mismatchError;
         }
       } else {
-        const signerAddress = await getPlebbitAddressFromPublicKey(
+        const subplebbitIpnsB58 = await getPlebbitAddressFromPublicKey(
           subplebbitPublicKey
         );
-        if (signerAddress !== subplebbitAddress) {
+        if (subplebbitIpnsB58 !== subplebbitAddress) {
           const mismatchError = new Error(
             "Request signature does not match subplebbit"
           );
