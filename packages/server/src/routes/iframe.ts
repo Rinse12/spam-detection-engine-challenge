@@ -200,23 +200,43 @@ function generateIframeHtml(challengeId: string, turnstileSiteKey?: string): str
       statusEl.className = 'status ' + type;
     }
 
-    function onTurnstileSuccess(token) {
+    function onTurnstileSuccess(turnstileToken) {
       showStatus('Verification successful! Completing...', 'loading');
 
-      // Generate a simple token (placeholder - real implementation will use JWT)
-      const challengeToken = btoa(JSON.stringify({
-        challengeId: challengeId,
-        turnstileToken: token,
-        completedAt: Date.now()
-      }));
-
-      // Send token to parent window
-      window.parent.postMessage({
-        type: 'challenge-complete',
-        token: challengeToken
-      }, '*');
-
-      showStatus('Verification complete!', 'success');
+      // Call server to get signed JWT
+      fetch('/api/v1/challenge/complete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          challengeId: challengeId,
+          challengeResponse: turnstileToken,
+          challengeType: 'turnstile'
+        })
+      })
+      .then(function(response) { return response.json(); })
+      .then(function(data) {
+        if (data.success && data.token) {
+          // Send JWT to parent window
+          window.parent.postMessage({
+            type: 'challenge-complete',
+            token: data.token
+          }, '*');
+          showStatus('Verification complete!', 'success');
+        } else {
+          showStatus('Verification failed: ' + (data.error || 'Unknown error'), 'error');
+          window.parent.postMessage({
+            type: 'challenge-error',
+            error: data.error || 'Token generation failed'
+          }, '*');
+        }
+      })
+      .catch(function(error) {
+        showStatus('Verification failed: ' + error.message, 'error');
+        window.parent.postMessage({
+          type: 'challenge-error',
+          error: error.message
+        }, '*');
+      });
     }
 
     function onTurnstileError(error) {

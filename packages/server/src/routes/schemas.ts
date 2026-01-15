@@ -72,3 +72,19 @@ export const IframeParamsSchema = z.object({
 });
 
 export type IframeParams = z.infer<typeof IframeParamsSchema>;
+
+/**
+ * Schema for the challenge complete request body.
+ * Called by the iframe after user completes a challenge (CAPTCHA, OAuth, etc.).
+ */
+export const CompleteRequestSchema = z
+    .object({
+        challengeId: z.string().min(1, "challengeId is required"),
+        /** The response token from the challenge provider (Turnstile, hCaptcha, OAuth code, etc.) */
+        challengeResponse: z.string().min(1, "challengeResponse is required"),
+        /** The type of challenge that was completed (e.g., "turnstile", "hcaptcha", "github") */
+        challengeType: z.string().optional()
+    })
+    .strict();
+
+export type CompleteRequest = z.infer<typeof CompleteRequestSchema>;

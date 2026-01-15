@@ -1,18 +1,21 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import type { VerifyResponse } from "@plebbit/spam-detection-shared";
 import type { SpamDetectionDatabase } from "../db/index.js";
+import type { KeyManager } from "../crypto/keys.js";
 import { VerifyRequestSchema, type VerifyRequest } from "./schemas.js";
 import { verifySignedRequest } from "../security/request-signature.js";
+import { verifyChallengeToken, type ChallengeTokenPayload } from "../crypto/jwt.js";
 
 export interface VerifyRouteOptions {
     db: SpamDetectionDatabase;
+    keyManager: KeyManager;
 }
 
 /**
  * Register the /api/v1/challenge/verify route.
  */
 export function registerVerifyRoute(fastify: FastifyInstance, options: VerifyRouteOptions): void {
-    const { db } = options;
+    const { db, keyManager } = options;
 
     fastify.post(
         "/api/v1/challenge/verify",
@@ -95,18 +98,29 @@ export function registerVerifyRoute(fastify: FastifyInstance, options: VerifyRou
                 };
             }
 
-            // Verify the token
-            // TODO: This will be moved to crypto/jwt.ts - for now just do basic validation
-            const tokenValid = verifyToken(token, challengeId);
+            // Verify the JWT token
+            let tokenPayload: ChallengeTokenPayload;
+            try {
+                const publicKey = await keyManager.getPublicKey();
+                tokenPayload = await verifyChallengeToken(token, publicKey);
 
-            if (!tokenValid) {
+                // Verify challengeId matches
+                if (tokenPayload.challengeId !== challengeId) {
+                    db.updateChallengeSessionStatus(challengeId, "failed");
+                    reply.status(401);
+                    return {
+                        success: false,
+                        error: "Token challenge ID mismatch"
+                    };
+                }
+            } catch (error) {
                 // Mark session as failed
                 db.updateChallengeSessionStatus(challengeId, "failed");
 
                 reply.status(401);
                 return {
                     success: false,
-                    error: "Invalid token"
+                    error: error instanceof Error ? error.message : "Invalid token"
                 };
             }
 
@@ -133,27 +147,6 @@ export function registerVerifyRoute(fastify: FastifyInstance, options: VerifyRou
             return response;
         }
     );
-}
-
-/**
- * Verify a token for a challenge.
- * TODO: This is a placeholder - real implementation will verify JWT signature in crypto/jwt.ts
- */
-function verifyToken(token: string, challengeId: string): boolean {
-    // For now, just check that the token is not empty and has reasonable format
-    // Real implementation will:
-    // 1. Verify JWT signature using Ed25519
-    // 2. Check that challengeId in JWT matches
-    // 3. Check that JWT is not expired
-    // 4. Verify CAPTCHA solution with Turnstile API
-
-    if (!token || token.length < 10) {
-        return false;
-    }
-
-    // Placeholder: accept any non-empty token for now
-    // In production, this will verify the JWT and Turnstile response
-    return true;
 }
 
 /**

@@ -12,7 +12,7 @@ describe("plebbit instance access", () => {
         const instance = { destroy, getSubplebbit: vi.fn() };
         setPlebbitLoaderForTest(async () => instance);
 
-        const server = createServer({
+        const server = await createServer({
             port: 0,
             logging: false,
             databasePath: ":memory:"

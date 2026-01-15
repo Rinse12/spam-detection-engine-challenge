@@ -117,15 +117,46 @@ Called by the subplebbit's challenge code to verify a token submitted by the aut
 
 ### GET /api/v1/iframe/:challengeId
 
-TODO: The iframe needs to explain, if we do Sign in by github that we won't send the account name to the sub. Same thing for IP address, we only share the IP address's country
-Serves the iframe challenge page (e.g., Cloudflare Turnstile). When the user solves the challenge:
+Serves the iframe challenge page. The server supports multiple challenge providers:
 
-1. The iframe page receives success from Turnstile
-2. The page generates a signed token (JWT signed by the server)
-3. The page calls `window.parent.postMessage({ type: 'challenge-complete', token: '...' }, '*')`
-4. The plebbit client receives this token
-5. The author includes this token in their `challengeAnswer` pubsub message
-6. The subplebbit's challenge code calls `/api/v1/challenge/verify` to validate the token
+- **CAPTCHA providers**: Cloudflare Turnstile (default), hCaptcha, reCAPTCHA, Yandex SmartCaptcha
+- **OAuth providers**: GitHub, Google, Apple, Facebook (Sign-in challenges)
+
+> **Privacy note**: For OAuth providers, the server only verifies successful authentication - it does NOT share account identifiers (username, email) with the subplebbit. For IP-based intelligence, only the country code is shared, never the raw IP address.
+
+When the user completes the challenge:
+
+1. The iframe page receives success from the challenge provider
+2. The iframe calls `POST /api/v1/challenge/complete` with the provider's response token
+3. The server validates the response with the provider and returns a signed JWT
+4. The page calls `window.parent.postMessage({ type: 'challenge-complete', token: '...' }, '*')`
+5. The plebbit client receives this token
+6. The author includes this token in their `challengeAnswer` pubsub message
+7. The subplebbit's challenge code calls `/api/v1/challenge/verify` to validate the token
+
+### POST /api/v1/challenge/complete
+
+Called by the iframe after the user completes a challenge. Validates the challenge response with the provider and returns a signed JWT.
+
+**Request:**
+
+```typescript
+{
+  challengeId: string;
+  challengeResponse: string; // Token from the challenge provider
+  challengeType?: string;    // e.g., "turnstile", "hcaptcha", "github", etc.
+}
+```
+
+**Response:**
+
+```typescript
+{
+  success: boolean;
+  token?: string;  // JWT token on success
+  error?: string;  // Error message on failure
+}
+```
 
 ## Challenge Flow (Detailed)
 
@@ -374,9 +405,10 @@ Requests without subplebbit author data are rejected.
 These settings are configured on the HTTP server, not in the challenge package:
 
 - `databasePath`: Path to the SQLite database file (required). Use `:memory:` for in-memory. Env: `DATABASE_PATH` (required for CLI entrypoint)
-- `iframeProvider`: Which CAPTCHA provider to use (turnstile, hcaptcha, self-hosted)
-- `contentAnalysis`: Whether to analyze publication content for spam patterns
-- `ipInfoToken`: IPinfo token for IP intelligence lookups (env `IPINFO_TOKEN`)
+- `keyPath`: Path to store the server's Ed25519 JWT signing keypair. Auto-generates if not exists. Env: `JWT_KEY_PATH`
+- `turnstileSiteKey`: Cloudflare Turnstile site key. Env: `TURNSTILE_SITE_KEY`
+- `turnstileSecretKey`: Cloudflare Turnstile secret key. Env: `TURNSTILE_SECRET_KEY`
+- `ipInfoToken`: IPinfo token for IP intelligence lookups. Env: `IPINFO_TOKEN`
 
 ## Key Design Decisions
 

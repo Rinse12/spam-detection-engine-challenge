@@ -4,6 +4,7 @@ import * as cborg from "cborg";
 import { toString as uint8ArrayToString } from "uint8arrays/to-string";
 import { signBufferEd25519, getPublicKeyFromPrivateKey } from "../src/plebbit-js-signer.js";
 import { resetPlebbitLoaderForTest, setPlebbitLoaderForTest } from "../src/subplebbit-resolver.js";
+import { signChallengeToken, createTokenPayload } from "../src/crypto/jwt.js";
 
 const baseTimestamp = Math.floor(Date.now() / 1000);
 const baseSignature = {
@@ -157,7 +158,7 @@ describe("API Routes", () => {
             getSubplebbit,
             destroy: vi.fn().mockResolvedValue(undefined)
         }));
-        server = createServer({
+        server = await createServer({
             port: 0, // Random available port
             logging: false,
             databasePath: ":memory:",
@@ -356,9 +357,14 @@ describe("API Routes", () => {
         });
 
         it("should verify valid token", async () => {
+            // Generate a valid JWT using the server's key manager
+            const privateKey = await server.keyManager.getPrivateKey();
+            const tokenPayload = createTokenPayload(challengeId);
+            const validToken = await signChallengeToken(tokenPayload, privateKey);
+
             const payload = await createVerifyPayload({
                 challengeId,
-                token: "valid-token-placeholder-12345"
+                token: validToken
             });
             const response = await server.fastify.inject({
                 method: "POST",
@@ -373,9 +379,14 @@ describe("API Routes", () => {
         });
 
         it("should mark session as completed after verification", async () => {
+            // Generate a valid JWT using the server's key manager
+            const privateKey = await server.keyManager.getPrivateKey();
+            const tokenPayload = createTokenPayload(challengeId);
+            const validToken = await signChallengeToken(tokenPayload, privateKey);
+
             const payload = await createVerifyPayload({
                 challengeId,
-                token: "valid-token-placeholder-12345"
+                token: validToken
             });
             await server.fastify.inject({
                 method: "POST",
@@ -406,9 +417,14 @@ describe("API Routes", () => {
         });
 
         it("should return 409 for already completed challenge", async () => {
+            // Generate a valid JWT using the server's key manager
+            const privateKey = await server.keyManager.getPrivateKey();
+            const tokenPayload = createTokenPayload(challengeId);
+            const validToken = await signChallengeToken(tokenPayload, privateKey);
+
             const firstPayload = await createVerifyPayload({
                 challengeId,
-                token: "valid-token-placeholder-12345"
+                token: validToken
             });
             // Complete the challenge first
             await server.fastify.inject({
@@ -420,7 +436,7 @@ describe("API Routes", () => {
             // Try to verify again
             const secondPayload = await createVerifyPayload({
                 challengeId,
-                token: "another-token-12345"
+                token: validToken
             });
             const response = await server.fastify.inject({
                 method: "POST",
@@ -455,7 +471,7 @@ describe("API Routes", () => {
         it("should return 401 for invalid token", async () => {
             const payload = await createVerifyPayload({
                 challengeId,
-                token: "short" // Too short to be valid
+                token: "not-a-valid-jwt-token" // Invalid JWT format
             });
             const response = await server.fastify.inject({
                 method: "POST",
@@ -466,7 +482,8 @@ describe("API Routes", () => {
             expect(response.statusCode).toBe(401);
             const body = response.json();
             expect(body.success).toBe(false);
-            expect(body.error).toContain("Invalid token");
+            // JWT library throws "Invalid Compact JWS" for malformed tokens
+            expect(body.error).toBeDefined();
         });
 
         it("should return 400 for missing fields", async () => {

@@ -2,6 +2,7 @@ import Fastify, { type FastifyInstance, type FastifyError } from "fastify";
 import { SpamDetectionDatabase, createDatabase } from "./db/index.js";
 import { registerRoutes } from "./routes/index.js";
 import { destroyPlebbitInstance, getPlebbitInstance, initPlebbitInstance } from "./subplebbit-resolver.js";
+import { createKeyManager, type KeyManager } from "./crypto/keys.js";
 
 export interface ServerConfig {
     /** Port to listen on. Default: 3000 */
@@ -12,6 +13,8 @@ export interface ServerConfig {
     baseUrl?: string;
     /** Path to SQLite database file. Use ":memory:" for in-memory. */
     databasePath: string;
+    /** Path to store the server's JWT signing keypair. Auto-generates if not exists. */
+    keyPath?: string;
     /** Cloudflare Turnstile site key */
     turnstileSiteKey?: string;
     /** Cloudflare Turnstile secret key */
@@ -25,6 +28,7 @@ export interface ServerConfig {
 export interface SpamDetectionServer {
     fastify: FastifyInstance;
     db: SpamDetectionDatabase;
+    keyManager: KeyManager;
     start(): Promise<string>;
     stop(): Promise<void>;
 }
@@ -32,13 +36,15 @@ export interface SpamDetectionServer {
 /**
  * Create a new spam detection server instance.
  */
-export function createServer(config: ServerConfig): SpamDetectionServer {
+export async function createServer(config: ServerConfig): Promise<SpamDetectionServer> {
     const {
         port = 3000,
         host = "0.0.0.0",
         baseUrl = `http://localhost:${port}`,
         databasePath,
+        keyPath,
         turnstileSiteKey,
+        turnstileSecretKey,
         ipInfoToken,
         logging = true
     } = config;
@@ -68,12 +74,17 @@ export function createServer(config: ServerConfig): SpamDetectionServer {
     // Create database
     const db = createDatabase(databasePath);
 
+    // Create or load JWT signing keypair
+    const keyManager = await createKeyManager(keyPath);
+
     // Register routes
     registerRoutes(fastify, {
         db,
         baseUrl,
         turnstileSiteKey,
-        ipInfoToken
+        turnstileSecretKey,
+        ipInfoToken,
+        keyManager
     });
 
     initPlebbitInstance();
@@ -92,6 +103,7 @@ export function createServer(config: ServerConfig): SpamDetectionServer {
     return {
         fastify,
         db,
+        keyManager,
 
         async start(): Promise<string> {
             const address = await fastify.listen({ port, host });
@@ -128,19 +140,30 @@ if (isMainModule) {
         process.exit(1);
     }
 
-    const server = createServer({
+    createServer({
         port: parseInt(process.env.PORT ?? "3000", 10),
         host: process.env.HOST ?? "0.0.0.0",
         baseUrl: process.env.BASE_URL,
         databasePath,
+        keyPath: process.env.JWT_KEY_PATH,
         turnstileSiteKey: process.env.TURNSTILE_SITE_KEY,
         turnstileSecretKey: process.env.TURNSTILE_SECRET_KEY,
         ipInfoToken: process.env.IPINFO_TOKEN,
         logging: process.env.LOG_LEVEL !== "silent"
-    });
+    })
+        .then((server) => {
+            // Graceful shutdown
+            const shutdown = async () => {
+                console.log("\nShutting down...");
+                await server.stop();
+                process.exit(0);
+            };
 
-    server
-        .start()
+            process.on("SIGINT", shutdown);
+            process.on("SIGTERM", shutdown);
+
+            return server.start();
+        })
         .then((address) => {
             console.log(`Spam detection server listening at ${address}`);
         })
@@ -148,14 +171,4 @@ if (isMainModule) {
             console.error("Failed to start server:", err);
             process.exit(1);
         });
-
-    // Graceful shutdown
-    const shutdown = async () => {
-        console.log("\nShutting down...");
-        await server.stop();
-        process.exit(0);
-    };
-
-    process.on("SIGINT", shutdown);
-    process.on("SIGTERM", shutdown);
 }
