@@ -25,7 +25,7 @@ The risk scoring system primarily relies on trusted `author.subplebbit` data for
 
 ## Risk Factors
 
-### 1. Account Age (Weight: 17% without IP, 12% with IP)
+### 1. Account Age (Weight: 15% without IP, 10% with IP)
 
 Evaluates how long the author has been active, using the **older** of:
 
@@ -46,7 +46,7 @@ This dual-source approach ensures we capture the earliest known activity even wh
 
 **Rationale**: Older accounts have demonstrated sustained, non-malicious behavior over time.
 
-### 2. Karma Score (Weight: 13% without IP, 8% with IP)
+### 2. Karma Score (Weight: 11% without IP, 7% with IP)
 
 Evaluates the author's accumulated karma (`postScore + replyScore`) using a weighted combination of:
 
@@ -77,7 +77,7 @@ This dual-source approach gives priority to the author's reputation in the curre
 
 **Rationale**: Karma reflects community trust. High karma indicates valued contributions; negative karma indicates problematic behavior. Weighting current sub karma higher ensures that an author's local reputation takes precedence over their global reputation.
 
-### 3. Author Reputation (Weight: 25% without IP, 20% with IP)
+### 3. Author Reputation (Weight: 22% without IP, 18% with IP)
 
 Evaluates whether the author has verified publication history in this subplebbit.
 
@@ -90,7 +90,7 @@ Evaluates whether the author has verified publication history in this subplebbit
 
 **Rationale**: Authors with verified publication history have demonstrated willingness to participate legitimately.
 
-### 4. Comment Content/Title Risk (Weight: 18% without IP, 12% with IP)
+### 4. Comment Content/Title Risk (Weight: 15% without IP, 10% with IP)
 
 Analyzes comment content and title for spam indicators by querying the database for similar past publications. **Only applies to comments (posts and replies)** - returns neutral score (0.5) for other publication types.
 
@@ -133,7 +133,34 @@ Analyzes comment content and title for spam indicators by querying the database 
 
 **Note**: The base score for comments starts at 0.2 (low risk). Non-comment publications receive a neutral score of 0.5.
 
-### 5. Velocity Risk (Weight: 12% without IP, 8% with IP)
+### 5. Comment URL/Link Risk (Weight: 12% without IP, 10% with IP)
+
+Analyzes `comment.link` (the dedicated link field for link posts) for spam indicators. This is separate from URLs found in `comment.content`. **Only applies to comments (posts and replies) that have a link** - returns neutral score (0.5) for other publications or comments without links.
+
+| Indicator                                          | Score Impact | Description                           |
+| -------------------------------------------------- | ------------ | ------------------------------------- |
+| **Same Author - Duplicate Links**                  |              |                                       |
+| 5+ posts with same link from author in 24h         | +0.40        | Heavy link spam                       |
+| 3-4 posts with same link from author in 24h        | +0.25        | Moderate link spam                    |
+| 1-2 posts with same link from author in 24h        | +0.15        | Possible duplicate posting            |
+| **Other Authors - Duplicate Links (Coordinated)**  |              |                                       |
+| 10+ posts with same link from other authors        | +0.50        | Likely coordinated spam campaign      |
+| 5-9 posts with same link from other authors        | +0.35        | Possible coordinated spam             |
+| 2-4 posts with same link from other authors        | +0.20        | Link seen from multiple authors       |
+| 1 post with same link from another author          | +0.10        | Link seen from another author         |
+| **Domain Spam (Same Author)**                      |              |                                       |
+| 10+ links to same domain from author in 24h        | +0.25        | Domain-focused spam                   |
+| 5-9 links to same domain from author in 24h        | +0.15        | Elevated domain promotion             |
+| **Suspicious URL Patterns**                        |              |                                       |
+| Uses URL shortener (bit.ly, tinyurl, etc.)         | +0.15        | Link obfuscation                      |
+| Uses IP address instead of domain                  | +0.20        | Suspicious direct IP link             |
+| Unusually long URL (>500 chars)                    | +0.10        | Possible obfuscation                  |
+| Excessive query parameters (>5)                    | +0.05        | Possible tracking/affiliate link      |
+| Invalid URL format                                 | +0.10        | Malformed link                        |
+
+**Note**: The base score for comments with links starts at 0.2 (low risk). Non-comment publications or comments without links receive a neutral score of 0.5. URL normalization removes tracking parameters (utm_*, fbclid, etc.) before comparison.
+
+### 6. Velocity Risk (Weight: 10% without IP, 7% with IP)
 
 Measures how frequently an author is publishing to detect burst spam behavior. Queries the database to count actual publications by the author in the last hour and last 24 hours.
 
@@ -149,7 +176,7 @@ The effective rate is calculated as the maximum of:
 - Publications in the last hour
 - Average publications per hour over the last 24 hours
 
-### 6. Wallet Velocity Risk (Weight: 15% without IP, 15% with IP)
+### 7. Wallet Velocity Risk (Weight: 15% without IP, 15% with IP)
 
 Tracks publication velocity by wallet address from `author.wallets`. Detects coordinated spam from users who share the same wallet-verified identity (e.g., mintpass NFT holders).
 
@@ -193,7 +220,7 @@ This factor uses publication-type-specific thresholds since different actions ha
 
 **Note**: If an author has multiple wallets, the factor uses the highest velocity among all wallets. If no wallets are linked to the author, this factor is skipped (weight=0).
 
-### 7. IP Risk (Weight: 0% without IP, 25% with IP)
+### 8. IP Risk (Weight: 0% without IP, 23% with IP)
 
 When available (after iframe access), evaluates the author's IP address characteristics.
 
@@ -213,13 +240,14 @@ Weights are redistributed based on whether IP information is available:
 
 | Factor                     | Without IP | With IP  |
 | -------------------------- | ---------- | -------- |
-| Author Reputation          | 25%        | 20%      |
-| Comment Content/Title Risk | 18%        | 12%      |
-| Velocity Risk              | 12%        | 8%       |
-| Account Age                | 17%        | 12%      |
-| Karma Score                | 13%        | 8%       |
+| Author Reputation          | 22%        | 18%      |
+| Comment Content/Title Risk | 15%        | 10%      |
+| Comment URL/Link Risk      | 12%        | 10%      |
+| Velocity Risk              | 10%        | 7%       |
+| Account Age                | 15%        | 10%      |
+| Karma Score                | 11%        | 7%       |
 | Wallet Velocity            | 15%        | 15%      |
-| IP Risk                    | 0%         | 25%      |
+| IP Risk                    | 0%         | 23%      |
 | **Total**                  | **100%**   | **100%** |
 
 ## Score Calculation

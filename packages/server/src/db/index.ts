@@ -985,6 +985,104 @@ export class SpamDetectionDatabase {
 
         return Math.min(...timestamps);
     }
+
+    // ============================================
+    // Link/URL Query Methods
+    // ============================================
+
+    /**
+     * Count how many times a specific link has been posted by a given author.
+     * Used to detect link spam from the same author.
+     *
+     * @param params.authorAddress - The author's address
+     * @param params.link - The normalized link URL to search for
+     * @param params.sinceTimestamp - Only count links posted after this timestamp
+     * @returns Number of times this link has been posted by this author
+     */
+    findLinksByAuthor(params: { authorAddress: string; link: string; sinceTimestamp: number }): number {
+        const { authorAddress, link, sinceTimestamp } = params;
+
+        const result = this.db
+            .prepare(
+                `SELECT COUNT(*) as count FROM comments
+                 WHERE json_extract(author, '$.address') = ?
+                 AND link IS NOT NULL
+                 AND LOWER(link) = LOWER(?)
+                 AND receivedAt >= ?`
+            )
+            .get(authorAddress, link, sinceTimestamp) as { count: number };
+
+        return result.count;
+    }
+
+    /**
+     * Count how many times a specific link has been posted by other authors.
+     * Used to detect coordinated link spam campaigns.
+     *
+     * @param params.authorAddress - The current author's address (excluded from results)
+     * @param params.link - The normalized link URL to search for
+     * @param params.sinceTimestamp - Only count links posted after this timestamp
+     * @returns Object with count of posts and unique authors
+     */
+    findLinksByOthers(params: {
+        authorAddress: string;
+        link: string;
+        sinceTimestamp: number;
+    }): { count: number; uniqueAuthors: number } {
+        const { authorAddress, link, sinceTimestamp } = params;
+
+        const result = this.db
+            .prepare(
+                `SELECT
+                    COUNT(*) as count,
+                    COUNT(DISTINCT json_extract(author, '$.address')) as uniqueAuthors
+                 FROM comments
+                 WHERE json_extract(author, '$.address') != ?
+                 AND link IS NOT NULL
+                 AND LOWER(link) = LOWER(?)
+                 AND receivedAt >= ?`
+            )
+            .get(authorAddress, link, sinceTimestamp) as { count: number; uniqueAuthors: number };
+
+        return result;
+    }
+
+    /**
+     * Count how many links to a specific domain have been posted by a given author.
+     * Used to detect domain-focused spam (posting many different pages from same domain).
+     *
+     * @param params.authorAddress - The author's address
+     * @param params.domain - The domain to search for (e.g., "example.com")
+     * @param params.sinceTimestamp - Only count links posted after this timestamp
+     * @returns Number of links to this domain from this author
+     */
+    countLinkDomainByAuthor(params: { authorAddress: string; domain: string; sinceTimestamp: number }): number {
+        const { authorAddress, domain, sinceTimestamp } = params;
+
+        // Match domain in link URL - handles both with and without www prefix
+        // The link column stores URLs like "https://example.com/path"
+        // We use LIKE to match the domain portion
+        const result = this.db
+            .prepare(
+                `SELECT COUNT(*) as count FROM comments
+                 WHERE json_extract(author, '$.address') = ?
+                 AND link IS NOT NULL
+                 AND (
+                     LOWER(link) LIKE '%://' || LOWER(?) || '/%'
+                     OR LOWER(link) LIKE '%://' || LOWER(?) || '?%'
+                     OR LOWER(link) LIKE '%://' || LOWER(?) || '#%'
+                     OR LOWER(link) LIKE '%://www.' || LOWER(?) || '/%'
+                     OR LOWER(link) LIKE '%://www.' || LOWER(?) || '?%'
+                     OR LOWER(link) LIKE '%://www.' || LOWER(?) || '#%'
+                     OR LOWER(link) = '%://' || LOWER(?)
+                     OR LOWER(link) = '%://www.' || LOWER(?)
+                 )
+                 AND receivedAt >= ?`
+            )
+            .get(authorAddress, domain, domain, domain, domain, domain, domain, domain, domain, sinceTimestamp) as { count: number };
+
+        return result.count;
+    }
 }
 
 /**

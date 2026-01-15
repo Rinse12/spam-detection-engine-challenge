@@ -6,6 +6,7 @@ import {
     calculateAccountAge,
     calculateAuthorReputation,
     calculateCommentContentTitleRisk,
+    calculateCommentUrlRisk,
     calculateIpRisk,
     calculateKarma,
     calculateVelocity,
@@ -71,6 +72,7 @@ export function calculateRiskScore(options: CalculateRiskScoreOptions): RiskScor
         calculateKarma(ctx, weights.karmaScore),
         calculateAuthorReputation(ctx, weights.authorReputation),
         calculateCommentContentTitleRisk(ctx, weights.commentContentTitleRisk),
+        calculateCommentUrlRisk(ctx, weights.commentUrlRisk),
         calculateVelocity(ctx, weights.velocityRisk),
         calculateWalletVelocity(ctx, weights.walletVelocity),
         calculateIpRisk(ipIntelligence, weights.ipRisk)
