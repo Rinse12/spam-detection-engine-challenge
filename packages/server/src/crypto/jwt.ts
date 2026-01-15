@@ -1,5 +1,7 @@
 import * as jose from "jose";
 
+type KeyType = jose.CryptoKey | jose.KeyObject;
+
 /** Token expiry in seconds (1 hour per README spec) */
 export const TOKEN_EXPIRY_SECONDS = 3600;
 
@@ -19,7 +21,7 @@ export interface ChallengeTokenPayload {
  * @param privateKey - Ed25519 private key for signing
  * @returns Signed JWT string
  */
-export async function signChallengeToken(payload: ChallengeTokenPayload, privateKey: jose.KeyLike): Promise<string> {
+export async function signChallengeToken(payload: ChallengeTokenPayload, privateKey: KeyType): Promise<string> {
     const jwt = await new jose.SignJWT({
         challengeId: payload.challengeId,
         completedAt: payload.completedAt,
@@ -41,7 +43,7 @@ export async function signChallengeToken(payload: ChallengeTokenPayload, private
  * @returns Verified payload
  * @throws Error if token is invalid, expired, or signature doesn't match
  */
-export async function verifyChallengeToken(token: string, publicKey: jose.KeyLike): Promise<ChallengeTokenPayload> {
+export async function verifyChallengeToken(token: string, publicKey: KeyType): Promise<ChallengeTokenPayload> {
     const { payload } = await jose.jwtVerify(token, publicKey, {
         algorithms: ["EdDSA"]
     });

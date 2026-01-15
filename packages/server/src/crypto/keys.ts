@@ -8,23 +8,25 @@ export interface StoredKeyPair {
     createdAt: number;
 }
 
+type KeyType = jose.CryptoKey | jose.KeyObject;
+
 export interface KeyManager {
-    getPrivateKey(): Promise<jose.KeyLike>;
-    getPublicKey(): Promise<jose.KeyLike>;
+    getPrivateKey(): Promise<KeyType>;
+    getPublicKey(): Promise<KeyType>;
 }
 
 /**
  * Generate a new Ed25519 keypair for JWT signing.
  */
-export async function generateKeyPair(): Promise<{ privateKey: jose.KeyLike; publicKey: jose.KeyLike }> {
-    const { privateKey, publicKey } = await jose.generateKeyPair("EdDSA", { crv: "Ed25519" });
+export async function generateKeyPair(): Promise<{ privateKey: KeyType; publicKey: KeyType }> {
+    const { privateKey, publicKey } = await jose.generateKeyPair("EdDSA", { crv: "Ed25519", extractable: true });
     return { privateKey, publicKey };
 }
 
 /**
  * Export keypair to storable format.
  */
-export async function exportKeyPair(privateKey: jose.KeyLike, publicKey: jose.KeyLike): Promise<StoredKeyPair> {
+export async function exportKeyPair(privateKey: KeyType, publicKey: KeyType): Promise<StoredKeyPair> {
     const privateJwk = await jose.exportJWK(privateKey);
     const publicJwk = await jose.exportJWK(publicKey);
 
@@ -38,12 +40,12 @@ export async function exportKeyPair(privateKey: jose.KeyLike, publicKey: jose.Ke
 /**
  * Import keypair from stored format.
  */
-export async function importKeyPair(stored: StoredKeyPair): Promise<{ privateKey: jose.KeyLike; publicKey: jose.KeyLike }> {
+export async function importKeyPair(stored: StoredKeyPair): Promise<{ privateKey: KeyType; publicKey: KeyType }> {
     const privateJwk = JSON.parse(stored.privateKey);
     const publicJwk = JSON.parse(stored.publicKey);
 
-    const privateKey = (await jose.importJWK(privateJwk, "EdDSA")) as jose.KeyLike;
-    const publicKey = (await jose.importJWK(publicJwk, "EdDSA")) as jose.KeyLike;
+    const privateKey = (await jose.importJWK(privateJwk, "EdDSA")) as KeyType;
+    const publicKey = (await jose.importJWK(publicJwk, "EdDSA")) as KeyType;
 
     return { privateKey, publicKey };
 }
@@ -51,7 +53,7 @@ export async function importKeyPair(stored: StoredKeyPair): Promise<{ privateKey
 /**
  * Save keypair to a JSON file.
  */
-export async function saveKeyPairToFile(filePath: string, privateKey: jose.KeyLike, publicKey: jose.KeyLike): Promise<void> {
+export async function saveKeyPairToFile(filePath: string, privateKey: KeyType, publicKey: KeyType): Promise<void> {
     const stored = await exportKeyPair(privateKey, publicKey);
     const dir = path.dirname(filePath);
 
@@ -65,7 +67,7 @@ export async function saveKeyPairToFile(filePath: string, privateKey: jose.KeyLi
 /**
  * Load keypair from a JSON file.
  */
-export async function loadKeyPairFromFile(filePath: string): Promise<{ privateKey: jose.KeyLike; publicKey: jose.KeyLike }> {
+export async function loadKeyPairFromFile(filePath: string): Promise<{ privateKey: KeyType; publicKey: KeyType }> {
     const content = fs.readFileSync(filePath, "utf-8");
     const stored: StoredKeyPair = JSON.parse(content);
     return importKeyPair(stored);
@@ -84,8 +86,8 @@ export function keyPairFileExists(filePath: string): boolean {
  * @param keyPath - Path to store/load the keypair. If undefined, generates in-memory only.
  */
 export async function createKeyManager(keyPath?: string): Promise<KeyManager> {
-    let privateKey: jose.KeyLike;
-    let publicKey: jose.KeyLike;
+    let privateKey: KeyType;
+    let publicKey: KeyType;
 
     if (keyPath && keyPairFileExists(keyPath)) {
         // Load existing keypair
