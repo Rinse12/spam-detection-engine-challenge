@@ -5,41 +5,32 @@ import { registerVerifyRoute } from "./verify.js";
 import { registerIframeRoute } from "./iframe.js";
 
 export interface RouteOptions {
-  db: SpamDetectionDatabase;
-  baseUrl: string;
-  turnstileSiteKey?: string;
-  ipInfoToken?: string;
-  resolveSubplebbitPublicKey: (subplebbitAddress: string) => Promise<string>;
+    db: SpamDetectionDatabase;
+    baseUrl: string;
+    turnstileSiteKey?: string;
+    ipInfoToken?: string;
+    resolveSubplebbitPublicKey: (subplebbitAddress: string) => Promise<string>;
 }
 
 /**
  * Register all API routes on the Fastify instance.
  */
-export function registerRoutes(
-  fastify: FastifyInstance,
-  options: RouteOptions
-): void {
-  const {
-    db,
-    baseUrl,
-    turnstileSiteKey,
-    ipInfoToken,
-    resolveSubplebbitPublicKey,
-  } = options;
+export function registerRoutes(fastify: FastifyInstance, options: RouteOptions): void {
+    const { db, baseUrl, turnstileSiteKey, ipInfoToken, resolveSubplebbitPublicKey } = options;
 
-  // Register individual routes
-  registerEvaluateRoute(fastify, {
-    db,
-    baseUrl,
-    resolveSubplebbitPublicKey,
-  });
-  registerVerifyRoute(fastify, { db });
-  registerIframeRoute(fastify, { db, turnstileSiteKey, ipInfoToken });
+    // Register individual routes
+    registerEvaluateRoute(fastify, {
+        db,
+        baseUrl,
+        resolveSubplebbitPublicKey
+    });
+    registerVerifyRoute(fastify, { db });
+    registerIframeRoute(fastify, { db, turnstileSiteKey, ipInfoToken });
 
-  // Health check endpoint
-  fastify.get("/health", async () => {
-    return { status: "ok", timestamp: Date.now() };
-  });
+    // Health check endpoint
+    fastify.get("/health", async () => {
+        return { status: "ok", timestamp: Date.now() };
+    });
 }
 
 export { registerEvaluateRoute } from "./evaluate.js";

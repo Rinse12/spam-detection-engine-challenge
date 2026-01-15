@@ -4,127 +4,118 @@ import { IframeParamsSchema, type IframeParams } from "./schemas.js";
 import { refreshIpIntelIfNeeded } from "../ip-intel/index.js";
 
 export interface IframeRouteOptions {
-  db: SpamDetectionDatabase;
-  turnstileSiteKey?: string;
-  ipInfoToken?: string;
+    db: SpamDetectionDatabase;
+    turnstileSiteKey?: string;
+    ipInfoToken?: string;
 }
 
 /**
  * Register the /api/v1/iframe/:challengeId route.
  */
-export function registerIframeRoute(
-  fastify: FastifyInstance,
-  options: IframeRouteOptions
-): void {
-  const { db, turnstileSiteKey, ipInfoToken } = options;
+export function registerIframeRoute(fastify: FastifyInstance, options: IframeRouteOptions): void {
+    const { db, turnstileSiteKey, ipInfoToken } = options;
 
-  fastify.get(
-    "/api/v1/iframe/:challengeId",
-    async (
-      request: FastifyRequest<{ Params: IframeParams }>,
-      reply: FastifyReply
-    ): Promise<void> => {
-      // Validate params
-      const parseResult = IframeParamsSchema.safeParse(request.params);
+    fastify.get(
+        "/api/v1/iframe/:challengeId",
+        async (request: FastifyRequest<{ Params: IframeParams }>, reply: FastifyReply): Promise<void> => {
+            // Validate params
+            const parseResult = IframeParamsSchema.safeParse(request.params);
 
-      if (!parseResult.success) {
-        reply.status(400);
-        reply.send("Invalid challenge ID");
-        return;
-      }
+            if (!parseResult.success) {
+                reply.status(400);
+                reply.send("Invalid challenge ID");
+                return;
+            }
 
-      const { challengeId } = parseResult.data;
+            const { challengeId } = parseResult.data;
 
-      // Look up challenge session
-      const session = db.getChallengeSessionByChallengeId(challengeId);
+            // Look up challenge session
+            const session = db.getChallengeSessionByChallengeId(challengeId);
 
-      if (!session) {
-        reply.status(404);
-        reply.send("Challenge not found");
-        return;
-      }
+            if (!session) {
+                reply.status(404);
+                reply.send("Challenge not found");
+                return;
+            }
 
-      // Check if challenge has expired
-      const now = Math.floor(Date.now() / 1000);
-      if (session.expiresAt < now) {
-        reply.status(410);
-        reply.send("Challenge has expired");
-        return;
-      }
+            // Check if challenge has expired
+            const now = Math.floor(Date.now() / 1000);
+            if (session.expiresAt < now) {
+                reply.status(410);
+                reply.send("Challenge has expired");
+                return;
+            }
 
-      // Check if challenge was already completed
-      if (session.status === "completed") {
-        reply.status(409);
-        reply.send("Challenge already completed");
-        return;
-      }
+            // Check if challenge was already completed
+            if (session.status === "completed") {
+                reply.status(409);
+                reply.send("Challenge already completed");
+                return;
+            }
 
-      // Get client IP for IP record
-      const clientIp = getClientIp(request); // TODO why string | undefined? Shouldn't it always be defined?
+            // Get client IP for IP record
+            const clientIp = getClientIp(request); // TODO why string | undefined? Shouldn't it always be defined?
 
-      // Store IP record
+            // Store IP record
 
-      if (clientIp) {
-        // why remove old ip records?
-        db.upsertIpRecord({
-          ipAddress: clientIp,
-          author: session.author,
-          challengeId,
-        });
+            if (clientIp) {
+                // why remove old ip records?
+                db.upsertIpRecord({
+                    ipAddress: clientIp,
+                    author: session.author,
+                    challengeId
+                });
 
-        if (ipInfoToken) {
-          void refreshIpIntelIfNeeded({
-            db,
-            ipAddress: clientIp,
-            author: session.author,
-            token: ipInfoToken,
-          }).catch((error) => {
-            request.log.warn({ err: error }, "Failed to refresh IP intelligence");
-          });
+                if (ipInfoToken) {
+                    void refreshIpIntelIfNeeded({
+                        db,
+                        ipAddress: clientIp,
+                        author: session.author,
+                        token: ipInfoToken
+                    }).catch((error) => {
+                        request.log.warn({ err: error }, "Failed to refresh IP intelligence");
+                    });
+                }
+            }
+
+            // Serve the iframe HTML
+            // TODO: This will be replaced with actual static files from challenge-iframe/
+            const html = generateIframeHtml(challengeId, turnstileSiteKey);
+
+            reply.type("text/html");
+            reply.send(html);
         }
-      }
-
-      // Serve the iframe HTML
-      // TODO: This will be replaced with actual static files from challenge-iframe/
-      const html = generateIframeHtml(challengeId, turnstileSiteKey);
-
-      reply.type("text/html");
-      reply.send(html);
-    }
-  );
+    );
 }
 
 /**
  * Get client IP address from request.
  */
 function getClientIp(request: FastifyRequest): string | undefined {
-  // Check common proxy headers
-  const forwarded = request.headers["x-forwarded-for"];
-  if (forwarded) {
-    const ips = Array.isArray(forwarded) ? forwarded[0] : forwarded;
-    return ips.split(",")[0].trim();
-  }
+    // Check common proxy headers
+    const forwarded = request.headers["x-forwarded-for"];
+    if (forwarded) {
+        const ips = Array.isArray(forwarded) ? forwarded[0] : forwarded;
+        return ips.split(",")[0].trim();
+    }
 
-  const realIp = request.headers["x-real-ip"];
-  if (realIp) {
-    return Array.isArray(realIp) ? realIp[0] : realIp;
-  }
+    const realIp = request.headers["x-real-ip"];
+    if (realIp) {
+        return Array.isArray(realIp) ? realIp[0] : realIp;
+    }
 
-  // Fall back to direct connection IP
-  return request.ip;
+    // Fall back to direct connection IP
+    return request.ip;
 }
 
 /**
  * Generate iframe HTML with Turnstile CAPTCHA.
  * TODO: This is a placeholder - real implementation will use static files.
  */
-function generateIframeHtml(
-  challengeId: string,
-  turnstileSiteKey?: string
-): string {
-  const siteKey = turnstileSiteKey ?? "PLACEHOLDER_SITE_KEY";
+function generateIframeHtml(challengeId: string, turnstileSiteKey?: string): string {
+    const siteKey = turnstileSiteKey ?? "PLACEHOLDER_SITE_KEY";
 
-  return `<!DOCTYPE html>
+    return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">

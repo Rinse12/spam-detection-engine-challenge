@@ -1,34 +1,34 @@
 {
-  "name": "@plebbit/spam-detection-shared",
-  "version": "0.0.0",
-  "description": "Shared types for the Plebbit spam detection engine",
-  "type": "module",
-  "main": "dist/types.js",
-  "types": "dist/types.d.ts",
-  "files": [
-    "dist",
-    "package.json"
-  ],
-  "publishConfig": {
-    "access": "public"
-  },
-  "exports": {
-    ".": {
-      "types": "./dist/types.d.ts",
-      "import": "./dist/types.js",
-      "require": "./dist/types.js"
+    "name": "@plebbit/spam-detection-shared",
+    "version": "0.0.0",
+    "description": "Shared types for the Plebbit spam detection engine",
+    "type": "module",
+    "main": "dist/types.js",
+    "types": "dist/types.d.ts",
+    "files": [
+        "dist",
+        "package.json"
+    ],
+    "publishConfig": {
+        "access": "public"
     },
-    "./package.json": "./package.json"
-  },
-  "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "clean": "rm -rf dist"
-  },
-  "dependencies": {
-    "i18n-iso-countries": "7.14.0",
-    "zod": "4.3.5"
-  },
-  "devDependencies": {
-    "typescript": "5.9.3"
-  }
+    "exports": {
+        ".": {
+            "types": "./dist/types.d.ts",
+            "import": "./dist/types.js",
+            "require": "./dist/types.js"
+        },
+        "./package.json": "./package.json"
+    },
+    "scripts": {
+        "build": "tsc -p tsconfig.json",
+        "clean": "rm -rf dist"
+    },
+    "dependencies": {
+        "i18n-iso-countries": "7.14.0",
+        "zod": "4.3.5"
+    },
+    "devDependencies": {
+        "typescript": "5.9.3"
+    }
 }

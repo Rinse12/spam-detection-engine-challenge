@@ -1,52 +1,48 @@
 import { z } from "zod";
 import type { RefinementCtx } from "zod";
 import {
-  DecryptedChallengeRequestSchema,
-  JsonSignatureSchema,
-  PlebbitTimestampSchema,
-  SubplebbitAuthorSchema,
-  derivePublicationFromChallengeRequest,
+    DecryptedChallengeRequestSchema,
+    JsonSignatureSchema,
+    PlebbitTimestampSchema,
+    SubplebbitAuthorSchema,
+    derivePublicationFromChallengeRequest
 } from "../plebbit-js-internals.js";
 
-const ChallengeRequestWithSubplebbitAuthorSchema =
-  DecryptedChallengeRequestSchema.superRefine(
-    (value: unknown, ctx: RefinementCtx) => {
-      try {
+const ChallengeRequestWithSubplebbitAuthorSchema = DecryptedChallengeRequestSchema.superRefine((value: unknown, ctx: RefinementCtx) => {
+    try {
         const publication = derivePublicationFromChallengeRequest(value);
         const subplebbitAuthor = publication?.author?.subplebbit;
 
         if (!subplebbitAuthor) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: "Missing subplebbit author data",
-          });
-          return;
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: "Missing subplebbit author data"
+            });
+            return;
         }
 
-        const subplebbitResult =
-          SubplebbitAuthorSchema.safeParse(subplebbitAuthor);
+        const subplebbitResult = SubplebbitAuthorSchema.safeParse(subplebbitAuthor);
         if (!subplebbitResult.success) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: "Invalid subplebbit author data",
-          });
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: "Invalid subplebbit author data"
+            });
         }
-      } catch (error) {
+    } catch (error) {
         ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "Invalid challenge request: missing publication",
+            code: z.ZodIssueCode.custom,
+            message: "Invalid challenge request: missing publication"
         });
-      }
     }
-  );
+});
 
 export const EvaluateRequestSchema = z
-  .object({
-    challengeRequest: ChallengeRequestWithSubplebbitAuthorSchema,
-    timestamp: PlebbitTimestampSchema,
-    signature: JsonSignatureSchema,
-  })
-  .strict();
+    .object({
+        challengeRequest: ChallengeRequestWithSubplebbitAuthorSchema,
+        timestamp: PlebbitTimestampSchema,
+        signature: JsonSignatureSchema
+    })
+    .strict();
 
 /**
  * Type for the evaluate request body.
@@ -58,13 +54,13 @@ export type EvaluateRequest = z.infer<typeof EvaluateRequestSchema>;
  * Schema for the verify request body.
  */
 export const VerifyRequestSchema = z
-  .object({
-    challengeId: z.string().min(1, "challengeId is required"),
-    token: z.string().min(1, "token is required"),
-    timestamp: PlebbitTimestampSchema,
-    signature: JsonSignatureSchema,
-  })
-  .strict();
+    .object({
+        challengeId: z.string().min(1, "challengeId is required"),
+        token: z.string().min(1, "token is required"),
+        timestamp: PlebbitTimestampSchema,
+        signature: JsonSignatureSchema
+    })
+    .strict();
 
 export type VerifyRequest = z.infer<typeof VerifyRequestSchema>;
 
@@ -72,7 +68,7 @@ export type VerifyRequest = z.infer<typeof VerifyRequestSchema>;
  * Schema for the iframe route params.
  */
 export const IframeParamsSchema = z.object({
-  challengeId: z.string().min(1, "challengeId is required"), // TODO figure out how it should look like
+    challengeId: z.string().min(1, "challengeId is required") // TODO figure out how it should look like
 });
 
 export type IframeParams = z.infer<typeof IframeParamsSchema>;

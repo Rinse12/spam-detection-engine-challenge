@@ -1,15 +1,15 @@
 {
-  "extends": "../../tsconfig.base.json",
-  "compilerOptions": {
-    "outDir": "dist",
-    "rootDir": "src",
-    "resolvePackageJsonExports": false,
-    "baseUrl": ".",
-    "paths": {
-      "@plebbit/plebbit-js/dist/node/pubsub-messages/types.js": [
-        "node_modules/@plebbit/plebbit-js/dist/node/pubsub-messages/types.d.ts"
-      ]
-    }
-  },
-  "include": ["src/**/*"]
+    "extends": "../../tsconfig.base.json",
+    "compilerOptions": {
+        "outDir": "dist",
+        "rootDir": "src",
+        "resolvePackageJsonExports": false,
+        "baseUrl": ".",
+        "paths": {
+            "@plebbit/plebbit-js/dist/node/pubsub-messages/types.js": [
+                "node_modules/@plebbit/plebbit-js/dist/node/pubsub-messages/types.d.ts"
+            ]
+        }
+    },
+    "include": ["src/**/*"]
 }

@@ -418,16 +418,16 @@ These settings are configured on the HTTP server, not in the challenge package:
 1. **Setup monorepo** with npm workspaces, TypeScript, ESM
 2. **Implement shared types** package
 3. **Build server**:
-   - Fastify setup with routes
-   - better-sqlite3 database
-   - Import plebbit-js schemas for validation
-   - Risk scoring service
-   - JWT token signing (Ed25519)
-   - Turnstile integration
-   - Iframe HTML pages
+    - Fastify setup with routes
+    - better-sqlite3 database
+    - Import plebbit-js schemas for validation
+    - Risk scoring service
+    - JWT token signing (Ed25519)
+    - Turnstile integration
+    - Iframe HTML pages
 4. **Build challenge package**:
-   - ChallengeFileFactory implementation
-   - HTTP client for server communication
+    - ChallengeFileFactory implementation
+    - HTTP client for server communication
 5. **Testing**: Unit tests, integration tests with plebbit-js
 6. **Documentation**: README, API docs
 
