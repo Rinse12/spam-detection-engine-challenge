@@ -558,6 +558,57 @@ export class SpamDetectionDatabase {
             last24Hours: this.countPublicationsByWallet(walletAddress, publicationType, oneDayAgo)
         };
     }
+
+    // ============================================
+    // Account Age Query Methods
+    // ============================================
+
+    /**
+     * Get the earliest receivedAt timestamp for an author across all publication types.
+     * This represents when we first saw this author in our own database.
+     * Returns undefined if the author has no publications in our database.
+     */
+    getAuthorFirstSeenTimestamp(authorAddress: string): number | undefined {
+        // Query each publication type for the minimum receivedAt
+        const commentMin = this.db
+            .prepare(
+                `SELECT MIN(receivedAt) as minTime FROM comments
+                 WHERE json_extract(author, '$.address') = ?`
+            )
+            .get(authorAddress) as { minTime: number | null };
+
+        const voteMin = this.db
+            .prepare(
+                `SELECT MIN(receivedAt) as minTime FROM votes
+                 WHERE json_extract(author, '$.address') = ?`
+            )
+            .get(authorAddress) as { minTime: number | null };
+
+        const editMin = this.db
+            .prepare(
+                `SELECT MIN(receivedAt) as minTime FROM commentEdits
+                 WHERE json_extract(author, '$.address') = ?`
+            )
+            .get(authorAddress) as { minTime: number | null };
+
+        const moderationMin = this.db
+            .prepare(
+                `SELECT MIN(receivedAt) as minTime FROM commentModerations
+                 WHERE json_extract(author, '$.address') = ?`
+            )
+            .get(authorAddress) as { minTime: number | null };
+
+        // Collect all non-null timestamps
+        const timestamps = [commentMin.minTime, voteMin.minTime, editMin.minTime, moderationMin.minTime].filter(
+            (t): t is number => t !== null
+        );
+
+        if (timestamps.length === 0) {
+            return undefined;
+        }
+
+        return Math.min(...timestamps);
+    }
 }
 
 /**

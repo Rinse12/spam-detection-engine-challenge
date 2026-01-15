@@ -33,7 +33,9 @@ const SCORES = {
 
 /**
  * Calculate risk score based on account age.
- * Uses firstCommentTimestamp from the subplebbit author data (TRUSTED).
+ * Uses the older of:
+ * 1. firstCommentTimestamp from author.subplebbit (TRUSTED - from subplebbit)
+ * 2. First seen timestamp from our own database
  *
  * Scoring logic:
  * - Older accounts are considered more trustworthy (lower risk)
@@ -41,13 +43,24 @@ const SCORES = {
  * - Accounts with no timestamp are treated as brand new (highest risk)
  */
 export function calculateAccountAge(ctx: RiskContext, weight: number): RiskFactor {
-    const { challengeRequest, now } = ctx;
+    const { challengeRequest, now, db } = ctx;
     const author = getAuthorFromChallengeRequest(challengeRequest);
     const subplebbitAuthor = author.subplebbit;
 
-    // TODO we should account for our own db history as well, not just author.subplebbit. Use the older between the two
-    // No first comment timestamp means new account or first interaction
-    if (!subplebbitAuthor?.firstCommentTimestamp) {
+    // Get first seen timestamp from our own database
+    const dbFirstSeen = db.getAuthorFirstSeenTimestamp(author.address);
+    const subplebbitFirstComment = subplebbitAuthor?.firstCommentTimestamp;
+
+    // Determine the effective first activity timestamp (use the older one)
+    let firstActivityTimestamp: number | undefined;
+    if (subplebbitFirstComment && dbFirstSeen) {
+        firstActivityTimestamp = Math.min(subplebbitFirstComment, dbFirstSeen);
+    } else {
+        firstActivityTimestamp = subplebbitFirstComment ?? dbFirstSeen;
+    }
+
+    // No first activity timestamp means new account or first interaction
+    if (!firstActivityTimestamp) {
         return {
             name: "accountAge",
             score: SCORES.NO_HISTORY,
@@ -56,7 +69,7 @@ export function calculateAccountAge(ctx: RiskContext, weight: number): RiskFacto
         };
     }
 
-    const accountAgeSeconds = now - subplebbitAuthor.firstCommentTimestamp;
+    const accountAgeSeconds = now - firstActivityTimestamp;
     const accountAgeDays = accountAgeSeconds / (24 * 60 * 60);
 
     let score: number;

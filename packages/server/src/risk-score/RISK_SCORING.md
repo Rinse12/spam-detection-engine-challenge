@@ -27,7 +27,12 @@ The risk scoring system primarily relies on trusted `author.subplebbit` data for
 
 ### 1. Account Age (Weight: 17% without IP, 12% with IP)
 
-Evaluates how long the author has been active in the subplebbit based on `author.subplebbit.firstCommentTimestamp`.
+Evaluates how long the author has been active, using the **older** of:
+
+1. `author.subplebbit.firstCommentTimestamp` (TRUSTED - from subplebbit)
+2. First seen timestamp from the spam detection database
+
+This dual-source approach ensures we capture the earliest known activity even when the subplebbit data is incomplete or when the spam detection system has older records.
 
 | Account Age | Risk Score | Description                            |
 | ----------- | ---------- | -------------------------------------- |
