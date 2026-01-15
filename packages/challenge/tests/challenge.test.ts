@@ -1,10 +1,12 @@
 import type { SubplebbitChallengeSetting } from "@plebbit/plebbit-js/dist/node/subplebbit/types.js";
 import type { DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor } from "@plebbit/plebbit-js/dist/node/pubsub-messages/types.js";
+import type { LocalSubplebbit } from "@plebbit/plebbit-js/dist/node/runtime/node/subplebbit/local-subplebbit.js";
+import { getPublicKeyFromPrivateKey } from "../src/plebbit-js-signer.js";
 import type {
   EvaluateResponse,
   VerifyResponse,
 } from "@plebbit/spam-detection-shared";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import ChallengeFileFactory from "../src/index.js";
 
 type MockResponseOptions = {
@@ -53,6 +55,19 @@ const createVerifyResponse = (
 
 const request =
   {} as DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor;
+const testPrivateKey = Buffer.alloc(32, 7).toString("base64");
+let subplebbit: LocalSubplebbit;
+
+beforeAll(async () => {
+  const publicKey = await getPublicKeyFromPrivateKey(testPrivateKey);
+  subplebbit = {
+    signer: {
+      privateKey: testPrivateKey,
+      publicKey,
+      type: "ed25519",
+    },
+  } as LocalSubplebbit;
+});
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -83,7 +98,8 @@ describe("spam-detection challenge package", () => {
     const result = await challengeFile.getChallenge(
       { options: {} } as SubplebbitChallengeSetting,
       request,
-      0
+      0,
+      subplebbit
     );
 
     expect(result).toEqual({ success: true });
@@ -105,14 +121,26 @@ describe("spam-detection challenge package", () => {
     await challengeFile.getChallenge(
       { options: {} } as SubplebbitChallengeSetting,
       request,
-      0
+      0,
+      subplebbit
     );
 
     const payload = JSON.parse(
       (fetchMock.mock.calls[0]?.[1]?.body ?? "{}") as string
     );
 
-    expect(payload).toEqual({ challengeRequest: request });
+    expect(payload).toEqual(
+      expect.objectContaining({
+        challengeRequest: request,
+        timestamp: expect.any(Number),
+        signature: expect.objectContaining({
+          publicKey: subplebbit.signer.publicKey,
+          type: "ed25519",
+          signedPropertyNames: ["challengeRequest", "timestamp"],
+          signature: expect.any(String),
+        }),
+      })
+    );
   });
 
   it("auto-rejects when riskScore meets the reject threshold", async () => {
@@ -128,7 +156,8 @@ describe("spam-detection challenge package", () => {
     const result = await challengeFile.getChallenge(
       { options: {} } as SubplebbitChallengeSetting,
       request,
-      0
+      0,
+      subplebbit
     );
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -150,7 +179,8 @@ describe("spam-detection challenge package", () => {
     const result = await challengeFile.getChallenge(
       { options: {} } as SubplebbitChallengeSetting,
       request,
-      0
+      0,
+      subplebbit
     );
 
     if (!("verify" in result)) {
@@ -178,7 +208,8 @@ describe("spam-detection challenge package", () => {
     const result = await challengeFile.getChallenge(
       { options: {} } as SubplebbitChallengeSetting,
       request,
-      0
+      0,
+      subplebbit
     );
 
     if (!("verify" in result)) {
@@ -189,10 +220,19 @@ describe("spam-detection challenge package", () => {
     const verifyBody = JSON.parse(
       (fetchMock.mock.calls[1]?.[1]?.body ?? "{}") as string
     );
-    expect(verifyBody).toEqual({
-      challengeId: evaluateResponse.challengeId,
-      token: "token-value",
-    });
+    expect(verifyBody).toEqual(
+      expect.objectContaining({
+        challengeId: evaluateResponse.challengeId,
+        token: "token-value",
+        timestamp: expect.any(Number),
+        signature: expect.objectContaining({
+          publicKey: subplebbit.signer.publicKey,
+          type: "ed25519",
+          signedPropertyNames: ["challengeId", "token", "timestamp"],
+          signature: expect.any(String),
+        }),
+      })
+    );
   });
 
   it("surfaces verification failures from the server", async () => {
@@ -209,7 +249,8 @@ describe("spam-detection challenge package", () => {
     const result = await challengeFile.getChallenge(
       { options: {} } as SubplebbitChallengeSetting,
       request,
-      0
+      0,
+      subplebbit
     );
 
     if (!("verify" in result)) {
@@ -233,7 +274,8 @@ describe("spam-detection challenge package", () => {
     const result = await challengeFile.getChallenge(
       { options: { maxIpRisk: "0.4" } } as SubplebbitChallengeSetting,
       request,
-      0
+      0,
+      subplebbit
     );
 
     if (!("verify" in result)) {
@@ -259,7 +301,8 @@ describe("spam-detection challenge package", () => {
     const result = await challengeFile.getChallenge(
       { options: { countryBlacklist: "us, ca" } } as SubplebbitChallengeSetting,
       request,
-      0
+      0,
+      subplebbit
     );
 
     if (!("verify" in result)) {
@@ -304,7 +347,8 @@ describe("spam-detection challenge package", () => {
       const result = await challengeFile.getChallenge(
         { options } as SubplebbitChallengeSetting,
         request,
-        0
+        0,
+        subplebbit
       );
 
       if (!("verify" in result)) {
@@ -334,7 +378,8 @@ describe("spam-detection challenge package", () => {
     const result = await challengeFile.getChallenge(
       { options: {} } as SubplebbitChallengeSetting,
       request,
-      0
+      0,
+      subplebbit
     );
 
     if (!("verify" in result)) {
@@ -356,7 +401,8 @@ describe("spam-detection challenge package", () => {
     await challengeFile.getChallenge(
       { options: { serverUrl: "https://example.com/api///" } } as SubplebbitChallengeSetting,
       request,
-      0
+      0,
+      subplebbit
     );
 
     expect(fetchMock).toHaveBeenCalledWith(
@@ -379,7 +425,8 @@ describe("spam-detection challenge package", () => {
       challengeFile.getChallenge(
         { options: {} } as SubplebbitChallengeSetting,
         request,
-        0
+        0,
+        subplebbit
       )
     ).rejects.toThrow(/Invalid evaluate response/i);
   });
@@ -396,7 +443,8 @@ describe("spam-detection challenge package", () => {
     const result = await challengeFile.getChallenge(
       { options: {} } as SubplebbitChallengeSetting,
       request,
-      0
+      0,
+      subplebbit
     );
 
     if (!("verify" in result)) {
@@ -420,7 +468,8 @@ describe("spam-detection challenge package", () => {
       challengeFile.getChallenge(
         { options: {} } as SubplebbitChallengeSetting,
         request,
-        0
+        0,
+        subplebbit
       )
     ).rejects.toThrow(/Spam detection server error \(500\).*boom/i);
   });
@@ -437,7 +486,8 @@ describe("spam-detection challenge package", () => {
       challengeFile.getChallenge(
         { options: {} } as SubplebbitChallengeSetting,
         request,
-        0
+        0,
+        subplebbit
       )
     ).rejects.toThrow(/Invalid JSON response/i);
   });

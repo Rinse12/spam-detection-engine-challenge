@@ -41,16 +41,23 @@ spam_detection_engine/
 
 Evaluate publication risk. The server tracks author history internally, so no completion tokens are needed.
 
-> **TODO:** The request must be signed by the subplebbit to prevent abuse (e.g., someone unrelated to the sub querying the engine to doxx users). Details of the signing mechanism to be figured out.
+Requests are signed by the subplebbit signer to prevent abuse (e.g., someone unrelated to the sub querying the engine to doxx users). The server validates the request signature and ensures the signer matches the subplebbit (for domain addresses, the server resolves the subplebbit via `plebbit.getSubplebbit` and compares `subplebbit.signature.publicKey`). Resolved subplebbit public keys are cached in-memory for 12 hours to reduce repeated lookups. The HTTP server initializes a single shared Plebbit instance and only destroys it when the server shuts down.
 
 **Request:**
 
 ```typescript
 // The request wraps the DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor from plebbit-js
 // subplebbitAddress and author.subplebbit are required on the publication
-// Request must be signed by the subplebbit (see TODO above)
+// signature is a plebbit-js JsonSignature; signedPropertyNames must cover all fields except signature
 {
   challengeRequest: DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor;
+  timestamp: number; // Unix timestamp (seconds)
+  signature: {
+    signature: string; // base64
+    publicKey: string; // base64
+    type: string;
+    signedPropertyNames: string[];
+  };
 }
 ```
 
@@ -74,7 +81,7 @@ The response always includes a pre-generated `challengeUrl`. If the sub decides 
 
 Called by the subplebbit's challenge code to verify a token submitted by the author. The author receives a token after completing the iframe challenge and includes it in their `challengeAnswer` pubsub message.
 
-**Request must be signed by the subplebbit** (same signing mechanism as /evaluate).
+**Request must be signed by the subplebbit** (same signing mechanism as /evaluate), using the same signing key that was used for the evaluate request.
 
 **Request:**
 
@@ -82,7 +89,13 @@ Called by the subplebbit's challenge code to verify a token submitted by the aut
 {
   challengeId: string;
   token: string; // Token from iframe, submitted by author in challengeAnswer
-  // + subplebbit signature (mechanism TBD)
+  timestamp: number; // Unix timestamp (seconds)
+  signature: {
+    signature: string; // base64
+    publicKey: string; // base64
+    type: string;
+    signedPropertyNames: string[];
+  };
 }
 ```
 
@@ -104,6 +117,7 @@ Called by the subplebbit's challenge code to verify a token submitted by the aut
 
 ### GET /api/v1/iframe/:challengeId
 
+TODO: The iframe needs to explain, if we do Sign in by github that we won't send the account name to the sub. Same thing for IP address, we only share the IP address's country
 Serves the iframe challenge page (e.g., Cloudflare Turnstile). When the user solves the challenge:
 
 1. The iframe page receives success from Turnstile
@@ -284,7 +298,9 @@ Stores comment moderation publications.
 - `receivedAt` INTEGER NOT NULL
 
 ### `challengeSessions` (ephemeral)
+
 #### TODO this is not complete yet, we will probably come back to this later
+
 Tracks pending challenges. **Automatically purged after 1 hour.**.
 
 - `id` INTEGER PRIMARY KEY
@@ -297,7 +313,9 @@ Tracks pending challenges. **Automatically purged after 1 hour.**.
 - `createdAt` INTEGER NOT NULL
 
 ### `ipRecords`
+
 #### TODO this is not complete yet, we will probably come back to this later
+
 Stores raw IP addresses associated with authors (captured via iframe).
 
 - `id` INTEGER PRIMARY KEY

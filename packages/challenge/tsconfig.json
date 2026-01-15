@@ -11,6 +11,9 @@
       ],
       "@plebbit/plebbit-js/dist/node/pubsub-messages/types.js": [
         "node_modules/@plebbit/plebbit-js/dist/node/pubsub-messages/types.d.ts"
+      ],
+      "@plebbit/plebbit-js/dist/node/runtime/node/subplebbit/local-subplebbit.js": [
+        "node_modules/@plebbit/plebbit-js/dist/node/runtime/node/subplebbit/local-subplebbit.d.ts"
       ]
     }
   },

@@ -5,6 +5,8 @@ import type {
   SubplebbitChallengeSetting,
 } from "@plebbit/plebbit-js/dist/node/subplebbit/types.js";
 import type { DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor } from "@plebbit/plebbit-js/dist/node/pubsub-messages/types.js";
+import type { LocalSubplebbit } from "@plebbit/plebbit-js/dist/node/runtime/node/subplebbit/local-subplebbit.js";
+import { signBufferEd25519 } from "./plebbit-js-signer.js";
 import type {
   EvaluateResponse,
   VerifyResponse,
@@ -14,6 +16,8 @@ import {
   VerifyResponseSchema,
 } from "@plebbit/spam-detection-shared";
 import { createOptionsSchema, type ParsedOptions } from "./schema.js";
+import * as cborg from "cborg";
+import { toString as uint8ArrayToString } from "uint8arrays/to-string";
 
 const DEFAULT_SERVER_URL = "https://spam.plebbit.org/api/v1"; // TODO once we have a server we will change this url
 
@@ -104,6 +108,44 @@ const parseOptions = (settings: SubplebbitChallengeSetting): ParsedOptions => {
     throw new Error(`Invalid challenge options: ${message}`);
   }
   return parsed.data;
+};
+
+const CBORG_ENCODE_OPTIONS = {
+  typeEncoders: {
+    undefined: () => {
+      throw new Error("Signed payload cannot include undefined values (cborg)");
+    },
+  },
+};
+
+const buildSignedPayload = (
+  payload: Record<string, unknown>,
+  signedPropertyNames: string[]
+) => {
+  const propsToSign: Record<string, unknown> = {};
+  for (const propertyName of signedPropertyNames) {
+    propsToSign[propertyName] = payload[propertyName];
+  }
+  return propsToSign;
+};
+
+const createRequestSignature = async (
+  payload: Record<string, unknown>,
+  signedPropertyNames: string[],
+  signer: { privateKey?: string; publicKey?: string; type?: string }
+) => {
+  if (!signer.privateKey || !signer.publicKey || !signer.type) {
+    throw new Error("Subplebbit signer is missing required fields");
+  }
+  const propsToSign = buildSignedPayload(payload, signedPropertyNames);
+  const encoded = cborg.encode(propsToSign, CBORG_ENCODE_OPTIONS);
+  const signatureBuffer = await signBufferEd25519(encoded, signer.privateKey);
+  return {
+    signature: uint8ArrayToString(signatureBuffer, "base64"),
+    publicKey: signer.publicKey,
+    type: signer.type,
+    signedPropertyNames,
+  };
 };
 
 const postJson = async (url: string, body: unknown): Promise<unknown> => {
@@ -201,14 +243,32 @@ const getPostChallengeRejection = (
 const getChallenge = async (
   subplebbitChallengeSettings: SubplebbitChallengeSetting,
   challengeRequestMessage: DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor,
-  _challengeIndex: number
+  _challengeIndex: number,
+  subplebbit: LocalSubplebbit
 ): Promise<ChallengeInput | ChallengeResultInput> => {
   const options = parseOptions(subplebbitChallengeSettings);
+  const signer = subplebbit?.signer;
+
+  if (!signer) {
+    throw new Error("Subplebbit signer is required to call spam engine");
+  }
+
+  const evaluateTimestamp = Math.floor(Date.now() / 1000);
+  const evaluatePayload = {
+    challengeRequest: challengeRequestMessage,
+    timestamp: evaluateTimestamp,
+  };
+  const evaluateSignature = await createRequestSignature(
+    evaluatePayload,
+    ["challengeRequest", "timestamp"],
+    signer
+  );
 
   const evaluateResponse = parseWithSchema<EvaluateResponse>(
     EvaluateResponseSchema,
     await postJson(`${options.serverUrl}/evaluate`, {
-      challengeRequest: challengeRequestMessage,
+      ...evaluatePayload,
+      signature: evaluateSignature,
     }),
     "evaluate"
   );
@@ -240,11 +300,19 @@ const getChallenge = async (
       return { success: false, error: "Missing challenge token." };
     }
 
+    const verifyTimestamp = Math.floor(Date.now() / 1000);
+    const verifyPayload = { challengeId, token, timestamp: verifyTimestamp };
+    const verifySignature = await createRequestSignature(
+      verifyPayload,
+      ["challengeId", "token", "timestamp"],
+      signer
+    );
+
     const verifyResponse = parseWithSchema<VerifyResponse>(
       VerifyResponseSchema,
       await postJson(`${options.serverUrl}/challenge/verify`, {
-        challengeId,
-        token,
+        ...verifyPayload,
+        signature: verifySignature,
       }),
       "verify"
     );

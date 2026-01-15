@@ -1,8 +1,9 @@
 import { z } from "zod";
 import type { RefinementCtx } from "zod";
-import type { DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor } from "@plebbit/plebbit-js/dist/node/pubsub-messages/types.js";
 import {
   DecryptedChallengeRequestSchema,
+  JsonSignatureSchema,
+  PlebbitTimestampSchema,
   SubplebbitAuthorSchema,
   derivePublicationFromChallengeRequest,
 } from "../plebbit-js-internals.js";
@@ -39,26 +40,31 @@ const ChallengeRequestWithSubplebbitAuthorSchema =
     }
   );
 
-export const EvaluateRequestSchema = z.object({
-  challengeRequest: ChallengeRequestWithSubplebbitAuthorSchema,
-});
+export const EvaluateRequestSchema = z
+  .object({
+    challengeRequest: ChallengeRequestWithSubplebbitAuthorSchema,
+    timestamp: PlebbitTimestampSchema,
+    signature: JsonSignatureSchema,
+  })
+  .strict();
 
 /**
  * Type for the evaluate request body.
  * Imported from plebbit-js.
  */
-export type EvaluateRequest = {
-  challengeRequest: DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor;
-};
+export type EvaluateRequest = z.infer<typeof EvaluateRequestSchema>;
 
 /**
  * Schema for the verify request body.
  */
-export const VerifyRequestSchema = z.object({
-  challengeId: z.string().min(1, "challengeId is required"),
-  token: z.string().min(1, "token is required"),
-  // TODO add signature by subplebbit so only subplebbits can see those verify responses
-});
+export const VerifyRequestSchema = z
+  .object({
+    challengeId: z.string().min(1, "challengeId is required"),
+    token: z.string().min(1, "token is required"),
+    timestamp: PlebbitTimestampSchema,
+    signature: JsonSignatureSchema,
+  })
+  .strict();
 
 export type VerifyRequest = z.infer<typeof VerifyRequestSchema>;
 

@@ -6,6 +6,7 @@ export interface ChallengeSession {
   challengeId: string;
   author: string;
   subplebbitAddress: string;
+  signerPublicKey: string | null; // TODO why do we need to store it?
   status: "pending" | "completed" | "failed";
   completedAt: number | null;
   expiresAt: number;
@@ -51,6 +52,7 @@ export class SpamDetectionDatabase {
 
     // Initialize schema
     this.db.exec(SCHEMA_SQL);
+    this.ensureChallengeSessionSchema();
   }
 
   /**
@@ -71,6 +73,20 @@ export class SpamDetectionDatabase {
   // Challenge Session Methods
   // ============================================
 
+  private ensureChallengeSessionSchema(): void {
+    const columns = this.db
+      .prepare("PRAGMA table_info(challengeSessions)")
+      .all() as Array<{ name: string }>;
+    const hasSignerPublicKey = columns.some(
+      (column) => column.name === "signerPublicKey"
+    );
+    if (!hasSignerPublicKey) {
+      this.db.exec(
+        "ALTER TABLE challengeSessions ADD COLUMN signerPublicKey TEXT"
+      );
+    }
+  }
+
   /**
    * Create a new challenge session.
    */
@@ -78,11 +94,24 @@ export class SpamDetectionDatabase {
     challengeId: string;
     author: string;
     subplebbitAddress: string;
+    signerPublicKey: string;
     expiresAt: number;
   }): ChallengeSession {
     const stmt = this.db.prepare(`
-      INSERT INTO challengeSessions (challengeId, author, subplebbitAddress, expiresAt)
-      VALUES (@challengeId, @author, @subplebbitAddress, @expiresAt)
+      INSERT INTO challengeSessions (
+        challengeId,
+        author,
+        subplebbitAddress,
+        signerPublicKey,
+        expiresAt
+      )
+      VALUES (
+        @challengeId,
+        @author,
+        @subplebbitAddress,
+        @signerPublicKey,
+        @expiresAt
+      )
     `);
 
     const result = stmt.run(params);

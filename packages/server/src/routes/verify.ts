@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import type { VerifyResponse } from "@plebbit/spam-detection-shared";
 import type { SpamDetectionDatabase } from "../db/index.js";
 import { VerifyRequestSchema, type VerifyRequest } from "./schemas.js";
+import { verifySignedRequest } from "../security/request-signature.js";
 
 export interface VerifyRouteOptions {
   db: SpamDetectionDatabase;
@@ -35,7 +36,33 @@ export function registerVerifyRoute(
         };
       }
 
-      const { challengeId, token } = parseResult.data;
+      const { challengeId, token, signature, timestamp } = parseResult.data;
+
+      const now = Math.floor(Date.now() / 1000);
+      const maxSkewSeconds = 5 * 60;
+      if (
+        timestamp < now - maxSkewSeconds ||
+        timestamp > now + maxSkewSeconds
+      ) {
+        reply.status(401);
+        return {
+          success: false,
+          error: "Request timestamp is out of range",
+        };
+      }
+
+      try {
+        await verifySignedRequest(
+          { challengeId, token, timestamp },
+          signature
+        );
+      } catch (error) {
+        reply.status((error as { statusCode?: number }).statusCode ?? 401);
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : "Invalid signature",
+        };
+      }
 
       // Look up challenge session
       const session = db.getChallengeSessionByChallengeId(challengeId);
@@ -49,7 +76,6 @@ export function registerVerifyRoute(
       }
 
       // Check if challenge has expired
-      const now = Math.floor(Date.now() / 1000);
       if (session.expiresAt < now) {
         reply.status(410);
         return {
@@ -64,6 +90,22 @@ export function registerVerifyRoute(
         return {
           success: false,
           error: `Challenge session is already ${session.status}`,
+        };
+      }
+
+      if (!session.signerPublicKey) {
+        reply.status(401);
+        return {
+          success: false,
+          error: "Challenge session signature is missing",
+        };
+      }
+
+      if (session.signerPublicKey !== signature.publicKey) {
+        reply.status(401);
+        return {
+          success: false,
+          error: "Request signature does not match session",
         };
       }
 

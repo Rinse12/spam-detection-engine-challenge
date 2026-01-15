@@ -3,6 +3,7 @@ import { SpamDetectionDatabase, createDatabase } from "../src/db/index.js";
 
 describe("SpamDetectionDatabase", () => {
   let db: SpamDetectionDatabase;
+  const signerPublicKey = "test-public-key";
 
   beforeEach(() => {
     db = createDatabase(":memory:");
@@ -18,6 +19,7 @@ describe("SpamDetectionDatabase", () => {
         challengeId: "test-challenge-123",
         author: "12D3KooW...",
         subplebbitAddress: "my-sub.eth",
+        signerPublicKey,
         expiresAt: Math.floor(Date.now() / 1000) + 3600,
       });
 
@@ -33,6 +35,7 @@ describe("SpamDetectionDatabase", () => {
         challengeId: "test-challenge-456",
         author: "12D3KooW...",
         subplebbitAddress: "my-sub.eth",
+        signerPublicKey,
         expiresAt: Math.floor(Date.now() / 1000) + 3600,
       });
 
@@ -52,6 +55,7 @@ describe("SpamDetectionDatabase", () => {
         challengeId: "test-challenge-789",
         author: "12D3KooW...",
         subplebbitAddress: "my-sub.eth",
+        signerPublicKey,
         expiresAt: Math.floor(Date.now() / 1000) + 3600,
       });
 
@@ -74,6 +78,7 @@ describe("SpamDetectionDatabase", () => {
         challengeId: "challenge-1",
         author: "author-123",
         subplebbitAddress: "sub-1.eth",
+        signerPublicKey,
         expiresAt: Math.floor(Date.now() / 1000) + 3600,
       });
 
@@ -81,6 +86,7 @@ describe("SpamDetectionDatabase", () => {
         challengeId: "challenge-2",
         author: "author-123",
         subplebbitAddress: "sub-2.eth",
+        signerPublicKey,
         expiresAt: Math.floor(Date.now() / 1000) + 3600,
       });
 
@@ -88,6 +94,7 @@ describe("SpamDetectionDatabase", () => {
         challengeId: "challenge-3",
         author: "other-author",
         subplebbitAddress: "sub-1.eth",
+        signerPublicKey,
         expiresAt: Math.floor(Date.now() / 1000) + 3600,
       });
 
@@ -100,6 +107,7 @@ describe("SpamDetectionDatabase", () => {
         challengeId: "pending-1",
         author: "author-456",
         subplebbitAddress: "sub.eth",
+        signerPublicKey,
         expiresAt: Math.floor(Date.now() / 1000) + 3600,
       });
 
@@ -107,6 +115,7 @@ describe("SpamDetectionDatabase", () => {
         challengeId: "pending-2",
         author: "author-456",
         subplebbitAddress: "sub.eth",
+        signerPublicKey,
         expiresAt: Math.floor(Date.now() / 1000) + 3600,
       });
 
@@ -114,6 +123,7 @@ describe("SpamDetectionDatabase", () => {
         challengeId: "completed-1",
         author: "author-456",
         subplebbitAddress: "sub.eth",
+        signerPublicKey,
         expiresAt: Math.floor(Date.now() / 1000) + 3600,
       });
       db.updateChallengeSessionStatus("completed-1", "completed");
@@ -130,6 +140,7 @@ describe("SpamDetectionDatabase", () => {
         challengeId: "expired-session",
         author: "author",
         subplebbitAddress: "sub.eth",
+        signerPublicKey,
         expiresAt: pastTime,
       });
 
@@ -137,6 +148,7 @@ describe("SpamDetectionDatabase", () => {
         challengeId: "valid-session",
         author: "author",
         subplebbitAddress: "sub.eth",
+        signerPublicKey,
         expiresAt: futureTime,
       });
 

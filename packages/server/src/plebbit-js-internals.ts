@@ -16,8 +16,8 @@ const utilUrl = pathToFileURL(path.join(plebbitRoot, "dist/node/util.js")).href;
 
 const [
   { DecryptedChallengeRequestSchema },
-  { SubplebbitAuthorSchema },
-  { derivePublicationFromChallengeRequest },
+  { JsonSignatureSchema, PlebbitTimestampSchema, SubplebbitAuthorSchema },
+  { derivePublicationFromChallengeRequest, isStringDomain },
 ] = await Promise.all([
   import(pubsubSchemaUrl),
   import(schemaUrl),
@@ -26,6 +26,9 @@ const [
 
 export {
   DecryptedChallengeRequestSchema,
+  JsonSignatureSchema,
+  PlebbitTimestampSchema,
   SubplebbitAuthorSchema,
   derivePublicationFromChallengeRequest,
+  isStringDomain,
 };

@@ -9,6 +9,7 @@ export interface RouteOptions {
   baseUrl: string;
   turnstileSiteKey?: string;
   ipInfoToken?: string;
+  resolveSubplebbitPublicKey: (subplebbitAddress: string) => Promise<string>;
 }
 
 /**
@@ -18,10 +19,20 @@ export function registerRoutes(
   fastify: FastifyInstance,
   options: RouteOptions
 ): void {
-  const { db, baseUrl, turnstileSiteKey, ipInfoToken } = options;
+  const {
+    db,
+    baseUrl,
+    turnstileSiteKey,
+    ipInfoToken,
+    resolveSubplebbitPublicKey,
+  } = options;
 
   // Register individual routes
-  registerEvaluateRoute(fastify, { db, baseUrl });
+  registerEvaluateRoute(fastify, {
+    db,
+    baseUrl,
+    resolveSubplebbitPublicKey,
+  });
   registerVerifyRoute(fastify, { db });
   registerIframeRoute(fastify, { db, turnstileSiteKey, ipInfoToken });
 

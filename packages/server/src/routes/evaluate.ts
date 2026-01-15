@@ -3,17 +3,24 @@ import type {
   DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor,
   PublicationWithSubplebbitAuthorFromDecryptedChallengeRequest,
 } from "@plebbit/plebbit-js/dist/node/pubsub-messages/types.js";
+import { getPlebbitAddressFromPublicKey } from "../plebbit-js-signer.js";
 import type { EvaluateResponse } from "@plebbit/spam-detection-shared";
 import type { SpamDetectionDatabase } from "../db/index.js";
 import { EvaluateRequestSchema, type EvaluateRequest } from "./schemas.js";
-import { derivePublicationFromChallengeRequest } from "../plebbit-js-internals.js";
+import {
+  derivePublicationFromChallengeRequest,
+  isStringDomain,
+} from "../plebbit-js-internals.js";
 import { randomUUID } from "crypto";
+import { verifySignedRequest } from "../security/request-signature.js";
 
 const CHALLENGE_EXPIRY_SECONDS = 3600; // 1 hour
+const MAX_REQUEST_SKEW_SECONDS = 5 * 60;
 
 export interface EvaluateRouteOptions {
   db: SpamDetectionDatabase;
   baseUrl: string;
+  resolveSubplebbitPublicKey: (subplebbitAddress: string) => Promise<string>;
 }
 
 /**
@@ -23,7 +30,7 @@ export function registerEvaluateRoute(
   fastify: FastifyInstance,
   options: EvaluateRouteOptions
 ): void {
-  const { db, baseUrl } = options;
+  const { db, baseUrl, resolveSubplebbitPublicKey } = options;
 
   fastify.post(
     "/api/v1/evaluate",
@@ -43,6 +50,20 @@ export function registerEvaluateRoute(
       }
 
       const { challengeRequest } = parseResult.data as EvaluateRequest;
+      const { signature, timestamp } = parseResult.data as EvaluateRequest;
+
+      const now = Math.floor(Date.now() / 1000);
+      if (
+        timestamp < now - MAX_REQUEST_SKEW_SECONDS ||
+        timestamp > now + MAX_REQUEST_SKEW_SECONDS
+      ) {
+        const error = new Error("Request timestamp is out of range");
+        (error as { statusCode?: number }).statusCode = 401;
+        throw error;
+      }
+
+      await verifySignedRequest({ challengeRequest, timestamp }, signature);
+
       let publication: PublicationWithSubplebbitAuthorFromDecryptedChallengeRequest;
 
       try {
@@ -59,12 +80,42 @@ export function registerEvaluateRoute(
 
       const author = publication.author.address;
       const subplebbitAddress = publication.subplebbitAddress;
+      const signerPublicKey = signature.publicKey;
+
+      if (isStringDomain(subplebbitAddress)) {
+        let resolvedPublicKey: string;
+        try {
+          resolvedPublicKey = await resolveSubplebbitPublicKey(subplebbitAddress);
+        } catch (error) {
+          const resolveError = new Error(
+            "Unable to resolve subplebbit signature"
+          );
+          (resolveError as { statusCode?: number }).statusCode = 401;
+          throw resolveError;
+        }
+        if (resolvedPublicKey !== signerPublicKey) {
+          const mismatchError = new Error(
+            "Request signature does not match subplebbit"
+          );
+          (mismatchError as { statusCode?: number }).statusCode = 401;
+          throw mismatchError;
+        }
+      } else {
+        const signerAddress =
+          await getPlebbitAddressFromPublicKey(signerPublicKey);
+        if (signerAddress !== subplebbitAddress) {
+          const mismatchError = new Error(
+            "Request signature does not match subplebbit"
+          );
+          (mismatchError as { statusCode?: number }).statusCode = 401;
+          throw mismatchError;
+        }
+      }
 
       // Generate challenge ID
       const challengeId = randomUUID();
 
       // Calculate expiry time
-      const now = Math.floor(Date.now() / 1000);
       const expiresAt = now + CHALLENGE_EXPIRY_SECONDS;
 
       // Create challenge session in database
@@ -72,6 +123,7 @@ export function registerEvaluateRoute(
         challengeId,
         author,
         subplebbitAddress,
+        signerPublicKey,
         expiresAt,
       });
 
