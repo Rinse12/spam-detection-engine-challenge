@@ -88,9 +88,7 @@ export function calculateIpRisk(ipIntel: IpIntelligence | undefined, weight: num
 /**
  * Estimate IP type based on intelligence flags.
  */
-export function estimateIpType(
-    ipIntel: IpIntelligence | undefined
-): "residential" | "vpn" | "proxy" | "tor" | "datacenter" | "unknown" {
+export function estimateIpType(ipIntel: IpIntelligence | undefined): "residential" | "vpn" | "proxy" | "tor" | "datacenter" | "unknown" {
     if (!ipIntel) return "unknown";
     if (ipIntel.isTor) return "tor";
     if (ipIntel.isProxy) return "proxy";

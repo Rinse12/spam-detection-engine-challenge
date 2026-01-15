@@ -112,9 +112,7 @@ function generateExplanation(score: number, factors: RiskFactor[]): string {
 
     const riskLevel = score < 0.3 ? "Low" : score < 0.7 ? "Moderate" : "High";
 
-    const factorSummaries = significantFactors
-        .map((f) => `${f.name}: ${(f.score * 100).toFixed(0)}%`)
-        .join(", ");
+    const factorSummaries = significantFactors.map((f) => `${f.name}: ${(f.score * 100).toFixed(0)}%`).join(", ");
 
     return `${riskLevel} risk (${(score * 100).toFixed(0)}%). Key factors: ${factorSummaries}`;
 }

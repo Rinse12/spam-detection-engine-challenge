@@ -11,9 +11,7 @@ import type { DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor } from "@
  *
  * This helper returns the publication object regardless of type.
  */
-export function getPublicationFromChallengeRequest(
-    challengeRequest: DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor
-): {
+export function getPublicationFromChallengeRequest(challengeRequest: DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor): {
     author: DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor["comment"] extends { author: infer A } ? A : never;
     subplebbitAddress: string;
     timestamp?: number;
@@ -39,9 +37,7 @@ export function getPublicationFromChallengeRequest(
 /**
  * Get the author from a challenge request.
  */
-export function getAuthorFromChallengeRequest(
-    challengeRequest: DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor
-) {
+export function getAuthorFromChallengeRequest(challengeRequest: DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor) {
     const publication = getPublicationFromChallengeRequest(challengeRequest);
     return publication.author;
 }

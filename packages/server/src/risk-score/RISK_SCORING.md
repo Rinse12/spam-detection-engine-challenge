@@ -27,14 +27,14 @@ The risk scoring system primarily relies on trusted `author.subplebbit` data for
 
 Evaluates how long the author has been active in the subplebbit based on `author.subplebbit.firstCommentTimestamp`.
 
-| Account Age | Risk Score | Description |
-|-------------|------------|-------------|
-| > 365 days  | 0.10       | Very established, highly trusted |
-| > 90 days   | 0.20       | Established account |
-| > 30 days   | 0.35       | Moderately established |
-| > 7 days    | 0.50       | Some history |
-| > 1 day     | 0.70       | New account |
-| < 1 day     | 0.85       | Very new account |
+| Account Age | Risk Score | Description                            |
+| ----------- | ---------- | -------------------------------------- |
+| > 365 days  | 0.10       | Very established, highly trusted       |
+| > 90 days   | 0.20       | Established account                    |
+| > 30 days   | 0.35       | Moderately established                 |
+| > 7 days    | 0.50       | Some history                           |
+| > 1 day     | 0.70       | New account                            |
+| < 1 day     | 0.85       | Very new account                       |
 | No history  | 0.90       | First interaction with this subplebbit |
 
 **Rationale**: Older accounts have demonstrated sustained, non-malicious behavior over time.
@@ -43,13 +43,13 @@ Evaluates how long the author has been active in the subplebbit based on `author
 
 Evaluates the author's accumulated karma (`postScore + replyScore`) from `author.subplebbit`.
 
-| Total Karma | Risk Score | Description |
-|-------------|------------|-------------|
-| >= 100      | 0.10       | Highly trusted contributor |
-| >= 50       | 0.20       | Established contributor |
-| >= 10       | 0.35       | Positive contributor |
-| >= 0        | 0.50       | Neutral |
-| >= -10      | 0.70       | Negative karma |
+| Total Karma | Risk Score | Description                       |
+| ----------- | ---------- | --------------------------------- |
+| >= 100      | 0.10       | Highly trusted contributor        |
+| >= 50       | 0.20       | Established contributor           |
+| >= 10       | 0.35       | Positive contributor              |
+| >= 0        | 0.50       | Neutral                           |
+| >= -10      | 0.70       | Negative karma                    |
 | < -10       | 0.90       | Very negative karma (problematic) |
 
 **Rationale**: Karma reflects community trust. High karma indicates valued contributions; negative karma indicates problematic behavior.
@@ -58,10 +58,10 @@ Evaluates the author's accumulated karma (`postScore + replyScore`) from `author
 
 Evaluates whether the author has verified publication history in this subplebbit.
 
-| Signal | Score Impact | Description |
-|--------|--------------|-------------|
-| Has `lastCommentCid` | -0.20 | Verified history exists in this subplebbit |
-| No verified history | +0.10 | No record of previous activity |
+| Signal               | Score Impact | Description                                |
+| -------------------- | ------------ | ------------------------------------------ |
+| Has `lastCommentCid` | -0.20        | Verified history exists in this subplebbit |
+| No verified history  | +0.10        | No record of previous activity             |
 
 **Note**: We intentionally do NOT use `author.previousCommentCid` as a trust signal because it's user-provided and can be faked.
 
@@ -71,15 +71,15 @@ Evaluates whether the author has verified publication history in this subplebbit
 
 Analyzes the publication content for spam indicators.
 
-| Indicator | Score Impact | Description |
-|-----------|--------------|-------------|
-| URL shortener in link | +0.25 | Often used to hide malicious links |
-| Suspicious TLD (.xyz, .top, etc.) | +0.20 | Commonly used for spam domains |
-| 5+ URLs in content | +0.20 | Excessive link dropping |
-| 3-4 URLs in content | +0.10 | Elevated link count |
-| URL shorteners in content | +0.15 each | Hidden links in text |
-| Excessive capitalization | +0.10 | SHOUTING (spam indicator) |
-| Repetitive patterns | +0.15 | Repeated text (bot behavior) |
+| Indicator                         | Score Impact | Description                        |
+| --------------------------------- | ------------ | ---------------------------------- |
+| URL shortener in link             | +0.25        | Often used to hide malicious links |
+| Suspicious TLD (.xyz, .top, etc.) | +0.20        | Commonly used for spam domains     |
+| 5+ URLs in content                | +0.20        | Excessive link dropping            |
+| 3-4 URLs in content               | +0.10        | Elevated link count                |
+| URL shorteners in content         | +0.15 each   | Hidden links in text               |
+| Excessive capitalization          | +0.10        | SHOUTING (spam indicator)          |
+| Repetitive patterns               | +0.15        | Repeated text (bot behavior)       |
 
 **Suspicious TLDs**: `.xyz`, `.top`, `.click`, `.loan`, `.work`, `.gq`, `.cf`, `.tk`, `.ml`, `.ga`
 
@@ -89,14 +89,15 @@ Analyzes the publication content for spam indicators.
 
 Measures how frequently an author is publishing to detect burst spam behavior. Queries the database to count actual publications by the author in the last hour and last 24 hours.
 
-| Publications/Hour | Risk Score | Description |
-|-------------------|------------|-------------|
-| 0-2               | 0.10       | Normal posting rate |
-| 3-5               | 0.40       | Elevated rate |
-| 6-10              | 0.70       | Suspicious rate |
+| Publications/Hour | Risk Score | Description          |
+| ----------------- | ---------- | -------------------- |
+| 0-2               | 0.10       | Normal posting rate  |
+| 3-5               | 0.40       | Elevated rate        |
+| 6-10              | 0.70       | Suspicious rate      |
 | 20+               | 0.95       | Likely automated/bot |
 
 The effective rate is calculated as the maximum of:
+
 - Publications in the last hour
 - Average publications per hour over the last 24 hours
 
@@ -104,13 +105,13 @@ The effective rate is calculated as the maximum of:
 
 When available (after iframe access), evaluates the author's IP address characteristics.
 
-| IP Type | Risk Score | Description |
-|---------|------------|-------------|
-| Residential | 0.20 | Normal user IP |
-| Datacenter | 0.70 | Often used for bots |
-| VPN | 0.75 | Anonymizing service |
-| Proxy | 0.85 | Anonymizing service |
-| Tor | 0.95 | Highest anonymization |
+| IP Type     | Risk Score | Description           |
+| ----------- | ---------- | --------------------- |
+| Residential | 0.20       | Normal user IP        |
+| Datacenter  | 0.70       | Often used for bots   |
+| VPN         | 0.75       | Anonymizing service   |
+| Proxy       | 0.85       | Anonymizing service   |
+| Tor         | 0.95       | Highest anonymization |
 
 **Note**: IP intelligence is best-effort and can have false positives. Use for informational purposes and rejection decisions only, not for auto-approval.
 
@@ -118,15 +119,15 @@ When available (after iframe access), evaluates the author's IP address characte
 
 Weights are redistributed based on whether IP information is available:
 
-| Factor | Without IP | With IP |
-|--------|------------|---------|
-| Author Reputation | 30% | 25% |
-| Content Risk | 20% | 15% |
-| Velocity Risk | 15% | 10% |
-| Account Age | 20% | 15% |
-| Karma Score | 15% | 10% |
-| IP Risk | 0% | 25% |
-| **Total** | **100%** | **100%** |
+| Factor            | Without IP | With IP  |
+| ----------------- | ---------- | -------- |
+| Author Reputation | 30%        | 25%      |
+| Content Risk      | 20%        | 15%      |
+| Velocity Risk     | 15%        | 10%      |
+| Account Age       | 20%        | 15%      |
+| Karma Score       | 15%        | 10%      |
+| IP Risk           | 0%         | 25%      |
+| **Total**         | **100%**   | **100%** |
 
 ## Score Calculation
 
@@ -142,10 +143,10 @@ Each factor produces a score between 0.0 and 1.0, which is multiplied by its wei
 
 These are suggested defaults for subplebbit configuration:
 
-| Threshold | Suggested Value | Action |
-|-----------|-----------------|--------|
-| `autoAcceptThreshold` | 0.2 | Auto-accept publications below this score |
-| `autoRejectThreshold` | 0.8 | Auto-reject publications above this score |
+| Threshold             | Suggested Value | Action                                    |
+| --------------------- | --------------- | ----------------------------------------- |
+| `autoAcceptThreshold` | 0.2             | Auto-accept publications below this score |
+| `autoRejectThreshold` | 0.8             | Auto-reject publications above this score |
 
 Publications between these thresholds trigger a challenge (e.g., CAPTCHA).
 

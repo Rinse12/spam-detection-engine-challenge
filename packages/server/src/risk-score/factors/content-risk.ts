@@ -175,10 +175,7 @@ export function calculateContentRisk(ctx: RiskContext, weight: number): RiskFact
     // Clamp score to [0, 1]
     score = Math.max(0, Math.min(1, score));
 
-    const explanation =
-        issues.length > 0
-            ? `Content analysis: ${issues.join(", ")}`
-            : "Content analysis: no suspicious patterns detected";
+    const explanation = issues.length > 0 ? `Content analysis: ${issues.join(", ")}` : "Content analysis: no suspicious patterns detected";
 
     return {
         name: "contentRisk",

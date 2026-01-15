@@ -42,8 +42,7 @@ export function calculateAuthorReputation(ctx: RiskContext, weight: number): Ris
     // Clamp score to [0, 1]
     score = Math.max(0, Math.min(1, score));
 
-    const explanation =
-        signals.length > 0 ? `Author reputation: ${signals.join(", ")}` : "Author reputation: neutral (no signals)";
+    const explanation = signals.length > 0 ? `Author reputation: ${signals.join(", ")}` : "Author reputation: neutral (no signals)";
 
     return {
         name: "authorReputation",
