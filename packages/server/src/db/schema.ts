@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS challengeSessions (
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'completed', 'failed')),
   completedAt INTEGER,
   expiresAt INTEGER NOT NULL,
-  createdAt INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+  receivedChallengeRequestAt INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
   authorAccessedIframeAt INTEGER
 );
 

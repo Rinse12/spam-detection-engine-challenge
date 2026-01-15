@@ -338,7 +338,7 @@ Tracks pending challenges. **Automatically purged after 1 hour.**.
 - `status` TEXT DEFAULT 'pending' (pending, completed, failed)
 - `completedAt` INTEGER
 - `expiresAt` INTEGER NOT NULL
-- `createdAt` INTEGER NOT NULL
+- `receivedChallengeRequestAt` INTEGER NOT NULL
 - `authorAccessedIframeAt` INTEGER -- when did the author access the iframe?
 
 ### `ipRecords`

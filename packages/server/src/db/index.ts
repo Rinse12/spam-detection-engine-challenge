@@ -8,7 +8,7 @@ export interface ChallengeSession {
     status: "pending" | "completed" | "failed";
     completedAt: number | null;
     expiresAt: number;
-    createdAt: number;
+    receivedChallengeRequestAt: number;
     /** When the author accessed the iframe */
     authorAccessedIframeAt: number | null;
 }
