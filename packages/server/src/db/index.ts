@@ -677,6 +677,268 @@ export class SpamDetectionDatabase {
         };
     }
 
+    // ============================================
+    // Similar Content Query Methods
+    // ============================================
+
+    /**
+     * Find comments with similar or identical content and/or title.
+     * Used for detecting duplicate/spam content.
+     *
+     * @param params.content - The content to search for similarity
+     * @param params.title - The title to search for similarity
+     * @param params.excludeChallengeId - Challenge ID to exclude from results (current publication)
+     * @param params.sinceTimestamp - Only search comments after this timestamp
+     * @param params.limit - Maximum number of results to return
+     * @returns Array of similar comments with their content/title and author info
+     */
+    findSimilarComments(params: {
+        content?: string;
+        title?: string;
+        excludeChallengeId?: string;
+        sinceTimestamp?: number;
+        limit?: number;
+    }): Array<{
+        challengeId: string;
+        authorAddress: string;
+        content: string | null;
+        title: string | null;
+        subplebbitAddress: string;
+        receivedAt: number;
+    }> {
+        const { content, title, excludeChallengeId, sinceTimestamp, limit = 50 } = params;
+
+        // Build query conditions
+        const conditions: string[] = [];
+        const queryParams: Record<string, unknown> = {};
+
+        if (excludeChallengeId) {
+            conditions.push("challengeId != @excludeChallengeId");
+            queryParams.excludeChallengeId = excludeChallengeId;
+        }
+
+        if (sinceTimestamp) {
+            conditions.push("receivedAt >= @sinceTimestamp");
+            queryParams.sinceTimestamp = sinceTimestamp;
+        }
+
+        // Build content/title matching conditions
+        const contentConditions: string[] = [];
+
+        if (content && content.trim().length > 0) {
+            // Exact match or very similar (normalized whitespace, case-insensitive)
+            contentConditions.push("LOWER(TRIM(content)) = LOWER(TRIM(@content))");
+            queryParams.content = content;
+        }
+
+        if (title && title.trim().length > 0) {
+            // Exact match on title (normalized)
+            contentConditions.push("LOWER(TRIM(title)) = LOWER(TRIM(@title))");
+            queryParams.title = title;
+        }
+
+        if (contentConditions.length === 0) {
+            return [];
+        }
+
+        // We want comments that match content OR title
+        conditions.push(`(${contentConditions.join(" OR ")})`);
+
+        const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+
+        const query = `
+            SELECT
+                challengeId,
+                json_extract(author, '$.address') as authorAddress,
+                content,
+                title,
+                subplebbitAddress,
+                receivedAt
+            FROM comments
+            ${whereClause}
+            ORDER BY receivedAt DESC
+            LIMIT @limit
+        `;
+
+        queryParams.limit = limit;
+
+        return this.db.prepare(query).all(queryParams) as Array<{
+            challengeId: string;
+            authorAddress: string;
+            content: string | null;
+            title: string | null;
+            subplebbitAddress: string;
+            receivedAt: number;
+        }>;
+    }
+
+    /**
+     * Find similar comments by content or title from the same author.
+     * Returns comments that have:
+     * - Exact match (case-insensitive, trimmed)
+     * - Content that contains the search content as a substring (or vice versa)
+     *
+     * Used to detect self-spamming with slight variations.
+     */
+    findSimilarContentByAuthor(params: {
+        authorAddress: string;
+        content?: string;
+        title?: string;
+        sinceTimestamp?: number;
+        limit?: number;
+    }): Array<{
+        challengeId: string;
+        content: string | null;
+        title: string | null;
+        subplebbitAddress: string;
+        receivedAt: number;
+    }> {
+        const { authorAddress, content, title, sinceTimestamp, limit = 100 } = params;
+
+        const conditions: string[] = ["json_extract(author, '$.address') = @authorAddress"];
+        const queryParams: Record<string, unknown> = { authorAddress, limit };
+
+        if (sinceTimestamp) {
+            conditions.push("receivedAt >= @sinceTimestamp");
+            queryParams.sinceTimestamp = sinceTimestamp;
+        }
+
+        // Build content/title matching conditions
+        // Match if: exact match OR one contains the other
+        const matchConditions: string[] = [];
+
+        if (content && content.trim().length > 10) {
+            const normalizedContent = content.trim().toLowerCase();
+            queryParams.content = normalizedContent;
+            queryParams.contentLike = `%${normalizedContent}%`;
+            matchConditions.push(`(
+                LOWER(TRIM(content)) = @content
+                OR LOWER(TRIM(content)) LIKE @contentLike
+                OR @content LIKE '%' || LOWER(TRIM(content)) || '%'
+            )`);
+        }
+
+        if (title && title.trim().length > 5) {
+            const normalizedTitle = title.trim().toLowerCase();
+            queryParams.title = normalizedTitle;
+            queryParams.titleLike = `%${normalizedTitle}%`;
+            matchConditions.push(`(
+                LOWER(TRIM(title)) = @title
+                OR LOWER(TRIM(title)) LIKE @titleLike
+                OR @title LIKE '%' || LOWER(TRIM(title)) || '%'
+            )`);
+        }
+
+        if (matchConditions.length === 0) {
+            return [];
+        }
+
+        conditions.push(`(${matchConditions.join(" OR ")})`);
+
+        const query = `
+            SELECT challengeId, content, title, subplebbitAddress, receivedAt
+            FROM comments
+            WHERE ${conditions.join(" AND ")}
+            ORDER BY receivedAt DESC
+            LIMIT @limit
+        `;
+
+        return this.db.prepare(query).all(queryParams) as Array<{
+            challengeId: string;
+            content: string | null;
+            title: string | null;
+            subplebbitAddress: string;
+            receivedAt: number;
+        }>;
+    }
+
+    /**
+     * Find similar comments by content or title from different authors.
+     * Returns comments that have:
+     * - Exact match (case-insensitive, trimmed)
+     * - Content that contains the search content as a substring (or vice versa)
+     *
+     * Used to detect coordinated spam campaigns.
+     */
+    findSimilarContentByOthers(params: {
+        authorAddress: string;
+        content?: string;
+        title?: string;
+        sinceTimestamp?: number;
+        limit?: number;
+    }): Array<{
+        challengeId: string;
+        authorAddress: string;
+        content: string | null;
+        title: string | null;
+        subplebbitAddress: string;
+        receivedAt: number;
+    }> {
+        const { authorAddress, content, title, sinceTimestamp, limit = 100 } = params;
+
+        const conditions: string[] = ["json_extract(author, '$.address') != @authorAddress"];
+        const queryParams: Record<string, unknown> = { authorAddress, limit };
+
+        if (sinceTimestamp) {
+            conditions.push("receivedAt >= @sinceTimestamp");
+            queryParams.sinceTimestamp = sinceTimestamp;
+        }
+
+        // Build content/title matching conditions
+        const matchConditions: string[] = [];
+
+        if (content && content.trim().length > 10) {
+            const normalizedContent = content.trim().toLowerCase();
+            queryParams.content = normalizedContent;
+            queryParams.contentLike = `%${normalizedContent}%`;
+            matchConditions.push(`(
+                LOWER(TRIM(content)) = @content
+                OR LOWER(TRIM(content)) LIKE @contentLike
+                OR @content LIKE '%' || LOWER(TRIM(content)) || '%'
+            )`);
+        }
+
+        if (title && title.trim().length > 5) {
+            const normalizedTitle = title.trim().toLowerCase();
+            queryParams.title = normalizedTitle;
+            queryParams.titleLike = `%${normalizedTitle}%`;
+            matchConditions.push(`(
+                LOWER(TRIM(title)) = @title
+                OR LOWER(TRIM(title)) LIKE @titleLike
+                OR @title LIKE '%' || LOWER(TRIM(title)) || '%'
+            )`);
+        }
+
+        if (matchConditions.length === 0) {
+            return [];
+        }
+
+        conditions.push(`(${matchConditions.join(" OR ")})`);
+
+        const query = `
+            SELECT
+                challengeId,
+                json_extract(author, '$.address') as authorAddress,
+                content,
+                title,
+                subplebbitAddress,
+                receivedAt
+            FROM comments
+            WHERE ${conditions.join(" AND ")}
+            ORDER BY receivedAt DESC
+            LIMIT @limit
+        `;
+
+        return this.db.prepare(query).all(queryParams) as Array<{
+            challengeId: string;
+            authorAddress: string;
+            content: string | null;
+            title: string | null;
+            subplebbitAddress: string;
+            receivedAt: number;
+        }>;
+    }
+
     /**
      * Get the earliest receivedAt timestamp for an author across all publication types.
      * This represents when we first saw this author in our own database.

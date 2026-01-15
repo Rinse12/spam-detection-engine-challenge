@@ -1,0 +1,592 @@
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { calculateCommentContentTitleRisk } from "../../src/risk-score/factors/comment-content-title-risk.js";
+import { SpamDetectionDatabase } from "../../src/db/index.js";
+import type { RiskContext } from "../../src/risk-score/types.js";
+import type { DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor } from "@plebbit/plebbit-js/dist/node/pubsub-messages/types.js";
+
+const baseTimestamp = Math.floor(Date.now() / 1000);
+const baseSignature = {
+    type: "ed25519",
+    signature: "sig",
+    publicKey: "pk",
+    signedPropertyNames: ["author"]
+};
+
+function createMockChallengeRequest(
+    authorAddress: string,
+    content?: string,
+    title?: string,
+    parentCid?: string
+): DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor {
+    return {
+        challengeRequestId: { bytes: new Uint8Array() },
+        acceptedChallengeTypes: ["turnstile"],
+        encrypted: {} as never,
+        comment: {
+            author: {
+                address: authorAddress
+            },
+            subplebbitAddress: "test-sub.eth",
+            timestamp: baseTimestamp,
+            protocolVersion: "1",
+            signature: baseSignature,
+            content,
+            title,
+            parentCid
+        }
+    } as DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor;
+}
+
+function createMockVoteChallengeRequest(authorAddress: string): DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor {
+    return {
+        challengeRequestId: { bytes: new Uint8Array() },
+        acceptedChallengeTypes: ["turnstile"],
+        encrypted: {} as never,
+        vote: {
+            author: {
+                address: authorAddress
+            },
+            subplebbitAddress: "test-sub.eth",
+            timestamp: baseTimestamp,
+            protocolVersion: "1",
+            signature: baseSignature,
+            commentCid: "QmTest",
+            vote: 1
+        }
+    } as DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor;
+}
+
+describe("calculateCommentContentTitleRisk", () => {
+    let db: SpamDetectionDatabase;
+
+    beforeEach(() => {
+        db = new SpamDetectionDatabase({ path: ":memory:" });
+    });
+
+    afterEach(() => {
+        db.close();
+    });
+
+    describe("non-comment publications", () => {
+        it("should return neutral score for vote publications", () => {
+            const challengeRequest = createMockVoteChallengeRequest("author1");
+
+            const ctx: RiskContext = {
+                challengeRequest,
+                now: baseTimestamp,
+                hasIpInfo: false,
+                db
+            };
+
+            const result = calculateCommentContentTitleRisk(ctx, 0.18);
+
+            expect(result.score).toBe(0.5);
+            expect(result.name).toBe("commentContentTitleRisk");
+            expect(result.explanation).toContain("not applicable");
+        });
+    });
+
+    describe("content without duplicates", () => {
+        it("should return low risk score for unique content", () => {
+            const challengeRequest = createMockChallengeRequest(
+                "author1",
+                "This is a unique comment that has never been posted before.",
+                "Unique Title"
+            );
+
+            const ctx: RiskContext = {
+                challengeRequest,
+                now: baseTimestamp,
+                hasIpInfo: false,
+                db
+            };
+
+            const result = calculateCommentContentTitleRisk(ctx, 0.18);
+
+            expect(result.score).toBe(0.2); // Base low risk
+            expect(result.explanation).toContain("no suspicious patterns");
+        });
+    });
+
+    describe("duplicate content from same author", () => {
+        it("should detect exact duplicate content from same author", () => {
+            const authorAddress = "author1";
+            const duplicateContent = "This is spam content that will be posted multiple times.";
+
+            // Add existing comment with same content
+            db.insertChallengeSession({
+                challengeId: "prev-comment-1",
+                subplebbitPublicKey: "pk",
+                expiresAt: baseTimestamp + 3600
+            });
+            db.insertComment({
+                challengeId: "prev-comment-1",
+                publication: {
+                    author: { address: authorAddress },
+                    subplebbitAddress: "test-sub.eth",
+                    timestamp: baseTimestamp - 1000,
+                    protocolVersion: "1",
+                    signature: baseSignature,
+                    content: duplicateContent
+                }
+            });
+
+            const challengeRequest = createMockChallengeRequest(authorAddress, duplicateContent);
+
+            const ctx: RiskContext = {
+                challengeRequest,
+                now: baseTimestamp,
+                hasIpInfo: false,
+                db
+            };
+
+            const result = calculateCommentContentTitleRisk(ctx, 0.18);
+
+            expect(result.score).toBeGreaterThan(0.2);
+            expect(result.explanation).toContain("duplicate");
+            expect(result.explanation).toContain("same author");
+        });
+
+        it("should increase risk score with more duplicates", () => {
+            const authorAddress = "author1";
+            const duplicateContent = "This is spam content that will be posted multiple times.";
+
+            // Add 5 existing comments with same content
+            for (let i = 0; i < 5; i++) {
+                db.insertChallengeSession({
+                    challengeId: `prev-comment-${i}`,
+                    subplebbitPublicKey: "pk",
+                    expiresAt: baseTimestamp + 3600
+                });
+                db.insertComment({
+                    challengeId: `prev-comment-${i}`,
+                    publication: {
+                        author: { address: authorAddress },
+                        subplebbitAddress: "test-sub.eth",
+                        timestamp: baseTimestamp - 1000 - i * 100,
+                        protocolVersion: "1",
+                        signature: baseSignature,
+                        content: duplicateContent
+                    }
+                });
+            }
+
+            const challengeRequest = createMockChallengeRequest(authorAddress, duplicateContent);
+
+            const ctx: RiskContext = {
+                challengeRequest,
+                now: baseTimestamp,
+                hasIpInfo: false,
+                db
+            };
+
+            const result = calculateCommentContentTitleRisk(ctx, 0.18);
+
+            expect(result.score).toBeGreaterThanOrEqual(0.55);
+            expect(result.explanation).toContain("5 duplicate");
+        });
+
+        it("should detect similar (not exact) content from same author via substring matching", () => {
+            const authorAddress = "author1";
+            // The SQL query uses LIKE for substring matching
+            // One text contains the core of the other
+            const originalContent = "Check out this amazing cryptocurrency investment opportunity";
+            const similarContent = "Check out this amazing cryptocurrency investment opportunity for big profits today!";
+            // The original is a substring of the new one, so SQL LIKE will match
+            // Jaccard similarity will then confirm they're similar (high overlap)
+
+            // Add existing comment with similar content
+            db.insertChallengeSession({
+                challengeId: "prev-similar-1",
+                subplebbitPublicKey: "pk",
+                expiresAt: baseTimestamp + 3600
+            });
+            db.insertComment({
+                challengeId: "prev-similar-1",
+                publication: {
+                    author: { address: authorAddress },
+                    subplebbitAddress: "test-sub.eth",
+                    timestamp: baseTimestamp - 1000,
+                    protocolVersion: "1",
+                    signature: baseSignature,
+                    content: originalContent
+                }
+            });
+
+            const challengeRequest = createMockChallengeRequest(authorAddress, similarContent);
+
+            const ctx: RiskContext = {
+                challengeRequest,
+                now: baseTimestamp,
+                hasIpInfo: false,
+                db
+            };
+
+            const result = calculateCommentContentTitleRisk(ctx, 0.18);
+
+            // The SQL LIKE finds this because similarContent contains originalContent
+            // Jaccard similarity confirms they're similar
+            expect(result.score).toBeGreaterThan(0.2);
+            expect(result.explanation).toContain("similar");
+        });
+    });
+
+    describe("duplicate content from different authors", () => {
+        it("should detect exact duplicate content from other authors (coordinated spam)", () => {
+            const currentAuthor = "author1";
+            const otherAuthor = "author2";
+            const spamContent = "Buy crypto now! Visit our website for guaranteed returns!";
+
+            // Add existing comment from different author with same content
+            db.insertChallengeSession({
+                challengeId: "other-author-spam",
+                subplebbitPublicKey: "pk",
+                expiresAt: baseTimestamp + 3600
+            });
+            db.insertComment({
+                challengeId: "other-author-spam",
+                publication: {
+                    author: { address: otherAuthor },
+                    subplebbitAddress: "test-sub.eth",
+                    timestamp: baseTimestamp - 1000,
+                    protocolVersion: "1",
+                    signature: baseSignature,
+                    content: spamContent
+                }
+            });
+
+            const challengeRequest = createMockChallengeRequest(currentAuthor, spamContent);
+
+            const ctx: RiskContext = {
+                challengeRequest,
+                now: baseTimestamp,
+                hasIpInfo: false,
+                db
+            };
+
+            const result = calculateCommentContentTitleRisk(ctx, 0.18);
+
+            expect(result.score).toBeGreaterThan(0.2);
+            expect(result.explanation).toContain("another author");
+        });
+
+        it("should increase risk for multiple authors posting same content", () => {
+            const currentAuthor = "author1";
+            const spamContent = "This is coordinated spam being posted by multiple accounts.";
+
+            // Add same content from 5 different authors
+            for (let i = 2; i <= 6; i++) {
+                db.insertChallengeSession({
+                    challengeId: `coord-spam-${i}`,
+                    subplebbitPublicKey: "pk",
+                    expiresAt: baseTimestamp + 3600
+                });
+                db.insertComment({
+                    challengeId: `coord-spam-${i}`,
+                    publication: {
+                        author: { address: `author${i}` },
+                        subplebbitAddress: "test-sub.eth",
+                        timestamp: baseTimestamp - 1000 - i * 100,
+                        protocolVersion: "1",
+                        signature: baseSignature,
+                        content: spamContent
+                    }
+                });
+            }
+
+            const challengeRequest = createMockChallengeRequest(currentAuthor, spamContent);
+
+            const ctx: RiskContext = {
+                challengeRequest,
+                now: baseTimestamp,
+                hasIpInfo: false,
+                db
+            };
+
+            const result = calculateCommentContentTitleRisk(ctx, 0.18);
+
+            expect(result.score).toBeGreaterThanOrEqual(0.6);
+            expect(result.explanation).toContain("coordinated spam");
+        });
+    });
+
+    describe("duplicate titles", () => {
+        it("should detect duplicate titles from same author", () => {
+            const authorAddress = "author1";
+            const duplicateTitle = "Breaking News: Major Announcement!";
+
+            // Add existing post with same title
+            db.insertChallengeSession({
+                challengeId: "prev-title-1",
+                subplebbitPublicKey: "pk",
+                expiresAt: baseTimestamp + 3600
+            });
+            db.insertComment({
+                challengeId: "prev-title-1",
+                publication: {
+                    author: { address: authorAddress },
+                    subplebbitAddress: "test-sub.eth",
+                    timestamp: baseTimestamp - 1000,
+                    protocolVersion: "1",
+                    signature: baseSignature,
+                    title: duplicateTitle,
+                    content: "Some content"
+                }
+            });
+
+            const challengeRequest = createMockChallengeRequest(authorAddress, "Different content", duplicateTitle);
+
+            const ctx: RiskContext = {
+                challengeRequest,
+                now: baseTimestamp,
+                hasIpInfo: false,
+                db
+            };
+
+            const result = calculateCommentContentTitleRisk(ctx, 0.18);
+
+            expect(result.score).toBeGreaterThan(0.2);
+            expect(result.explanation).toContain("same title");
+        });
+
+        it("should detect duplicate titles from other authors", () => {
+            const currentAuthor = "author1";
+            const otherAuthor = "author2";
+            const spamTitle = "Get Rich Quick With This One Simple Trick";
+
+            db.insertChallengeSession({
+                challengeId: "other-title-spam",
+                subplebbitPublicKey: "pk",
+                expiresAt: baseTimestamp + 3600
+            });
+            db.insertComment({
+                challengeId: "other-title-spam",
+                publication: {
+                    author: { address: otherAuthor },
+                    subplebbitAddress: "test-sub.eth",
+                    timestamp: baseTimestamp - 1000,
+                    protocolVersion: "1",
+                    signature: baseSignature,
+                    title: spamTitle,
+                    content: "Content"
+                }
+            });
+
+            const challengeRequest = createMockChallengeRequest(currentAuthor, "Different content", spamTitle);
+
+            const ctx: RiskContext = {
+                challengeRequest,
+                now: baseTimestamp,
+                hasIpInfo: false,
+                db
+            };
+
+            const result = calculateCommentContentTitleRisk(ctx, 0.18);
+
+            expect(result.score).toBeGreaterThan(0.2);
+            expect(result.explanation).toContain("another author");
+        });
+    });
+
+    describe("time window filtering", () => {
+        it("should not detect old duplicates outside 24h window", () => {
+            const authorAddress = "author1";
+            const content = "This is duplicate content but posted long ago.";
+            const twoDaysAgo = baseTimestamp - 2 * 24 * 60 * 60;
+
+            // Add old comment outside 24h window
+            db.insertChallengeSession({
+                challengeId: "old-comment",
+                subplebbitPublicKey: "pk",
+                expiresAt: baseTimestamp + 3600
+            });
+            db.insertComment({
+                challengeId: "old-comment",
+                publication: {
+                    author: { address: authorAddress },
+                    subplebbitAddress: "test-sub.eth",
+                    timestamp: twoDaysAgo,
+                    protocolVersion: "1",
+                    signature: baseSignature,
+                    content
+                }
+            });
+            // Set receivedAt to 2 days ago
+            db.getDb().prepare("UPDATE comments SET receivedAt = ? WHERE challengeId = ?").run(twoDaysAgo, "old-comment");
+
+            const challengeRequest = createMockChallengeRequest(authorAddress, content);
+
+            const ctx: RiskContext = {
+                challengeRequest,
+                now: baseTimestamp,
+                hasIpInfo: false,
+                db
+            };
+
+            const result = calculateCommentContentTitleRisk(ctx, 0.18);
+
+            // Should not detect old duplicates
+            expect(result.score).toBe(0.2);
+            expect(result.explanation).toContain("no suspicious patterns");
+        });
+    });
+
+    describe("static content analysis", () => {
+        it("should detect excessive URLs", () => {
+            const content = `
+                Check out these links:
+                https://spam1.com
+                https://spam2.com
+                https://spam3.com
+                https://spam4.com
+                https://spam5.com
+            `;
+
+            const challengeRequest = createMockChallengeRequest("author1", content);
+
+            const ctx: RiskContext = {
+                challengeRequest,
+                now: baseTimestamp,
+                hasIpInfo: false,
+                db
+            };
+
+            const result = calculateCommentContentTitleRisk(ctx, 0.18);
+
+            expect(result.score).toBeGreaterThan(0.2);
+            expect(result.explanation).toContain("5 URLs");
+        });
+
+        it("should detect excessive capitalization", () => {
+            const content = "THIS IS ALL CAPS TEXT THAT IS VERY SHOUTY AND ANNOYING TO READ";
+
+            const challengeRequest = createMockChallengeRequest("author1", content);
+
+            const ctx: RiskContext = {
+                challengeRequest,
+                now: baseTimestamp,
+                hasIpInfo: false,
+                db
+            };
+
+            const result = calculateCommentContentTitleRisk(ctx, 0.18);
+
+            expect(result.score).toBeGreaterThan(0.2);
+            expect(result.explanation).toContain("excessive capitalization");
+        });
+
+        it("should detect repetitive patterns", () => {
+            const content = "Buy now!!!!!! This is amazing amazing amazing amazing amazing product";
+
+            const challengeRequest = createMockChallengeRequest("author1", content);
+
+            const ctx: RiskContext = {
+                challengeRequest,
+                now: baseTimestamp,
+                hasIpInfo: false,
+                db
+            };
+
+            const result = calculateCommentContentTitleRisk(ctx, 0.18);
+
+            expect(result.score).toBeGreaterThan(0.2);
+            expect(result.explanation).toContain("repetitive");
+        });
+    });
+
+    describe("database similarity methods", () => {
+        it("findSimilarContentByAuthor should return matching comments", () => {
+            const authorAddress = "author1";
+            const content = "This is test content for similarity matching.";
+
+            db.insertChallengeSession({
+                challengeId: "similar-1",
+                subplebbitPublicKey: "pk",
+                expiresAt: baseTimestamp + 3600
+            });
+            db.insertComment({
+                challengeId: "similar-1",
+                publication: {
+                    author: { address: authorAddress },
+                    subplebbitAddress: "test-sub.eth",
+                    timestamp: baseTimestamp - 1000,
+                    protocolVersion: "1",
+                    signature: baseSignature,
+                    content
+                }
+            });
+
+            const results = db.findSimilarContentByAuthor({
+                authorAddress,
+                content,
+                sinceTimestamp: baseTimestamp - 86400
+            });
+
+            expect(results.length).toBe(1);
+            expect(results[0].content).toBe(content);
+        });
+
+        it("findSimilarContentByOthers should return matching comments from other authors", () => {
+            const authorAddress = "author1";
+            const otherAuthor = "author2";
+            const content = "This is test content for cross-author similarity matching.";
+
+            db.insertChallengeSession({
+                challengeId: "other-similar-1",
+                subplebbitPublicKey: "pk",
+                expiresAt: baseTimestamp + 3600
+            });
+            db.insertComment({
+                challengeId: "other-similar-1",
+                publication: {
+                    author: { address: otherAuthor },
+                    subplebbitAddress: "test-sub.eth",
+                    timestamp: baseTimestamp - 1000,
+                    protocolVersion: "1",
+                    signature: baseSignature,
+                    content
+                }
+            });
+
+            const results = db.findSimilarContentByOthers({
+                authorAddress,
+                content,
+                sinceTimestamp: baseTimestamp - 86400
+            });
+
+            expect(results.length).toBe(1);
+            expect(results[0].content).toBe(content);
+            expect(results[0].authorAddress).toBe(otherAuthor);
+        });
+
+        it("findSimilarContentByOthers should not return comments from same author", () => {
+            const authorAddress = "author1";
+            const content = "This is test content.";
+
+            db.insertChallengeSession({
+                challengeId: "same-author-1",
+                subplebbitPublicKey: "pk",
+                expiresAt: baseTimestamp + 3600
+            });
+            db.insertComment({
+                challengeId: "same-author-1",
+                publication: {
+                    author: { address: authorAddress },
+                    subplebbitAddress: "test-sub.eth",
+                    timestamp: baseTimestamp - 1000,
+                    protocolVersion: "1",
+                    signature: baseSignature,
+                    content
+                }
+            });
+
+            const results = db.findSimilarContentByOthers({
+                authorAddress,
+                content,
+                sinceTimestamp: baseTimestamp - 86400
+            });
+
+            expect(results.length).toBe(0);
+        });
+    });
+});

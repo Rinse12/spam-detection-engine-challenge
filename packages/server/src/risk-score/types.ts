@@ -47,7 +47,7 @@ export interface RiskContext {
  */
 export interface WeightConfig {
     authorReputation: number;
-    contentRisk: number;
+    commentContentTitleRisk: number;
     velocityRisk: number;
     accountAge: number;
     karmaScore: number;
@@ -61,7 +61,7 @@ export interface WeightConfig {
  */
 export const WEIGHTS_NO_IP: WeightConfig = {
     authorReputation: 0.25,
-    contentRisk: 0.18,
+    commentContentTitleRisk: 0.18,
     velocityRisk: 0.12,
     accountAge: 0.17,
     karmaScore: 0.13,
@@ -75,7 +75,7 @@ export const WEIGHTS_NO_IP: WeightConfig = {
  */
 export const WEIGHTS_WITH_IP: WeightConfig = {
     authorReputation: 0.2,
-    contentRisk: 0.12,
+    commentContentTitleRisk: 0.12,
     velocityRisk: 0.08,
     accountAge: 0.12,
     karmaScore: 0.08,

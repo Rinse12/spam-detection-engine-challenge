@@ -90,23 +90,48 @@ Evaluates whether the author has verified publication history in this subplebbit
 
 **Rationale**: Authors with verified publication history have demonstrated willingness to participate legitimately.
 
-### 4. Content Risk (Weight: 18% without IP, 12% with IP)
+### 4. Comment Content/Title Risk (Weight: 18% without IP, 12% with IP)
 
-Analyzes the publication content for spam indicators.
+Analyzes comment content and title for spam indicators by querying the database for similar past publications. **Only applies to comments (posts and replies)** - returns neutral score (0.5) for other publication types.
 
-| Indicator                         | Score Impact | Description                        |
-| --------------------------------- | ------------ | ---------------------------------- |
-| URL shortener in link             | +0.25        | Often used to hide malicious links |
-| Suspicious TLD (.xyz, .top, etc.) | +0.20        | Commonly used for spam domains     |
-| 5+ URLs in content                | +0.20        | Excessive link dropping            |
-| 3-4 URLs in content               | +0.10        | Elevated link count                |
-| URL shorteners in content         | +0.15 each   | Hidden links in text               |
-| Excessive capitalization          | +0.10        | SHOUTING (spam indicator)          |
-| Repetitive patterns               | +0.15        | Repeated text (bot behavior)       |
+**Similarity detection uses:**
 
-**Suspicious TLDs**: `.xyz`, `.top`, `.click`, `.loan`, `.work`, `.gq`, `.cf`, `.tk`, `.ml`, `.ga`
+1. SQL substring matching (LIKE) to find candidate matches
+2. Jaccard similarity on word sets to calculate actual similarity (threshold: 60%)
 
-**URL Shorteners Detected**: bit.ly, tinyurl.com, t.co, goo.gl, ow.ly, is.gd, buff.ly, adf.ly, j.mp, rb.gy, cutt.ly, shorturl.at, tiny.cc, s.id, v.gd, clck.ru
+| Indicator                                          | Score Impact | Description                              |
+| -------------------------------------------------- | ------------ | ---------------------------------------- |
+| **Same Author - Content Duplicates**               |              |                                          |
+| 5+ duplicate comments from same author in 24h      | +0.35        | Heavy self-spamming                      |
+| 3-4 duplicate comments from same author in 24h     | +0.25        | Moderate self-spamming                   |
+| 1-2 duplicate comments from same author in 24h     | +0.15        | Possible duplicate posting               |
+| **Same Author - Similar Content**                  |              |                                          |
+| 3+ similar comments from same author in 24h        | +0.20        | Similar content spamming                 |
+| 1-2 similar comments from same author in 24h       | +0.10        | Possible template spam                   |
+| **Other Authors - Content Duplicates**             |              |                                          |
+| 5+ identical comments from other authors           | +0.40        | Coordinated spam campaign                |
+| 2-4 identical comments from other authors          | +0.25        | Possible coordinated activity            |
+| 1 identical comment from another author            | +0.10        | Content seen from another author         |
+| **Other Authors - Similar Content**                |              |                                          |
+| 3+ similar comments from other authors             | +0.20        | Similar content from multiple accounts   |
+| 1-2 similar comments from other authors            | +0.08        | Similar content seen elsewhere           |
+| **Same Author - Title Duplicates**                 |              |                                          |
+| 3+ posts with same title from author in 24h        | +0.30        | Title spam                               |
+| 1-2 posts with same title from author in 24h       | +0.15        | Possible duplicate posting               |
+| **Same Author - Similar Titles**                   |              |                                          |
+| 2+ posts with similar title from author in 24h     | +0.15        | Similar title spamming                   |
+| **Other Authors - Title Duplicates**               |              |                                          |
+| 3+ posts with same title from other authors        | +0.25        | Coordinated title spam                   |
+| 1-2 posts with same title from another author      | +0.10        | Title seen from another author           |
+| **Other Authors - Similar Titles**                 |              |                                          |
+| 2+ posts with similar title from other authors     | +0.10        | Similar titles from multiple accounts    |
+| **Static Content Analysis**                        |              |                                          |
+| 5+ URLs in content                                 | +0.15        | Excessive link dropping                  |
+| 3-4 URLs in content                                | +0.08        | Elevated link count                      |
+| Excessive capitalization (>50% caps)               | +0.08        | SHOUTING (spam indicator)                |
+| Repetitive patterns (repeated chars/words)         | +0.10        | Bot-like behavior                        |
+
+**Note**: The base score for comments starts at 0.2 (low risk). Non-comment publications receive a neutral score of 0.5.
 
 ### 5. Velocity Risk (Weight: 12% without IP, 8% with IP)
 
@@ -186,16 +211,16 @@ When available (after iframe access), evaluates the author's IP address characte
 
 Weights are redistributed based on whether IP information is available:
 
-| Factor            | Without IP | With IP  |
-| ----------------- | ---------- | -------- |
-| Author Reputation | 25%        | 20%      |
-| Content Risk      | 18%        | 12%      |
-| Velocity Risk     | 12%        | 8%       |
-| Account Age       | 17%        | 12%      |
-| Karma Score       | 13%        | 8%       |
-| Wallet Velocity   | 15%        | 15%      |
-| IP Risk           | 0%         | 25%      |
-| **Total**         | **100%**   | **100%** |
+| Factor                     | Without IP | With IP  |
+| -------------------------- | ---------- | -------- |
+| Author Reputation          | 25%        | 20%      |
+| Comment Content/Title Risk | 18%        | 12%      |
+| Velocity Risk              | 12%        | 8%       |
+| Account Age                | 17%        | 12%      |
+| Karma Score                | 13%        | 8%       |
+| Wallet Velocity            | 15%        | 15%      |
+| IP Risk                    | 0%         | 25%      |
+| **Total**                  | **100%**   | **100%** |
 
 ## Score Calculation
 
@@ -224,7 +249,9 @@ Publications between these thresholds trigger a challenge (e.g., CAPTCHA).
 
 2. **New Subplebbit Limitation**: For new subplebbits, `author.subplebbit` data may be empty for all users initially.
 
-3. **Content Analysis Scope**: Currently focuses on URL patterns. Does not analyze semantic content or detect sophisticated spam.
+3. **Content Similarity Scope**: Uses word-level Jaccard similarity (60% threshold). May miss semantically similar content that uses different words. Substring matching helps catch some variations but sophisticated paraphrasing may evade detection.
+
+4. **Comment-Only Content Analysis**: Content/title similarity analysis only applies to comments (posts and replies). Other publication types (votes, edits, moderations) receive a neutral score for this factor.
 
 ## Future Improvements
 

@@ -5,7 +5,7 @@ import { WEIGHTS_NO_IP, WEIGHTS_WITH_IP } from "./types.js";
 import {
     calculateAccountAge,
     calculateAuthorReputation,
-    calculateContentRisk,
+    calculateCommentContentTitleRisk,
     calculateIpRisk,
     calculateKarma,
     calculateVelocity,
@@ -70,7 +70,7 @@ export function calculateRiskScore(options: CalculateRiskScoreOptions): RiskScor
         calculateAccountAge(ctx, weights.accountAge),
         calculateKarma(ctx, weights.karmaScore),
         calculateAuthorReputation(ctx, weights.authorReputation),
-        calculateContentRisk(ctx, weights.contentRisk),
+        calculateCommentContentTitleRisk(ctx, weights.commentContentTitleRisk),
         calculateVelocity(ctx, weights.velocityRisk),
         calculateWalletVelocity(ctx, weights.walletVelocity),
         calculateIpRisk(ipIntelligence, weights.ipRisk)
