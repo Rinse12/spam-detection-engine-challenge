@@ -12,7 +12,9 @@ const baseSignature = {
     signedPropertyNames: ["author"]
 };
 
-function createMockAuthor(wallets?: Record<string, { address: string; timestamp: number; signature: { signature: string; type: string } }>) {
+function createMockAuthor(
+    wallets?: Record<string, { address: string; timestamp: number; signature: { signature: string; type: string } }>
+) {
     return {
         address: "12D3KooWTestAddress",
         subplebbit: {
