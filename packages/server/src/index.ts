@@ -25,6 +25,7 @@ export interface ServerConfig {
   /** Enable request logging. Default: true */
   logging?: boolean;
   /** Override subplebbit resolver (useful for tests). */
+  // TODO need to re-think about this
   resolveSubplebbitPublicKey?: (subplebbitAddress: string) => Promise<string>;
 }
 

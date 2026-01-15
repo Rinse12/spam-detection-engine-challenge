@@ -200,6 +200,8 @@ function calculateRiskScore(
   }
 
   // Previous comment CID factor (has history)
+  // TODO we actually need to check if these cids are actually legitmate comments and not just random cids
+  // author.subplebbit values are trusted because they come from sub, while rest of author values are not trusted since they come from author
   if (author.previousCommentCid || subplebbitAuthor?.lastCommentCid) {
     score -= 0.05;
   }

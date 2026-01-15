@@ -7,5 +7,8 @@
   ],
   "scripts": {
     "build": "npm run -w @plebbit/spam-detection-shared build && npm run -w @plebbit/spam-detection-server build && npm run -w @plebbit/spam-detection-challenge build"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
   }
 }
