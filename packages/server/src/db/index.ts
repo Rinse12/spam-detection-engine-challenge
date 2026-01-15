@@ -572,12 +572,7 @@ export class SpamDetectionDatabase {
         const karmaMap = new Map<string, { postScore: number; replyScore: number; receivedAt: number }>();
 
         // Helper to update karma map with newer data only
-        const updateKarmaMap = (
-            subplebbitAddress: string,
-            postScore: number,
-            replyScore: number,
-            receivedAt: number
-        ) => {
+        const updateKarmaMap = (subplebbitAddress: string, postScore: number, replyScore: number, receivedAt: number) => {
             const existing = karmaMap.get(subplebbitAddress);
             if (!existing || receivedAt > existing.receivedAt) {
                 karmaMap.set(subplebbitAddress, { postScore, replyScore, receivedAt });

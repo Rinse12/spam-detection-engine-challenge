@@ -56,11 +56,13 @@ Evaluates the author's accumulated karma (`postScore + replyScore`) using a weig
 This dual-source approach gives priority to the author's reputation in the current subplebbit while still considering their cross-community reputation. A user who is problematic in one subplebbit won't automatically get a pass just because they have good karma elsewhere.
 
 **Karma aggregation from database:**
+
 - Only the **latest** karma per subplebbit is counted (avoids summing duplicates)
 - Karma is extracted from stored publications (comments, votes, edits, moderations)
 - The current subplebbit's karma from the challenge request is always used (most recent and direct from subplebbit)
 
 **Weighted calculation:**
+
 - If no other subs in DB: `totalKarma = currentSubKarma`
 - If other subs exist: `totalKarma = (currentSubKarma × 0.7) + (otherSubsKarma × 0.3)`
 

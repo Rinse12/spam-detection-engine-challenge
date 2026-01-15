@@ -101,7 +101,9 @@ export function calculateKarma(ctx: RiskContext, weight: number): RiskFactor {
 
     // Build explanation with context about karma sources
     const karmaSourceInfo =
-        otherSubsCount > 0 ? ` (current sub: ${currentSubKarma}, ${otherSubsCount} other sub${otherSubsCount > 1 ? "s" : ""}: ${otherSubsKarma})` : "";
+        otherSubsCount > 0
+            ? ` (current sub: ${currentSubKarma}, ${otherSubsCount} other sub${otherSubsCount > 1 ? "s" : ""}: ${otherSubsKarma})`
+            : "";
 
     if (totalKarma >= THRESHOLDS.VERY_HIGH) {
         score = SCORES.VERY_HIGH;

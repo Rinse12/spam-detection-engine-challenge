@@ -256,7 +256,9 @@ describe("calculateKarma", () => {
             });
 
             // Set older receivedAt
-            db.getDb().prepare("UPDATE comments SET receivedAt = ? WHERE challengeId = ?").run(baseTimestamp - 1000, oldChallengeId);
+            db.getDb()
+                .prepare("UPDATE comments SET receivedAt = ? WHERE challengeId = ?")
+                .run(baseTimestamp - 1000, oldChallengeId);
 
             // Add newer comment with higher karma from same other-sub
             const newChallengeId = "new-comment";
@@ -503,7 +505,9 @@ describe("calculateKarma", () => {
                     content: "Old"
                 }
             });
-            db.getDb().prepare("UPDATE comments SET receivedAt = ? WHERE challengeId = ?").run(baseTimestamp - 1000, "old-record");
+            db.getDb()
+                .prepare("UPDATE comments SET receivedAt = ? WHERE challengeId = ?")
+                .run(baseTimestamp - 1000, "old-record");
 
             // New record with different karma
             db.insertChallengeSession({
