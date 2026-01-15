@@ -1,7 +1,7 @@
 import path from "path";
 import { createRequire } from "module";
 import { pathToFileURL } from "url";
-import type { derivePublicationFromChallengeRequest as derivePublicationFromChallengeRequestType } from "@plebbit/plebbit-js/dist/node/util.js";
+import type { PublicationWithSubplebbitAuthorFromDecryptedChallengeRequest } from "@plebbit/plebbit-js/dist/node/pubsub-messages/types.js";
 
 const require = createRequire(import.meta.url);
 const plebbitEntry = require.resolve("@plebbit/plebbit-js");
@@ -17,7 +17,9 @@ const [
     { derivePublicationFromChallengeRequest: _derivePublicationFromChallengeRequest, isStringDomain }
 ] = await Promise.all([import(pubsubSchemaUrl), import(schemaUrl), import(utilUrl)]);
 
-const derivePublicationFromChallengeRequest = _derivePublicationFromChallengeRequest as typeof derivePublicationFromChallengeRequestType;
+const derivePublicationFromChallengeRequest = _derivePublicationFromChallengeRequest as (
+    request: unknown
+) => PublicationWithSubplebbitAuthorFromDecryptedChallengeRequest;
 
 export {
     DecryptedChallengeRequestSchema,

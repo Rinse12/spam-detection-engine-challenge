@@ -13,7 +13,7 @@ const ChallengeRequestWithSubplebbitAuthorSchema = DecryptedChallengeRequestSche
     (value: DecryptedChallengeRequest, ctx: RefinementCtx) => {
         try {
             const publication = derivePublicationFromChallengeRequest(value);
-            const subplebbitAuthor = (publication?.author as { subplebbit?: unknown })?.subplebbit;
+            const subplebbitAuthor = publication.author?.subplebbit;
 
             if (!subplebbitAuthor) {
                 ctx.addIssue({
