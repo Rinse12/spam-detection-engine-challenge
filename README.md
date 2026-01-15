@@ -307,6 +307,7 @@ Tracks pending challenges. **Automatically purged after 1 hour.**.
 - `challengeId` TEXT NOT NULL UNIQUE
 - `author` TEXT NOT NULL
 - `subplebbitAddress` TEXT NOT NULL
+- `subplebbitPublicKey` TEXT
 - `status` TEXT DEFAULT 'pending' (pending, completed, failed)
 - `completedAt` INTEGER
 - `expiresAt` INTEGER NOT NULL
