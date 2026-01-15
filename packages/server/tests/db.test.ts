@@ -77,7 +77,6 @@ describe("SpamDetectionDatabase", () => {
             const session = db.getChallengeSessionByChallengeId("iframe-test");
             expect(session?.authorAccessedIframeAt).toBe(now);
         });
-
     });
 
     describe("IP records", () => {
