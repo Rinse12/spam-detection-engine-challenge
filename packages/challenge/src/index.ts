@@ -7,21 +7,21 @@ import type {
 import type { DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor } from "@plebbit/plebbit-js/dist/node/pubsub-messages/types.js";
 import type { LocalSubplebbit } from "@plebbit/plebbit-js/dist/node/runtime/node/subplebbit/local-subplebbit.js";
 import { signBufferEd25519 } from "./plebbit-js-signer.js";
-import type { EvaluateResponse, VerifyResponse } from "@plebbit/spam-detection-shared";
-import { EvaluateResponseSchema, VerifyResponseSchema } from "@plebbit/spam-detection-shared";
+import type { EvaluateResponse, VerifyResponse } from "@easy-community-spam-blocker/shared";
+import { EvaluateResponseSchema, VerifyResponseSchema } from "@easy-community-spam-blocker/shared";
 import { createOptionsSchema, type ParsedOptions } from "./schema.js";
 import * as cborg from "cborg";
 import { toString as uint8ArrayToString } from "uint8arrays/to-string";
 
-const DEFAULT_SERVER_URL = "https://spam.plebbit.org/api/v1"; // TODO once we have a server we will change this url
+const DEFAULT_SERVER_URL = "https://easycommunityspamblocker.com/api/v1";
 
 const optionInputs = [
     {
         option: "serverUrl",
         label: "Server URL",
         default: DEFAULT_SERVER_URL,
-        description: "URL of the spam detection server",
-        placeholder: "https://spam.plebbit.org/api/v1"
+        description: "URL of the EasyCommunitySpamBlocker server",
+        placeholder: "https://easycommunityspamblocker.com/api/v1"
     },
     {
         option: "autoAcceptThreshold",
@@ -85,7 +85,7 @@ const OptionsSchema = createOptionsSchema(optionInputs);
 
 const type: ChallengeInput["type"] = "url/iframe";
 
-const description: ChallengeFileInput["description"] = "Validate publications using the Plebbit spam detection engine.";
+const description: ChallengeFileInput["description"] = "Validate publications using EasyCommunitySpamBlocker.";
 
 const parseOptions = (settings: SubplebbitChallengeSetting): ParsedOptions => {
     const parsed = OptionsSchema.safeParse(settings?.options);
@@ -150,11 +150,11 @@ const postJson = async (url: string, body: unknown): Promise<unknown> => {
 
     if (!response.ok) {
         const details = responseBody !== undefined ? `: ${JSON.stringify(responseBody)}` : "";
-        throw new Error(`Spam detection server error (${response.status})${details}`);
+        throw new Error(`EasyCommunitySpamBlocker server error (${response.status})${details}`);
     }
 
     if (responseBody === undefined) {
-        throw new Error("Invalid JSON response from spam detection server");
+        throw new Error("Invalid JSON response from EasyCommunitySpamBlocker server");
     }
 
     return responseBody;
@@ -166,7 +166,7 @@ const parseWithSchema = <T>(schema: { parse: (data: unknown) => T }, data: unkno
     } catch (error) {
         const message = error instanceof Error ? error.message : "";
         const suffix = message ? `: ${message}` : "";
-        throw new Error(`Invalid ${context} response from spam detection server${suffix}`);
+        throw new Error(`Invalid ${context} response from EasyCommunitySpamBlocker server${suffix}`);
     }
 };
 
@@ -216,7 +216,7 @@ const getChallenge = async (
     const signer = subplebbit?.signer;
 
     if (!signer) {
-        throw new Error("Subplebbit signer is required to call spam engine");
+        throw new Error("Subplebbit signer is required to call EasyCommunitySpamBlocker");
     }
 
     const evaluateTimestamp = Math.floor(Date.now() / 1000);
@@ -245,7 +245,7 @@ const getChallenge = async (
         return {
             success: false,
             // TODO find a better error message
-            error: `Rejected by spam detection engine (riskScore ${formatRiskScore(riskScore)}).${explanation}`
+            error: `Rejected by EasyCommunitySpamBlocker (riskScore ${formatRiskScore(riskScore)}).${explanation}`
         };
     }
 

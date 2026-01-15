@@ -4,7 +4,7 @@ import type {
     PublicationWithSubplebbitAuthorFromDecryptedChallengeRequest
 } from "@plebbit/plebbit-js/dist/node/pubsub-messages/types.js";
 import { getPlebbitAddressFromPublicKey } from "../plebbit-js-signer.js";
-import type { EvaluateResponse } from "@plebbit/spam-detection-shared";
+import type { EvaluateResponse } from "@easy-community-spam-blocker/shared";
 import type { SpamDetectionDatabase } from "../db/index.js";
 import { EvaluateRequestSchema, type EvaluateRequest } from "./schemas.js";
 import { derivePublicationFromChallengeRequest, isStringDomain } from "../plebbit-js-internals.js";

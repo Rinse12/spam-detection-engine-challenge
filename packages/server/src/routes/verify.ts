@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
-import type { VerifyResponse } from "@plebbit/spam-detection-shared";
+import type { VerifyResponse } from "@easy-community-spam-blocker/shared";
 import type { SpamDetectionDatabase } from "../db/index.js";
 import type { KeyManager } from "../crypto/keys.js";
 import { VerifyRequestSchema, type VerifyRequest } from "./schemas.js";

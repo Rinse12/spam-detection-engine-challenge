@@ -2,7 +2,7 @@ import type { SubplebbitChallengeSetting } from "@plebbit/plebbit-js/dist/node/s
 import type { DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor } from "@plebbit/plebbit-js/dist/node/pubsub-messages/types.js";
 import type { LocalSubplebbit } from "@plebbit/plebbit-js/dist/node/runtime/node/subplebbit/local-subplebbit.js";
 import { getPublicKeyFromPrivateKey } from "../src/plebbit-js-signer.js";
-import type { EvaluateResponse, VerifyResponse } from "@plebbit/spam-detection-shared";
+import type { EvaluateResponse, VerifyResponse } from "@easy-community-spam-blocker/shared";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import ChallengeFileFactory from "../src/index.js";
 
@@ -34,7 +34,7 @@ const createEvaluateResponse = (overrides: Partial<EvaluateResponse> = {}): Eval
     riskScore: 0.5,
     explanation: "OK",
     challengeId: "challenge-123",
-    challengeUrl: "https://spam.plebbit.org/api/v1/iframe/challenge-123",
+    challengeUrl: "https://easycommunityspamblocker.com/api/v1/iframe/challenge-123",
     challengeExpiresAt: 1710000000,
     ...overrides
 });
@@ -64,12 +64,12 @@ afterEach(() => {
     vi.restoreAllMocks();
 });
 
-describe("spam-detection challenge package", () => {
+describe("EasyCommunitySpamBlocker challenge package", () => {
     it("exposes metadata and option inputs", () => {
         const challengeFile = ChallengeFileFactory({} as SubplebbitChallengeSetting);
 
         expect(challengeFile.type).toBe("url/iframe");
-        expect(challengeFile.description).toMatch(/spam detection engine/i);
+        expect(challengeFile.description).toMatch(/EasyCommunitySpamBlocker/i);
         expect(challengeFile.optionInputs.some((input) => input.option === "serverUrl")).toBe(true);
     });
 
@@ -81,7 +81,7 @@ describe("spam-detection challenge package", () => {
 
         expect(result).toEqual({ success: true });
         expect(fetchMock).toHaveBeenCalledTimes(1);
-        expect(fetchMock).toHaveBeenCalledWith("https://spam.plebbit.org/api/v1/evaluate", expect.objectContaining({ method: "POST" }));
+        expect(fetchMock).toHaveBeenCalledWith("https://easycommunityspamblocker.com/api/v1/evaluate", expect.objectContaining({ method: "POST" }));
     });
 
     it("wraps evaluate requests with the challengeRequest payload", async () => {
@@ -115,7 +115,7 @@ describe("spam-detection challenge package", () => {
         expect(fetchMock).toHaveBeenCalledTimes(1);
         expect(result).toEqual({
             success: false,
-            error: "Rejected by spam detection engine (riskScore 0.80). Too risky"
+            error: "Rejected by EasyCommunitySpamBlocker (riskScore 0.80). Too risky"
         });
     });
 
@@ -316,7 +316,7 @@ describe("spam-detection challenge package", () => {
         const challengeFile = ChallengeFileFactory({} as SubplebbitChallengeSetting);
 
         await expect(challengeFile.getChallenge({ options: {} } as SubplebbitChallengeSetting, request, 0, subplebbit)).rejects.toThrow(
-            /Spam detection server error \(500\).*boom/i
+            /EasyCommunitySpamBlocker server error \(500\).*boom/i
         );
     });
 

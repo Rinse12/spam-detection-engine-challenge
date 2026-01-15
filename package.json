@@ -1,12 +1,12 @@
 {
-    "name": "spam-detection-engine",
+    "name": "easy-community-spam-blocker",
     "private": true,
     "type": "module",
     "workspaces": [
         "packages/*"
     ],
     "scripts": {
-        "build": "npm run -w @plebbit/spam-detection-shared build && npm run -w @plebbit/spam-detection-server build && npm run -w @plebbit/spam-detection-challenge build",
+        "build": "npm run -w @easy-community-spam-blocker/shared build && npm run -w @easy-community-spam-blocker/server build && npm run -w @easy-community-spam-blocker/challenge build",
         "format": "prettier --write .",
         "format:check": "prettier --check .",
         "prepare": "husky"

@@ -1,9 +1,9 @@
 /**
- * Database schema for the spam detection engine.
+ * Database schema for EasyCommunitySpamBlocker.
  * Uses better-sqlite3 with SQLite.
  */
 
-// TODO need to handle cases where spam engine receives publications with unrecognized fields. We should strip those unrecognized fields away before storing
+// TODO need to handle cases where EasyCommunitySpamBlocker receives publications with unrecognized fields. We should strip those unrecognized fields away before storing
 export const SCHEMA_SQL = `
 -- Challenge sessions table (ephemeral) - stores pending challenges
 CREATE TABLE IF NOT EXISTS challengeSessions (

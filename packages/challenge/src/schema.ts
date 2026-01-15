@@ -1,4 +1,4 @@
-import { IsoCountryCodeSchema } from "@plebbit/spam-detection-shared";
+import { IsoCountryCodeSchema } from "@easy-community-spam-blocker/shared";
 import { z } from "zod";
 
 export type ParsedOptions = {

@@ -1,7 +1,7 @@
 {
-    "name": "@plebbit/spam-detection-shared",
+    "name": "@easy-community-spam-blocker/shared",
     "version": "0.0.0",
-    "description": "Shared types for the Plebbit spam detection engine",
+    "description": "Shared types for EasyCommunitySpamBlocker",
     "type": "module",
     "main": "dist/types.js",
     "types": "dist/types.d.ts",

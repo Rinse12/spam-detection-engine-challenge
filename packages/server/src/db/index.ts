@@ -33,7 +33,7 @@ export interface DatabaseConfig {
 }
 
 /**
- * Database wrapper for the spam detection engine.
+ * Database wrapper for EasyCommunitySpamBlocker.
  * Provides methods for managing challenge sessions and IP records.
  */
 export class SpamDetectionDatabase {

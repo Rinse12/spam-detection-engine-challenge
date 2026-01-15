@@ -1,11 +1,11 @@
-# Spam Detection Engine for Plebbit
+# EasyCommunitySpamBlocker
 
 ## Overview
 
 A centralized spam detection service that evaluates publications and provides risk scores to help subplebbits filter spam. Consists of:
 
-1. **HTTP Server** (`@plebbit/spam-detection-server`) - Risk assessment and challenge server
-2. **Challenge Package** (`@plebbit/spam-detection-challenge`) - npm package for subplebbit integration
+1. **HTTP Server** (`@easy-community-spam-blocker/server`) - Risk assessment and challenge server
+2. **Challenge Package** (`@easy-community-spam-blocker/challenge`) - npm package for subplebbit integration
 
 **Important:**
 
@@ -15,7 +15,7 @@ A centralized spam detection service that evaluates publications and provides ri
 ## Repository Structure
 
 ```
-spam_detection_engine/
+easy-community-spam-blocker/
 ├── package.json                    # Root workspace config
 ├── tsconfig.base.json
 ├── packages/
@@ -68,9 +68,10 @@ Requests are signed by the subplebbit signer to prevent abuse (e.g., someone unr
   riskScore: number; // 0.0 to 1.0
   explanation?: string; // Human-readable reasoning for the score
 
+// TODO aren't we supposed to include JWT public key here?
   // Pre-generated challenge URL - sub can use this if it decides to challenge
   challengeId: string;
-  challengeUrl: string; // Full URL: https://spam.plebbit.org/api/v1/iframe/{challengeId}
+  challengeUrl: string; // Full URL: https://easycommunityspamblocker.com/api/v1/iframe/{challengeId}
   challengeExpiresAt?: number; // Unix timestamp, 1 hour from creation
 }
 ```
@@ -162,7 +163,7 @@ Called by the iframe after the user completes a challenge. Validates the challen
 
 ```
 ┌─────────────────┐       ┌──────────────────┐       ┌────────────────┐
-│   Plebbit       │       │  Spam Detection  │       │   Turnstile    │
+│   Plebbit       │       │ EasySpamBlocker  │       │   Turnstile    │
 │   Client        │       │     Server       │       │                │
 └────────┬────────┘       └────────┬─────────┘       └───────┬────────┘
          │                         │                          │
@@ -243,7 +244,7 @@ Weighted combination (0-1 scale):
 
 When a user completes the iframe challenge:
 
-1. The iframe page (served by the spam detection server) generates a JWT
+1. The iframe page (served by the EasyCommunitySpamBlocker server) generates a JWT
 2. The JWT is signed by the server's private key
 3. The JWT contains: `challengeId`, `authorAddress`, `completedAt`, `expiresAt`
 4. The sub's challenge code calls `/api/v1/challenge/verify` with the token
@@ -350,7 +351,7 @@ Stores raw IP addresses associated with authors (captured via iframe). One recor
 - `isProxy` INTEGER (BOOLEAN 0/1)
 - `isTor` INTEGER (BOOLEAN 0/1)
 - `isDatacenter` INTEGER (BOOLEAN 0/1)
-- `countryCode` TEXT -- ISO 3166-1 alpha-2 country codes
+- `countryCode` TEXT -- ISO 3166-1 alpha-2 country code
 - `timestamp` INTEGER NOT NULL -- when did we query the ip provider
 
 ## Challenge Code (npm package)
@@ -361,9 +362,9 @@ Implements plebbit-js `ChallengeFileFactory`:
 // Usage in subplebbit settings
 {
   "challenges": [{
-    "name": "@plebbit/spam-detection-challenge",
+    "name": "@easy-community-spam-blocker/challenge",
     "options": {
-      "serverUrl": "https://spam.plebbit.org/api/v1",
+      "serverUrl": "https://easycommunityspamblocker.com/api/v1",
       "autoAcceptThreshold": "0.2",
       "autoRejectThreshold": "0.8",
       "countryBlacklist": "RU,CN,KP",
@@ -384,9 +385,9 @@ Requests without subplebbit author data are rejected.
 
 ### Configuration Options (Challenge Package)
 
-| Option                | Default                           | Description                                                                    |
-| --------------------- | --------------------------------- | ------------------------------------------------------------------------------ |
-| `serverUrl`           | `https://spam.plebbit.org/api/v1` | URL of the spam detection server (must be http/https)                          |
+| Option                | Default                                       | Description                                                                    |
+| --------------------- | --------------------------------------------- | ------------------------------------------------------------------------------ |
+| `serverUrl`           | `https://easycommunityspamblocker.com/api/v1` | URL of the EasyCommunitySpamBlocker server (must be http/https)                |
 | `autoAcceptThreshold` | `0.2`                             | Auto-accept publications below this risk score                                 |
 | `autoRejectThreshold` | `0.8`                             | Auto-reject publications above this risk score                                 |
 | `countryBlacklist`    | `""`                              | Comma-separated ISO 3166-1 alpha-2 country codes to block (e.g., `"RU,CN,KP"`) |
