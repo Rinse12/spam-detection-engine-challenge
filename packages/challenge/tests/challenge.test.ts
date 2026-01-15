@@ -81,7 +81,10 @@ describe("EasyCommunitySpamBlocker challenge package", () => {
 
         expect(result).toEqual({ success: true });
         expect(fetchMock).toHaveBeenCalledTimes(1);
-        expect(fetchMock).toHaveBeenCalledWith("https://easycommunityspamblocker.com/api/v1/evaluate", expect.objectContaining({ method: "POST" }));
+        expect(fetchMock).toHaveBeenCalledWith(
+            "https://easycommunityspamblocker.com/api/v1/evaluate",
+            expect.objectContaining({ method: "POST" })
+        );
     });
 
     it("wraps evaluate requests with the challengeRequest payload", async () => {

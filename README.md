@@ -388,14 +388,14 @@ Requests without subplebbit author data are rejected.
 | Option                | Default                                       | Description                                                                    |
 | --------------------- | --------------------------------------------- | ------------------------------------------------------------------------------ |
 | `serverUrl`           | `https://easycommunityspamblocker.com/api/v1` | URL of the EasyCommunitySpamBlocker server (must be http/https)                |
-| `autoAcceptThreshold` | `0.2`                             | Auto-accept publications below this risk score                                 |
-| `autoRejectThreshold` | `0.8`                             | Auto-reject publications above this risk score                                 |
-| `countryBlacklist`    | `""`                              | Comma-separated ISO 3166-1 alpha-2 country codes to block (e.g., `"RU,CN,KP"`) |
-| `maxIpRisk`           | `1.0`                             | Reject if ipRisk from /verify exceeds this threshold                           |
-| `blockVpn`            | `false`                           | Reject publications from VPN IPs (`true`/`false` only)                         |
-| `blockProxy`          | `false`                           | Reject publications from proxy IPs (`true`/`false` only)                       |
-| `blockTor`            | `false`                           | Reject publications from Tor exit nodes (`true`/`false` only)                  |
-| `blockDatacenter`     | `false`                           | Reject publications from datacenter IPs (`true`/`false` only)                  |
+| `autoAcceptThreshold` | `0.2`                                         | Auto-accept publications below this risk score                                 |
+| `autoRejectThreshold` | `0.8`                                         | Auto-reject publications above this risk score                                 |
+| `countryBlacklist`    | `""`                                          | Comma-separated ISO 3166-1 alpha-2 country codes to block (e.g., `"RU,CN,KP"`) |
+| `maxIpRisk`           | `1.0`                                         | Reject if ipRisk from /verify exceeds this threshold                           |
+| `blockVpn`            | `false`                                       | Reject publications from VPN IPs (`true`/`false` only)                         |
+| `blockProxy`          | `false`                                       | Reject publications from proxy IPs (`true`/`false` only)                       |
+| `blockTor`            | `false`                                       | Reject publications from Tor exit nodes (`true`/`false` only)                  |
+| `blockDatacenter`     | `false`                                       | Reject publications from datacenter IPs (`true`/`false` only)                  |
 
 **Post-challenge filtering:** After a user completes a challenge, the `/verify` response includes IP intelligence data. The challenge code uses the above options to reject publications even after successful challenge completion (e.g., if the user is from a blacklisted country or using a VPN).
 
