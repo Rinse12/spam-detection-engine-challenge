@@ -10,8 +10,8 @@ export interface ServerConfig {
     host?: string;
     /** Base URL for generating challenge URLs. Default: "http://localhost:3000" */
     baseUrl?: string;
-    /** Path to SQLite database file. Use ":memory:" for in-memory. Default: ":memory:" */
-    databasePath?: string;
+    /** Path to SQLite database file. Use ":memory:" for in-memory. */
+    databasePath: string;
     /** Cloudflare Turnstile site key */
     turnstileSiteKey?: string;
     /** Cloudflare Turnstile secret key */
@@ -35,17 +35,21 @@ export interface SpamDetectionServer {
 /**
  * Create a new spam detection server instance.
  */
-export function createServer(config: ServerConfig = {}): SpamDetectionServer {
+export function createServer(config: ServerConfig): SpamDetectionServer {
     const {
         port = 3000,
         host = "0.0.0.0",
         baseUrl = `http://localhost:${port}`,
-        databasePath = ":memory:",
+        databasePath,
         turnstileSiteKey,
         ipInfoToken,
         logging = true,
         resolveSubplebbitPublicKey: resolveSubplebbitPublicKeyOverride
     } = config;
+
+    if (!databasePath) {
+        throw new Error("databasePath is required");
+    }
 
     // Create Fastify instance
     const fastify = Fastify({
@@ -125,11 +129,17 @@ const isMainModule =
     process.argv[1]?.endsWith("/server/src/index.ts");
 
 if (isMainModule) {
+    const databasePath = process.env.DATABASE_PATH;
+    if (!databasePath) {
+        console.error("DATABASE_PATH is required to start the server.");
+        process.exit(1);
+    }
+
     const server = createServer({
         port: parseInt(process.env.PORT ?? "3000", 10),
         host: process.env.HOST ?? "0.0.0.0",
         baseUrl: process.env.BASE_URL,
-        databasePath: process.env.DATABASE_PATH ?? "spam_detection.db",
+        databasePath,
         turnstileSiteKey: process.env.TURNSTILE_SITE_KEY,
         turnstileSecretKey: process.env.TURNSTILE_SECRET_KEY,
         ipInfoToken: process.env.IPINFO_TOKEN,

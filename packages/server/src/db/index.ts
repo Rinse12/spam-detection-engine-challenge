@@ -319,9 +319,9 @@ export class SpamDetectionDatabase {
 }
 
 /**
- * Create a database instance with default configuration.
+ * Create a database instance.
  */
-export function createDatabase(path: string = ":memory:"): SpamDetectionDatabase {
+export function createDatabase(path: string): SpamDetectionDatabase {
     return new SpamDetectionDatabase({ path });
 }
 

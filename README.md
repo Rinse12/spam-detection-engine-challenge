@@ -383,6 +383,7 @@ Requests without subplebbit author data are rejected.
 
 These settings are configured on the HTTP server, not in the challenge package:
 
+- `databasePath`: Path to the SQLite database file (required). Use `:memory:` for in-memory. Env: `DATABASE_PATH` (required for CLI entrypoint)
 - `iframeProvider`: Which CAPTCHA provider to use (turnstile, hcaptcha, self-hosted)
 - `contentAnalysis`: Whether to analyze publication content for spam patterns
 - `ipInfoToken`: IPinfo token for IP intelligence lookups (env `IPINFO_TOKEN`)
@@ -433,7 +434,7 @@ These settings are configured on the HTTP server, not in the challenge package:
 
 ## Verification Plan
 
-1. Run server locally: `npm run dev`
+1. Run server locally: `DATABASE_PATH=spam_detection.db npm run dev`
 2. Test /evaluate endpoint with `{ challengeRequest: DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor }`
 3. Test iframe flow using challengeUrl from /evaluate response
 4. Test /challenge/verify with valid and invalid tokens
