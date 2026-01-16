@@ -34,6 +34,21 @@ export function getAuthorFromChallengeRequest(
 }
 
 /**
+ * Get the author's cryptographic public key from a challenge request.
+ *
+ * This is the Ed25519 public key from the publication's signature, which
+ * is cryptographically tied to the author's identity. Unlike author.address,
+ * which can be a domain name, this public key is always the true identifier.
+ *
+ * Use this for identity tracking (velocity, karma, etc.) instead of author.address.
+ */
+export function getAuthorPublicKeyFromChallengeRequest(challengeRequest: DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor): string {
+    const publication = getPublicationFromChallengeRequest(challengeRequest);
+
+    return publication.signature.publicKey;
+}
+
+/**
  * Publication types for velocity tracking.
  */
 export type PublicationType = "post" | "reply" | "vote" | "commentEdit" | "commentModeration" | "subplebbitEdit";

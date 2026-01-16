@@ -23,6 +23,25 @@ The score is calculated as a weighted combination of multiple factors, each anal
 
 The risk scoring system primarily relies on trusted `author.subplebbit` data for reputation signals.
 
+## Author Identity Tracking
+
+**Important**: `author.address` is NOT used for identity tracking.
+
+The `author.address` field can be either:
+
+- A b58-encoded IPNS address (cryptographically tied to the author's key)
+- A domain name (not cryptographically tied to the author)
+
+Since `author.address` can be a domain that the author controls but doesn't cryptographically prove ownership of, we use the **signature's public key** (`publication.signature.publicKey`) for all identity-related tracking:
+
+- Velocity tracking (how fast an author is posting)
+- Karma aggregation (author's reputation across subplebbits)
+- Account age (first seen timestamp)
+- Content similarity detection (same author vs. different authors)
+- Link spam detection (same author vs. coordinated campaigns)
+
+The Ed25519 public key in the signature is the cryptographic identifier that truly identifies the author across all their publications.
+
 ## Risk Factors
 
 ### 1. Account Age (Weight: 15% without IP, 10% with IP)
@@ -162,19 +181,61 @@ Analyzes `comment.link` (the dedicated link field for link posts) for spam indic
 
 ### 6. Velocity Risk (Weight: 10% without IP, 7% with IP)
 
-Measures how frequently an author is publishing to detect burst spam behavior. Queries the database to count actual publications by the author in the last hour and last 24 hours.
+Measures how frequently an author is publishing to detect burst spam behavior. Queries the database to count actual publications by the author's **signature public key** in the last hour and last 24 hours.
 
-| Publications/Hour | Risk Score | Description          |
-| ----------------- | ---------- | -------------------- |
-| 0-2               | 0.10       | Normal posting rate  |
-| 3-5               | 0.40       | Elevated rate        |
-| 6-10              | 0.70       | Suspicious rate      |
-| 20+               | 0.95       | Likely automated/bot |
+This factor uses publication-type-specific thresholds since different actions have different natural rates:
+
+**Post thresholds (comments without parentCid):**
+
+| Posts/Hour | Risk Score | Description          |
+| ---------- | ---------- | -------------------- |
+| 0-2        | 0.10       | Normal posting rate  |
+| 3-5        | 0.40       | Elevated rate        |
+| 6-8        | 0.70       | Suspicious rate      |
+| 12+        | 0.95       | Likely automated/bot |
+
+**Reply thresholds (comments with parentCid):**
+
+| Replies/Hour | Risk Score | Description          |
+| ------------ | ---------- | -------------------- |
+| 0-5          | 0.10       | Normal posting rate  |
+| 6-10         | 0.40       | Elevated rate        |
+| 11-15        | 0.70       | Suspicious rate      |
+| 25+          | 0.95       | Likely automated/bot |
+
+**Vote thresholds:**
+
+| Votes/Hour | Risk Score | Description          |
+| ---------- | ---------- | -------------------- |
+| 0-20       | 0.10       | Normal voting rate   |
+| 21-40      | 0.40       | Elevated rate        |
+| 41-60      | 0.70       | Suspicious rate      |
+| 100+       | 0.95       | Likely automated/bot |
+
+**Comment edit thresholds:**
+
+| Edits/Hour | Risk Score | Description          |
+| ---------- | ---------- | -------------------- |
+| 0-3        | 0.10       | Normal editing rate  |
+| 4-5        | 0.40       | Elevated rate        |
+| 6-10       | 0.70       | Suspicious rate      |
+| 15+        | 0.95       | Likely automated/bot |
+
+**Comment moderation thresholds:**
+
+| Moderations/Hour | Risk Score | Description            |
+| ---------------- | ---------- | ---------------------- |
+| 0-5              | 0.10       | Normal moderation rate |
+| 6-10             | 0.40       | Elevated rate          |
+| 11-15            | 0.70       | Suspicious rate        |
+| 25+              | 0.95       | Likely automated/bot   |
 
 The effective rate is calculated as the maximum of:
 
-- Publications in the last hour
+- Publications of that type in the last hour
 - Average publications per hour over the last 24 hours
+
+**Note**: Subplebbit edits are not tracked for velocity as they are administrative actions.
 
 ### 7. Wallet Velocity Risk (Weight: 15% without IP, 15% with IP)
 

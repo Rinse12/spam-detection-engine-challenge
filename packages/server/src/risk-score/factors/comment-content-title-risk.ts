@@ -1,5 +1,5 @@
 import type { RiskContext, RiskFactor } from "../types.js";
-import { getAuthorFromChallengeRequest, getPublicationType } from "../utils.js";
+import { getAuthorPublicKeyFromChallengeRequest, getPublicationType } from "../utils.js";
 
 /**
  * Content and title risk analysis for comments (posts and replies).
@@ -104,8 +104,9 @@ export function calculateCommentContentTitleRisk(ctx: RiskContext, weight: numbe
     }
 
     const comment = challengeRequest.comment!;
-    const author = getAuthorFromChallengeRequest(challengeRequest);
-    const authorAddress = author.address;
+    // Use the author's cryptographic public key for identity tracking
+    // (author.address can be a domain and is not cryptographically tied to the author)
+    const authorPublicKey = getAuthorPublicKeyFromChallengeRequest(challengeRequest);
 
     let score = 0.2; // Start at low risk for comments
     const issues: string[] = [];
@@ -124,7 +125,7 @@ export function calculateCommentContentTitleRisk(ctx: RiskContext, weight: numbe
     if (content && content.trim().length > 10) {
         // Query with lower threshold to get all candidates, then categorize by similarity level
         const similarFromAuthor = db.findSimilarContentByAuthor({
-            authorAddress,
+            authorPublicKey,
             content,
             sinceTimestamp,
             similarityThreshold: SIMILARITY_THRESHOLD
@@ -165,7 +166,7 @@ export function calculateCommentContentTitleRisk(ctx: RiskContext, weight: numbe
 
         // Check for similar content from different authors (coordinated spam)
         const similarFromOthers = db.findSimilarContentByOthers({
-            authorAddress,
+            authorPublicKey,
             content,
             sinceTimestamp,
             similarityThreshold: SIMILARITY_THRESHOLD
@@ -178,10 +179,10 @@ export function calculateCommentContentTitleRisk(ctx: RiskContext, weight: numbe
         for (const match of similarFromOthers) {
             if (match.contentSimilarity >= EXACT_MATCH_THRESHOLD) {
                 othersExactMatchCount++;
-                uniqueOtherAuthors.add(match.authorAddress);
+                uniqueOtherAuthors.add(match.authorPublicKey);
             } else if (match.contentSimilarity >= SIMILARITY_THRESHOLD) {
                 othersHighSimilarityCount++;
-                uniqueOtherAuthors.add(match.authorAddress);
+                uniqueOtherAuthors.add(match.authorPublicKey);
             }
         }
 
@@ -210,7 +211,7 @@ export function calculateCommentContentTitleRisk(ctx: RiskContext, weight: numbe
     // Check for similar titles from the same author (post title spam)
     if (title && title.trim().length > 5) {
         const similarTitlesFromAuthor = db.findSimilarContentByAuthor({
-            authorAddress,
+            authorPublicKey,
             title,
             sinceTimestamp,
             similarityThreshold: SIMILARITY_THRESHOLD
@@ -242,7 +243,7 @@ export function calculateCommentContentTitleRisk(ctx: RiskContext, weight: numbe
 
         // Check for similar titles from different authors
         const similarTitlesFromOthers = db.findSimilarContentByOthers({
-            authorAddress,
+            authorPublicKey,
             title,
             sinceTimestamp,
             similarityThreshold: SIMILARITY_THRESHOLD

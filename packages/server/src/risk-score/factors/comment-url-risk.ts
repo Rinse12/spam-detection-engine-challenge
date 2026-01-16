@@ -1,5 +1,5 @@
 import type { RiskContext, RiskFactor } from "../types.js";
-import { getAuthorFromChallengeRequest, getPublicationType } from "../utils.js";
+import { getAuthorPublicKeyFromChallengeRequest, getPublicationType } from "../utils.js";
 
 /**
  * URL/link risk analysis for comments (posts and replies).
@@ -197,8 +197,9 @@ export function calculateCommentUrlRisk(ctx: RiskContext, weight: number): RiskF
         };
     }
 
-    const author = getAuthorFromChallengeRequest(challengeRequest);
-    const authorAddress = author.address;
+    // Use the author's cryptographic public key for identity tracking
+    // (author.address can be a domain and is not cryptographically tied to the author)
+    const authorPublicKey = getAuthorPublicKeyFromChallengeRequest(challengeRequest);
 
     let score = 0.2; // Start at low risk for comments with links
     const issues: string[] = [];
@@ -220,7 +221,7 @@ export function calculateCommentUrlRisk(ctx: RiskContext, weight: number): RiskF
 
         // Check for same link from the same author
         const sameAuthorLinks = db.findLinksByAuthor({
-            authorAddress,
+            authorPublicKey,
             link: normalizedLink,
             sinceTimestamp
         });
@@ -238,7 +239,7 @@ export function calculateCommentUrlRisk(ctx: RiskContext, weight: number): RiskF
 
         // Check for same link from different authors (coordinated spam)
         const otherAuthorsResult = db.findLinksByOthers({
-            authorAddress,
+            authorPublicKey,
             link: normalizedLink,
             sinceTimestamp
         });
@@ -281,7 +282,7 @@ export function calculateCommentUrlRisk(ctx: RiskContext, weight: number): RiskF
 
         // Check domain diversity - same domain posted repeatedly is suspicious
         const domainCount = db.countLinkDomainByAuthor({
-            authorAddress,
+            authorPublicKey,
             domain: extractDomain(link)!,
             sinceTimestamp
         });

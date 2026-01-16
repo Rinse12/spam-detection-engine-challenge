@@ -415,7 +415,8 @@ describe("calculateKarma", () => {
         });
 
         it("should aggregate karma from votes", () => {
-            const authorAddress = "test-author";
+            const authorPublicKey = "vote-author-pk";
+            const signature = { ...baseSignature, publicKey: authorPublicKey };
 
             db.insertChallengeSession({
                 challengeId: "vote-1",
@@ -426,19 +427,20 @@ describe("calculateKarma", () => {
                 challengeId: "vote-1",
                 publication: {
                     author: {
-                        address: authorAddress,
+                        address: "test-author",
                         subplebbit: { postScore: 25, replyScore: 15 }
                     },
                     subplebbitAddress: "vote-sub.eth",
                     timestamp: baseTimestamp,
                     protocolVersion: "1",
-                    signature: baseSignature,
+                    signature,
                     commentCid: "QmComment",
                     vote: 1
                 }
             });
 
-            const karmaMap = db.getAuthorKarmaBySubplebbit(authorAddress);
+            // Query by signature public key (not author address)
+            const karmaMap = db.getAuthorKarmaBySubplebbit(authorPublicKey);
 
             expect(karmaMap.size).toBe(1);
             expect(karmaMap.get("vote-sub.eth")).toEqual({
@@ -449,7 +451,8 @@ describe("calculateKarma", () => {
         });
 
         it("should aggregate karma from comment edits", () => {
-            const authorAddress = "test-author";
+            const authorPublicKey = "edit-author-pk";
+            const signature = { ...baseSignature, publicKey: authorPublicKey };
 
             db.insertChallengeSession({
                 challengeId: "edit-1",
@@ -460,19 +463,20 @@ describe("calculateKarma", () => {
                 challengeId: "edit-1",
                 publication: {
                     author: {
-                        address: authorAddress,
+                        address: "test-author",
                         subplebbit: { postScore: 35, replyScore: 25 }
                     },
                     subplebbitAddress: "edit-sub.eth",
                     timestamp: baseTimestamp,
                     protocolVersion: "1",
-                    signature: baseSignature,
+                    signature,
                     commentCid: "QmComment",
                     content: "Edited"
                 }
             });
 
-            const karmaMap = db.getAuthorKarmaBySubplebbit(authorAddress);
+            // Query by signature public key (not author address)
+            const karmaMap = db.getAuthorKarmaBySubplebbit(authorPublicKey);
 
             expect(karmaMap.size).toBe(1);
             expect(karmaMap.get("edit-sub.eth")).toEqual({
@@ -483,7 +487,8 @@ describe("calculateKarma", () => {
         });
 
         it("should use latest record per sub when multiple exist", () => {
-            const authorAddress = "test-author";
+            const authorPublicKey = "same-author-pk";
+            const signature = { ...baseSignature, publicKey: authorPublicKey };
 
             // Old record
             db.insertChallengeSession({
@@ -495,13 +500,13 @@ describe("calculateKarma", () => {
                 challengeId: "old-record",
                 publication: {
                     author: {
-                        address: authorAddress,
+                        address: "test-author",
                         subplebbit: { postScore: 10, replyScore: 5 }
                     },
                     subplebbitAddress: "same-sub.eth",
                     timestamp: baseTimestamp - 1000,
                     protocolVersion: "1",
-                    signature: baseSignature,
+                    signature,
                     content: "Old"
                 }
             });
@@ -519,18 +524,19 @@ describe("calculateKarma", () => {
                 challengeId: "new-record",
                 publication: {
                     author: {
-                        address: authorAddress,
+                        address: "test-author",
                         subplebbit: { postScore: 100, replyScore: 50 }
                     },
                     subplebbitAddress: "same-sub.eth",
                     timestamp: baseTimestamp,
                     protocolVersion: "1",
-                    signature: baseSignature,
+                    signature,
                     content: "New"
                 }
             });
 
-            const karmaMap = db.getAuthorKarmaBySubplebbit(authorAddress);
+            // Query by signature public key (not author address)
+            const karmaMap = db.getAuthorKarmaBySubplebbit(authorPublicKey);
 
             expect(karmaMap.size).toBe(1);
             // Should have the newer karma values
@@ -553,7 +559,8 @@ describe("calculateKarma", () => {
         });
 
         it("should sum karma across all subs", () => {
-            const authorAddress = "test-author";
+            const authorPublicKey = "agg-author-pk";
+            const signature = { ...baseSignature, publicKey: authorPublicKey };
 
             // Add karma from sub-a
             db.insertChallengeSession({
@@ -565,13 +572,13 @@ describe("calculateKarma", () => {
                 challengeId: "sub-a",
                 publication: {
                     author: {
-                        address: authorAddress,
+                        address: "test-author",
                         subplebbit: { postScore: 30, replyScore: 20 }
                     },
                     subplebbitAddress: "sub-a.eth",
                     timestamp: baseTimestamp,
                     protocolVersion: "1",
-                    signature: baseSignature,
+                    signature,
                     content: "A"
                 }
             });
@@ -586,18 +593,19 @@ describe("calculateKarma", () => {
                 challengeId: "sub-b",
                 publication: {
                     author: {
-                        address: authorAddress,
+                        address: "test-author",
                         subplebbit: { postScore: 40, replyScore: 10 }
                     },
                     subplebbitAddress: "sub-b.eth",
                     timestamp: baseTimestamp,
                     protocolVersion: "1",
-                    signature: baseSignature,
+                    signature,
                     content: "B"
                 }
             });
 
-            const result = db.getAuthorAggregatedKarma(authorAddress);
+            // Query by signature public key (not author address)
+            const result = db.getAuthorAggregatedKarma(authorPublicKey);
 
             expect(result).toEqual({
                 totalPostScore: 70,

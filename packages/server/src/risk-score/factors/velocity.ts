@@ -1,19 +1,41 @@
 import type { RiskContext, RiskFactor } from "../types.js";
-import { getAuthorFromChallengeRequest } from "../utils.js";
+import { getAuthorPublicKeyFromChallengeRequest, getPublicationType, type PublicationType } from "../utils.js";
 
 /**
- * Posts per hour thresholds.
- * Based on typical human posting behavior.
+ * Thresholds for author velocity by publication type.
+ * Different publication types have different acceptable posting rates.
  */
 const THRESHOLDS = {
-    /** Normal posting rate */
-    NORMAL: 2,
-    /** Elevated posting rate */
-    ELEVATED: 5,
-    /** Suspicious posting rate */
-    SUSPICIOUS: 10,
-    /** Likely bot/spam rate */
-    BOT_LIKE: 20
+    post: {
+        NORMAL: 2,
+        ELEVATED: 5,
+        SUSPICIOUS: 8,
+        BOT_LIKE: 12
+    },
+    reply: {
+        NORMAL: 5,
+        ELEVATED: 10,
+        SUSPICIOUS: 15,
+        BOT_LIKE: 25
+    },
+    vote: {
+        NORMAL: 20,
+        ELEVATED: 40,
+        SUSPICIOUS: 60,
+        BOT_LIKE: 100
+    },
+    commentEdit: {
+        NORMAL: 3,
+        ELEVATED: 5,
+        SUSPICIOUS: 10,
+        BOT_LIKE: 15
+    },
+    commentModeration: {
+        NORMAL: 5,
+        ELEVATED: 10,
+        SUSPICIOUS: 15,
+        BOT_LIKE: 25
+    }
 };
 
 /**
@@ -27,46 +49,81 @@ const SCORES = {
 };
 
 /**
+ * Get thresholds for a publication type.
+ * Returns null for types that don't have velocity tracking.
+ */
+function getThresholdsForType(pubType: PublicationType): (typeof THRESHOLDS)["post"] | null {
+    if (pubType === "subplebbitEdit") {
+        // Subplebbit edits don't need velocity tracking
+        return null;
+    }
+    return THRESHOLDS[pubType];
+}
+
+/**
+ * Calculate the velocity score based on publications per hour.
+ */
+function calculateScoreFromVelocity(
+    lastHour: number,
+    last24Hours: number,
+    thresholds: (typeof THRESHOLDS)["post"]
+): { score: number; level: string } {
+    const avgPerHour = last24Hours / 24;
+    const effectiveRate = Math.max(lastHour, avgPerHour);
+
+    if (effectiveRate <= thresholds.NORMAL) {
+        return { score: SCORES.NORMAL, level: "normal" };
+    } else if (effectiveRate <= thresholds.ELEVATED) {
+        return { score: SCORES.ELEVATED, level: "elevated" };
+    } else if (effectiveRate <= thresholds.SUSPICIOUS) {
+        return { score: SCORES.SUSPICIOUS, level: "suspicious" };
+    } else {
+        return { score: SCORES.BOT_LIKE, level: "likely automated" };
+    }
+}
+
+/**
  * Calculate risk score based on publication velocity.
  *
- * Uses database queries to count actual publications by this author
- * in the last hour and last 24 hours.
+ * This factor tracks publication velocity by the author's cryptographic public key
+ * (from the publication signature). This is more reliable than author.address,
+ * which can be a domain name and is not cryptographically tied to the author.
+ *
+ * Different publication types have different thresholds since posting frequency
+ * expectations differ (e.g., votes are typically more frequent than posts).
  */
 export function calculateVelocity(ctx: RiskContext, weight: number): RiskFactor {
     const { challengeRequest, db } = ctx;
-    const author = getAuthorFromChallengeRequest(challengeRequest);
-    const authorAddress = author.address;
+    // Use the author's cryptographic public key for identity tracking.
+    // author.address can be a domain and is not cryptographically tied to the author.
+    const authorPublicKey = getAuthorPublicKeyFromChallengeRequest(challengeRequest);
+
+    const pubType = getPublicationType(challengeRequest);
+    const thresholds = getThresholdsForType(pubType);
+
+    // If this publication type doesn't have velocity tracking
+    if (!thresholds) {
+        return {
+            name: "velocityRisk",
+            score: 0,
+            weight: 0,
+            explanation: `Velocity: Not tracked for ${pubType}`
+        };
+    }
+
+    // At this point, pubType must be one of the tracked types (not subplebbitEdit)
+    const trackedPubType = pubType as "post" | "reply" | "vote" | "commentEdit" | "commentModeration";
 
     // Query database for velocity stats
-    const velocityStats = db.getAuthorVelocityStats(authorAddress);
+    const velocityStats = db.getAuthorVelocityStats(authorPublicKey, trackedPubType);
     const { lastHour, last24Hours } = velocityStats;
 
-    const avgPerHour = last24Hours / 24;
-
-    // Use the higher of recent rate or average rate
-    const effectiveRate = Math.max(lastHour, avgPerHour);
-
-    let score: number;
-    let explanation: string;
-
-    if (effectiveRate <= THRESHOLDS.NORMAL) {
-        score = SCORES.NORMAL;
-        explanation = `Velocity: ${lastHour} publications/hour, ${last24Hours} in 24h (normal)`;
-    } else if (effectiveRate <= THRESHOLDS.ELEVATED) {
-        score = SCORES.ELEVATED;
-        explanation = `Velocity: ${lastHour} publications/hour, ${last24Hours} in 24h (elevated)`;
-    } else if (effectiveRate <= THRESHOLDS.SUSPICIOUS) {
-        score = SCORES.SUSPICIOUS;
-        explanation = `Velocity: ${lastHour} publications/hour, ${last24Hours} in 24h (suspicious)`;
-    } else {
-        score = SCORES.BOT_LIKE;
-        explanation = `Velocity: ${lastHour} publications/hour, ${last24Hours} in 24h (likely automated)`;
-    }
+    const { score, level } = calculateScoreFromVelocity(lastHour, last24Hours, thresholds);
 
     return {
         name: "velocityRisk",
         score,
         weight,
-        explanation
+        explanation: `Velocity (${trackedPubType}): ${lastHour}/hr, ${last24Hours}/24h (${level})`
     };
 }

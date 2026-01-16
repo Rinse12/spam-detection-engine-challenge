@@ -232,6 +232,8 @@ describe("calculateCommentContentTitleRisk", () => {
             const currentAuthor = "author1";
             const otherAuthor = "author2";
             const spamContent = "Buy crypto now! Visit our website for guaranteed returns!";
+            // Different public key for other author
+            const otherSignature = { ...baseSignature, publicKey: "author2-pk" };
 
             // Add existing comment from different author with same content
             db.insertChallengeSession({
@@ -246,7 +248,7 @@ describe("calculateCommentContentTitleRisk", () => {
                     subplebbitAddress: "test-sub.eth",
                     timestamp: baseTimestamp - 1000,
                     protocolVersion: "1",
-                    signature: baseSignature,
+                    signature: otherSignature,
                     content: spamContent
                 }
             });
@@ -270,8 +272,9 @@ describe("calculateCommentContentTitleRisk", () => {
             const currentAuthor = "author1";
             const spamContent = "This is coordinated spam being posted by multiple accounts.";
 
-            // Add same content from 5 different authors
+            // Add same content from 5 different authors (each with unique public key)
             for (let i = 2; i <= 6; i++) {
+                const authorSignature = { ...baseSignature, publicKey: `author${i}-pk` };
                 db.insertChallengeSession({
                     challengeId: `coord-spam-${i}`,
                     subplebbitPublicKey: "pk",
@@ -284,7 +287,7 @@ describe("calculateCommentContentTitleRisk", () => {
                         subplebbitAddress: "test-sub.eth",
                         timestamp: baseTimestamp - 1000 - i * 100,
                         protocolVersion: "1",
-                        signature: baseSignature,
+                        signature: authorSignature,
                         content: spamContent
                     }
                 });
@@ -349,6 +352,8 @@ describe("calculateCommentContentTitleRisk", () => {
             const currentAuthor = "author1";
             const otherAuthor = "author2";
             const spamTitle = "Get Rich Quick With This One Simple Trick";
+            // Different public key for other author
+            const otherSignature = { ...baseSignature, publicKey: "author2-pk" };
 
             db.insertChallengeSession({
                 challengeId: "other-title-spam",
@@ -362,7 +367,7 @@ describe("calculateCommentContentTitleRisk", () => {
                     subplebbitAddress: "test-sub.eth",
                     timestamp: baseTimestamp - 1000,
                     protocolVersion: "1",
-                    signature: baseSignature,
+                    signature: otherSignature,
                     title: spamTitle,
                     content: "Content"
                 }
@@ -492,8 +497,9 @@ describe("calculateCommentContentTitleRisk", () => {
 
     describe("database similarity methods", () => {
         it("findSimilarContentByAuthor should return matching comments", () => {
-            const authorAddress = "author1";
+            const authorPublicKey = "author1-pk";
             const content = "This is test content for similarity matching.";
+            const signature = { ...baseSignature, publicKey: authorPublicKey };
 
             db.insertChallengeSession({
                 challengeId: "similar-1",
@@ -503,17 +509,18 @@ describe("calculateCommentContentTitleRisk", () => {
             db.insertComment({
                 challengeId: "similar-1",
                 publication: {
-                    author: { address: authorAddress },
+                    author: { address: "author1" },
                     subplebbitAddress: "test-sub.eth",
                     timestamp: baseTimestamp - 1000,
                     protocolVersion: "1",
-                    signature: baseSignature,
+                    signature,
                     content
                 }
             });
 
+            // Query by signature public key (not author address)
             const results = db.findSimilarContentByAuthor({
-                authorAddress,
+                authorPublicKey,
                 content,
                 sinceTimestamp: baseTimestamp - 86400
             });
@@ -523,9 +530,10 @@ describe("calculateCommentContentTitleRisk", () => {
         });
 
         it("findSimilarContentByOthers should return matching comments from other authors", () => {
-            const authorAddress = "author1";
-            const otherAuthor = "author2";
+            const authorPublicKey = "author1-pk";
+            const otherAuthorPublicKey = "author2-pk";
             const content = "This is test content for cross-author similarity matching.";
+            const otherSignature = { ...baseSignature, publicKey: otherAuthorPublicKey };
 
             db.insertChallengeSession({
                 challengeId: "other-similar-1",
@@ -535,29 +543,31 @@ describe("calculateCommentContentTitleRisk", () => {
             db.insertComment({
                 challengeId: "other-similar-1",
                 publication: {
-                    author: { address: otherAuthor },
+                    author: { address: "author2" },
                     subplebbitAddress: "test-sub.eth",
                     timestamp: baseTimestamp - 1000,
                     protocolVersion: "1",
-                    signature: baseSignature,
+                    signature: otherSignature,
                     content
                 }
             });
 
+            // Query by signature public key (not author address)
             const results = db.findSimilarContentByOthers({
-                authorAddress,
+                authorPublicKey,
                 content,
                 sinceTimestamp: baseTimestamp - 86400
             });
 
             expect(results.length).toBe(1);
             expect(results[0].content).toBe(content);
-            expect(results[0].authorAddress).toBe(otherAuthor);
+            expect(results[0].authorPublicKey).toBe(otherAuthorPublicKey);
         });
 
         it("findSimilarContentByOthers should not return comments from same author", () => {
-            const authorAddress = "author1";
+            const authorPublicKey = "author1-pk";
             const content = "This is test content.";
+            const signature = { ...baseSignature, publicKey: authorPublicKey };
 
             db.insertChallengeSession({
                 challengeId: "same-author-1",
@@ -567,17 +577,18 @@ describe("calculateCommentContentTitleRisk", () => {
             db.insertComment({
                 challengeId: "same-author-1",
                 publication: {
-                    author: { address: authorAddress },
+                    author: { address: "author1" },
                     subplebbitAddress: "test-sub.eth",
                     timestamp: baseTimestamp - 1000,
                     protocolVersion: "1",
-                    signature: baseSignature,
+                    signature,
                     content
                 }
             });
 
+            // Query by signature public key (not author address)
             const results = db.findSimilarContentByOthers({
-                authorAddress,
+                authorPublicKey,
                 content,
                 sinceTimestamp: baseTimestamp - 86400
             });

@@ -274,60 +274,93 @@ export class SpamDetectionDatabase {
     }
 
     // ============================================
-    // Risk Score Query Methods
+    // Author Velocity Query Methods (by public key)
     // ============================================
 
     /**
-     * Count publications by author address within a time window.
-     * Searches across comments, votes, commentEdits, and commentModerations.
-     * The author column stores JSON, so we extract the address field.
+     * Count publications by author's public key for a specific publication type within a time window.
+     * The signature column stores JSON with the author's Ed25519 public key.
+     *
+     * Note: We use signature.publicKey instead of author.address because
+     * author.address can be a domain name and is not cryptographically
+     * tied to the author's identity.
+     *
+     * @param authorPublicKey - The Ed25519 public key from the publication's signature
+     * @param publicationType - The type of publication to count
+     * @param sinceTimestamp - Only count publications after this timestamp
      */
-    countPublicationsByAuthor(authorAddress: string, sinceTimestamp: number): number {
-        // Query each publication type and sum the counts
-        // Using json_extract to get the address from the JSON author field
-        const commentCount = this.db
-            .prepare(
-                `SELECT COUNT(*) as count FROM comments
-         WHERE json_extract(author, '$.address') = ? AND receivedAt >= ?`
-            )
-            .get(authorAddress, sinceTimestamp) as { count: number };
+    countPublicationsByAuthorPublicKey(
+        authorPublicKey: string,
+        publicationType: "post" | "reply" | "vote" | "commentEdit" | "commentModeration",
+        sinceTimestamp: number
+    ): number {
+        let count = 0;
 
-        const voteCount = this.db
-            .prepare(
-                `SELECT COUNT(*) as count FROM votes
-         WHERE json_extract(author, '$.address') = ? AND receivedAt >= ?`
-            )
-            .get(authorAddress, sinceTimestamp) as { count: number };
+        if (publicationType === "post") {
+            // Posts are comments without parentCid
+            const result = this.db
+                .prepare(
+                    `SELECT COUNT(*) as count FROM comments
+                    WHERE json_extract(signature, '$.publicKey') = ? AND parentCid IS NULL AND receivedAt >= ?`
+                )
+                .get(authorPublicKey, sinceTimestamp) as { count: number };
+            count = result.count;
+        } else if (publicationType === "reply") {
+            // Replies are comments with parentCid
+            const result = this.db
+                .prepare(
+                    `SELECT COUNT(*) as count FROM comments
+                    WHERE json_extract(signature, '$.publicKey') = ? AND parentCid IS NOT NULL AND receivedAt >= ?`
+                )
+                .get(authorPublicKey, sinceTimestamp) as { count: number };
+            count = result.count;
+        } else if (publicationType === "vote") {
+            const result = this.db
+                .prepare(
+                    `SELECT COUNT(*) as count FROM votes
+                    WHERE json_extract(signature, '$.publicKey') = ? AND receivedAt >= ?`
+                )
+                .get(authorPublicKey, sinceTimestamp) as { count: number };
+            count = result.count;
+        } else if (publicationType === "commentEdit") {
+            const result = this.db
+                .prepare(
+                    `SELECT COUNT(*) as count FROM commentEdits
+                    WHERE json_extract(signature, '$.publicKey') = ? AND receivedAt >= ?`
+                )
+                .get(authorPublicKey, sinceTimestamp) as { count: number };
+            count = result.count;
+        } else if (publicationType === "commentModeration") {
+            const result = this.db
+                .prepare(
+                    `SELECT COUNT(*) as count FROM commentModerations
+                    WHERE json_extract(signature, '$.publicKey') = ? AND receivedAt >= ?`
+                )
+                .get(authorPublicKey, sinceTimestamp) as { count: number };
+            count = result.count;
+        }
 
-        const editCount = this.db
-            .prepare(
-                `SELECT COUNT(*) as count FROM commentEdits
-         WHERE json_extract(author, '$.address') = ? AND receivedAt >= ?`
-            )
-            .get(authorAddress, sinceTimestamp) as { count: number };
-
-        const moderationCount = this.db
-            .prepare(
-                `SELECT COUNT(*) as count FROM commentModerations
-         WHERE json_extract(author, '$.address') = ? AND receivedAt >= ?`
-            )
-            .get(authorAddress, sinceTimestamp) as { count: number };
-
-        return commentCount.count + voteCount.count + editCount.count + moderationCount.count;
+        return count;
     }
 
     /**
-     * Count publications by author in the last hour and last 24 hours.
-     * Returns both counts for velocity calculation.
+     * Get author velocity stats for a specific publication type.
+     * Returns publication counts in the last hour and last 24 hours.
+     *
+     * @param authorPublicKey - The Ed25519 public key from the publication's signature
+     * @param publicationType - The type of publication to count
      */
-    getAuthorVelocityStats(authorAddress: string): { lastHour: number; last24Hours: number } {
+    getAuthorVelocityStats(
+        authorPublicKey: string,
+        publicationType: "post" | "reply" | "vote" | "commentEdit" | "commentModeration"
+    ): { lastHour: number; last24Hours: number } {
         const now = Math.floor(Date.now() / 1000);
         const oneHourAgo = now - 3600;
         const oneDayAgo = now - 86400;
 
         return {
-            lastHour: this.countPublicationsByAuthor(authorAddress, oneHourAgo),
-            last24Hours: this.countPublicationsByAuthor(authorAddress, oneDayAgo)
+            lastHour: this.countPublicationsByAuthorPublicKey(authorPublicKey, publicationType, oneHourAgo),
+            last24Hours: this.countPublicationsByAuthorPublicKey(authorPublicKey, publicationType, oneDayAgo)
         };
     }
 
@@ -606,15 +639,17 @@ export class SpamDetectionDatabase {
     }
 
     // ============================================
-    // Account Age Query Methods
+    // Karma Query Methods (by public key)
     // ============================================
 
     /**
      * Get the latest karma (postScore + replyScore) per subplebbit for an author.
      * Only counts the most recent karma from each subplebbit to avoid summing duplicates.
      * Returns a map of subplebbitAddress -> { postScore, replyScore, receivedAt }
+     *
+     * @param authorPublicKey - The Ed25519 public   key from the publication's signature
      */
-    getAuthorKarmaBySubplebbit(authorAddress: string): Map<string, { postScore: number; replyScore: number; receivedAt: number }> {
+    getAuthorKarmaBySubplebbit(authorPublicKey: string): Map<string, { postScore: number; replyScore: number; receivedAt: number }> {
         const karmaMap = new Map<string, { postScore: number; replyScore: number; receivedAt: number }>();
 
         // Helper to update karma map with newer data only
@@ -634,10 +669,10 @@ export class SpamDetectionDatabase {
                     COALESCE(json_extract(author, '$.subplebbit.replyScore'), 0) as replyScore,
                     receivedAt
                  FROM comments
-                 WHERE json_extract(author, '$.address') = ?
+                 WHERE json_extract(signature, '$.publicKey') = ?
                  ORDER BY receivedAt DESC`
             )
-            .all(authorAddress) as Array<{ subplebbitAddress: string; postScore: number; replyScore: number; receivedAt: number }>;
+            .all(authorPublicKey) as Array<{ subplebbitAddress: string; postScore: number; replyScore: number; receivedAt: number }>;
 
         for (const row of commentRows) {
             updateKarmaMap(row.subplebbitAddress, row.postScore, row.replyScore, row.receivedAt);
@@ -652,10 +687,10 @@ export class SpamDetectionDatabase {
                     COALESCE(json_extract(author, '$.subplebbit.replyScore'), 0) as replyScore,
                     receivedAt
                  FROM votes
-                 WHERE json_extract(author, '$.address') = ?
+                 WHERE json_extract(signature, '$.publicKey') = ?
                  ORDER BY receivedAt DESC`
             )
-            .all(authorAddress) as Array<{ subplebbitAddress: string; postScore: number; replyScore: number; receivedAt: number }>;
+            .all(authorPublicKey) as Array<{ subplebbitAddress: string; postScore: number; replyScore: number; receivedAt: number }>;
 
         for (const row of voteRows) {
             updateKarmaMap(row.subplebbitAddress, row.postScore, row.replyScore, row.receivedAt);
@@ -670,10 +705,10 @@ export class SpamDetectionDatabase {
                     COALESCE(json_extract(author, '$.subplebbit.replyScore'), 0) as replyScore,
                     receivedAt
                  FROM commentEdits
-                 WHERE json_extract(author, '$.address') = ?
+                 WHERE json_extract(signature, '$.publicKey') = ?
                  ORDER BY receivedAt DESC`
             )
-            .all(authorAddress) as Array<{ subplebbitAddress: string; postScore: number; replyScore: number; receivedAt: number }>;
+            .all(authorPublicKey) as Array<{ subplebbitAddress: string; postScore: number; replyScore: number; receivedAt: number }>;
 
         for (const row of editRows) {
             updateKarmaMap(row.subplebbitAddress, row.postScore, row.replyScore, row.receivedAt);
@@ -688,10 +723,10 @@ export class SpamDetectionDatabase {
                     COALESCE(json_extract(author, '$.subplebbit.replyScore'), 0) as replyScore,
                     receivedAt
                  FROM commentModerations
-                 WHERE json_extract(author, '$.address') = ?
+                 WHERE json_extract(signature, '$.publicKey') = ?
                  ORDER BY receivedAt DESC`
             )
-            .all(authorAddress) as Array<{ subplebbitAddress: string; postScore: number; replyScore: number; receivedAt: number }>;
+            .all(authorPublicKey) as Array<{ subplebbitAddress: string; postScore: number; replyScore: number; receivedAt: number }>;
 
         for (const row of moderationRows) {
             updateKarmaMap(row.subplebbitAddress, row.postScore, row.replyScore, row.receivedAt);
@@ -704,9 +739,11 @@ export class SpamDetectionDatabase {
      * Get the total aggregated karma for an author across all subplebbits in our database.
      * Only counts the latest karma from each subplebbit to avoid summing duplicates.
      * Returns { totalPostScore, totalReplyScore, subplebbitCount }
+     *
+     * @param authorPublicKey - The Ed25519 public key from the publication's signature
      */
-    getAuthorAggregatedKarma(authorAddress: string): { totalPostScore: number; totalReplyScore: number; subplebbitCount: number } {
-        const karmaMap = this.getAuthorKarmaBySubplebbit(authorAddress);
+    getAuthorAggregatedKarma(authorPublicKey: string): { totalPostScore: number; totalReplyScore: number; subplebbitCount: number } {
+        const karmaMap = this.getAuthorKarmaBySubplebbit(authorPublicKey);
 
         let totalPostScore = 0;
         let totalReplyScore = 0;
@@ -736,7 +773,7 @@ export class SpamDetectionDatabase {
      * @param params.excludeChallengeId - Challenge ID to exclude from results (current publication)
      * @param params.sinceTimestamp - Only search comments after this timestamp
      * @param params.limit - Maximum number of results to return
-     * @returns Array of similar comments with their content/title and author info
+     * @returns Array of similar comments with their content/title and author public key
      */
     findSimilarComments(params: {
         content?: string;
@@ -746,7 +783,7 @@ export class SpamDetectionDatabase {
         limit?: number;
     }): Array<{
         challengeId: string;
-        authorAddress: string;
+        authorPublicKey: string;
         content: string | null;
         title: string | null;
         subplebbitAddress: string;
@@ -795,7 +832,7 @@ export class SpamDetectionDatabase {
         const query = `
             SELECT
                 challengeId,
-                json_extract(author, '$.address') as authorAddress,
+                json_extract(signature, '$.publicKey') as authorPublicKey,
                 content,
                 title,
                 subplebbitAddress,
@@ -810,7 +847,7 @@ export class SpamDetectionDatabase {
 
         return this.db.prepare(query).all(queryParams) as Array<{
             challengeId: string;
-            authorAddress: string;
+            authorPublicKey: string;
             content: string | null;
             title: string | null;
             subplebbitAddress: string;
@@ -826,9 +863,11 @@ export class SpamDetectionDatabase {
      * filter by the desired threshold (e.g., 0.6 for 60% similarity).
      *
      * Used to detect self-spamming with slight variations.
+     *
+     * @param params.authorPublicKey - The Ed25519 public key from the publication's signature
      */
     findSimilarContentByAuthor(params: {
-        authorAddress: string;
+        authorPublicKey: string;
         content?: string;
         title?: string;
         sinceTimestamp?: number;
@@ -843,12 +882,12 @@ export class SpamDetectionDatabase {
         contentSimilarity: number;
         titleSimilarity: number;
     }> {
-        const { authorAddress, content, title, sinceTimestamp, similarityThreshold = 0.6, limit = 100 } = params;
+        const { authorPublicKey, content, title, sinceTimestamp, similarityThreshold = 0.6, limit = 100 } = params;
 
-        const conditions: string[] = ["json_extract(author, '$.address') = @authorAddress"];
+        const conditions: string[] = ["json_extract(signature, '$.publicKey') = @authorPublicKey"];
         // Always include content and title params (even if null) since they're used in SELECT clause
         const queryParams: Record<string, unknown> = {
-            authorAddress,
+            authorPublicKey,
             limit,
             similarityThreshold,
             content: content || null,
@@ -912,9 +951,11 @@ export class SpamDetectionDatabase {
      * filter by the desired threshold (e.g., 0.6 for 60% similarity).
      *
      * Used to detect coordinated spam campaigns.
+     *
+     * @param params.authorPublicKey - The Ed25519 public key from the publication's signature (to exclude)
      */
     findSimilarContentByOthers(params: {
-        authorAddress: string;
+        authorPublicKey: string;
         content?: string;
         title?: string;
         sinceTimestamp?: number;
@@ -922,7 +963,7 @@ export class SpamDetectionDatabase {
         limit?: number;
     }): Array<{
         challengeId: string;
-        authorAddress: string;
+        authorPublicKey: string;
         content: string | null;
         title: string | null;
         subplebbitAddress: string;
@@ -930,12 +971,12 @@ export class SpamDetectionDatabase {
         contentSimilarity: number;
         titleSimilarity: number;
     }> {
-        const { authorAddress, content, title, sinceTimestamp, similarityThreshold = 0.6, limit = 100 } = params;
+        const { authorPublicKey, content, title, sinceTimestamp, similarityThreshold = 0.6, limit = 100 } = params;
 
-        const conditions: string[] = ["json_extract(author, '$.address') != @authorAddress"];
+        const conditions: string[] = ["json_extract(signature, '$.publicKey') != @authorPublicKey"];
         // Always include content and title params (even if null) since they're used in SELECT clause
         const queryParams: Record<string, unknown> = {
-            authorAddress,
+            authorPublicKey,
             limit,
             similarityThreshold,
             content: content || null,
@@ -968,7 +1009,7 @@ export class SpamDetectionDatabase {
         const query = `
             SELECT
                 challengeId,
-                json_extract(author, '$.address') as authorAddress,
+                json_extract(signature, '$.publicKey') as authorPublicKey,
                 content,
                 title,
                 subplebbitAddress,
@@ -983,7 +1024,7 @@ export class SpamDetectionDatabase {
 
         return this.db.prepare(query).all(queryParams) as Array<{
             challengeId: string;
-            authorAddress: string;
+            authorPublicKey: string;
             content: string | null;
             title: string | null;
             subplebbitAddress: string;
@@ -997,36 +1038,38 @@ export class SpamDetectionDatabase {
      * Get the earliest receivedAt timestamp for an author across all publication types.
      * This represents when we first saw this author in our own database.
      * Returns undefined if the author has no publications in our database.
+     *
+     * @param authorPublicKey - The Ed25519 public key from the publication's signature
      */
-    getAuthorFirstSeenTimestamp(authorAddress: string): number | undefined {
+    getAuthorFirstSeenTimestamp(authorPublicKey: string): number | undefined {
         // Query each publication type for the minimum receivedAt
         const commentMin = this.db
             .prepare(
                 `SELECT MIN(receivedAt) as minTime FROM comments
-                 WHERE json_extract(author, '$.address') = ?`
+                 WHERE json_extract(signature, '$.publicKey') = ?`
             )
-            .get(authorAddress) as { minTime: number | null };
+            .get(authorPublicKey) as { minTime: number | null };
 
         const voteMin = this.db
             .prepare(
                 `SELECT MIN(receivedAt) as minTime FROM votes
-                 WHERE json_extract(author, '$.address') = ?`
+                 WHERE json_extract(signature, '$.publicKey') = ?`
             )
-            .get(authorAddress) as { minTime: number | null };
+            .get(authorPublicKey) as { minTime: number | null };
 
         const editMin = this.db
             .prepare(
                 `SELECT MIN(receivedAt) as minTime FROM commentEdits
-                 WHERE json_extract(author, '$.address') = ?`
+                 WHERE json_extract(signature, '$.publicKey') = ?`
             )
-            .get(authorAddress) as { minTime: number | null };
+            .get(authorPublicKey) as { minTime: number | null };
 
         const moderationMin = this.db
             .prepare(
                 `SELECT MIN(receivedAt) as minTime FROM commentModerations
-                 WHERE json_extract(author, '$.address') = ?`
+                 WHERE json_extract(signature, '$.publicKey') = ?`
             )
-            .get(authorAddress) as { minTime: number | null };
+            .get(authorPublicKey) as { minTime: number | null };
 
         // Collect all non-null timestamps
         const timestamps = [commentMin.minTime, voteMin.minTime, editMin.minTime, moderationMin.minTime].filter(
@@ -1041,30 +1084,30 @@ export class SpamDetectionDatabase {
     }
 
     // ============================================
-    // Link/URL Query Methods
+    // Link/URL Query Methods (by public key)
     // ============================================
 
     /**
      * Count how many times a specific link has been posted by a given author.
      * Used to detect link spam from the same author.
      *
-     * @param params.authorAddress - The author's address
+     * @param params.authorPublicKey - The Ed25519 public key from the publication's signature
      * @param params.link - The normalized link URL to search for
      * @param params.sinceTimestamp - Only count links posted after this timestamp
      * @returns Number of times this link has been posted by this author
      */
-    findLinksByAuthor(params: { authorAddress: string; link: string; sinceTimestamp: number }): number {
-        const { authorAddress, link, sinceTimestamp } = params;
+    findLinksByAuthor(params: { authorPublicKey: string; link: string; sinceTimestamp: number }): number {
+        const { authorPublicKey, link, sinceTimestamp } = params;
 
         const result = this.db
             .prepare(
                 `SELECT COUNT(*) as count FROM comments
-                 WHERE json_extract(author, '$.address') = ?
+                 WHERE json_extract(signature, '$.publicKey') = ?
                  AND link IS NOT NULL
                  AND LOWER(link) = LOWER(?)
                  AND receivedAt >= ?`
             )
-            .get(authorAddress, link, sinceTimestamp) as { count: number };
+            .get(authorPublicKey, link, sinceTimestamp) as { count: number };
 
         return result.count;
     }
@@ -1073,26 +1116,26 @@ export class SpamDetectionDatabase {
      * Count how many times a specific link has been posted by other authors.
      * Used to detect coordinated link spam campaigns.
      *
-     * @param params.authorAddress - The current author's address (excluded from results)
+     * @param params.authorPublicKey - The Ed25519 public key from the publication's signature (excluded from results)
      * @param params.link - The normalized link URL to search for
      * @param params.sinceTimestamp - Only count links posted after this timestamp
-     * @returns Object with count of posts and unique authors
+     * @returns Object with count of posts and unique authors (by public key)
      */
-    findLinksByOthers(params: { authorAddress: string; link: string; sinceTimestamp: number }): { count: number; uniqueAuthors: number } {
-        const { authorAddress, link, sinceTimestamp } = params;
+    findLinksByOthers(params: { authorPublicKey: string; link: string; sinceTimestamp: number }): { count: number; uniqueAuthors: number } {
+        const { authorPublicKey, link, sinceTimestamp } = params;
 
         const result = this.db
             .prepare(
                 `SELECT
                     COUNT(*) as count,
-                    COUNT(DISTINCT json_extract(author, '$.address')) as uniqueAuthors
+                    COUNT(DISTINCT json_extract(signature, '$.publicKey')) as uniqueAuthors
                  FROM comments
-                 WHERE json_extract(author, '$.address') != ?
+                 WHERE json_extract(signature, '$.publicKey') != ?
                  AND link IS NOT NULL
                  AND LOWER(link) = LOWER(?)
                  AND receivedAt >= ?`
             )
-            .get(authorAddress, link, sinceTimestamp) as { count: number; uniqueAuthors: number };
+            .get(authorPublicKey, link, sinceTimestamp) as { count: number; uniqueAuthors: number };
 
         return result;
     }
@@ -1101,13 +1144,13 @@ export class SpamDetectionDatabase {
      * Count how many links to a specific domain have been posted by a given author.
      * Used to detect domain-focused spam (posting many different pages from same domain).
      *
-     * @param params.authorAddress - The author's address
+     * @param params.authorPublicKey - The Ed25519 public key from the publication's signature
      * @param params.domain - The domain to search for (e.g., "example.com")
      * @param params.sinceTimestamp - Only count links posted after this timestamp
      * @returns Number of links to this domain from this author
      */
-    countLinkDomainByAuthor(params: { authorAddress: string; domain: string; sinceTimestamp: number }): number {
-        const { authorAddress, domain, sinceTimestamp } = params;
+    countLinkDomainByAuthor(params: { authorPublicKey: string; domain: string; sinceTimestamp: number }): number {
+        const { authorPublicKey, domain, sinceTimestamp } = params;
 
         // Match domain in link URL - handles both with and without www prefix
         // The link column stores URLs like "https://example.com/path"
@@ -1115,7 +1158,7 @@ export class SpamDetectionDatabase {
         const result = this.db
             .prepare(
                 `SELECT COUNT(*) as count FROM comments
-                 WHERE json_extract(author, '$.address') = ?
+                 WHERE json_extract(signature, '$.publicKey') = ?
                  AND link IS NOT NULL
                  AND (
                      LOWER(link) LIKE '%://' || LOWER(?) || '/%'
@@ -1129,7 +1172,7 @@ export class SpamDetectionDatabase {
                  )
                  AND receivedAt >= ?`
             )
-            .get(authorAddress, domain, domain, domain, domain, domain, domain, domain, domain, sinceTimestamp) as { count: number };
+            .get(authorPublicKey, domain, domain, domain, domain, domain, domain, domain, domain, sinceTimestamp) as { count: number };
 
         return result.count;
     }

@@ -1,5 +1,5 @@
 import type { RiskContext, RiskFactor } from "../types.js";
-import { getAuthorFromChallengeRequest, getPublicationFromChallengeRequest } from "../utils.js";
+import { getAuthorFromChallengeRequest, getAuthorPublicKeyFromChallengeRequest, getPublicationFromChallengeRequest } from "../utils.js";
 
 /**
  * Karma thresholds for scoring.
@@ -57,6 +57,7 @@ const OTHER_SUBS_WEIGHT = 0.3;
  */
 export function calculateKarma(ctx: RiskContext, weight: number): RiskFactor {
     const author = getAuthorFromChallengeRequest(ctx.challengeRequest);
+    const authorPublicKey = getAuthorPublicKeyFromChallengeRequest(ctx.challengeRequest);
     const publication = getPublicationFromChallengeRequest(ctx.challengeRequest);
 
     // Get current request's karma from the subplebbit author (TRUSTED)
@@ -67,7 +68,8 @@ export function calculateKarma(ctx: RiskContext, weight: number): RiskFactor {
     const currentSubplebbitAddress = publication.subplebbitAddress;
 
     // Get aggregated karma from database (latest per subplebbit)
-    const dbKarma = ctx.db.getAuthorKarmaBySubplebbit(author.address);
+    // Use the author's public key for identity tracking (author.address can be a domain)
+    const dbKarma = ctx.db.getAuthorKarmaBySubplebbit(authorPublicKey);
 
     // Calculate karma from other subplebbits (excluding current sub)
     let otherSubsPostScore = 0;

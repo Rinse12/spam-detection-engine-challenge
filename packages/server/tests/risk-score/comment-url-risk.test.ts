@@ -207,6 +207,8 @@ describe("calculateCommentUrlRisk", () => {
             const currentAuthor = "author1";
             const otherAuthor = "author2";
             const spamLink = "https://coordinated-spam.com/scam";
+            // Different public key for other author
+            const otherSignature = { ...baseSignature, publicKey: "author2-pk" };
 
             // Add existing comment from different author with same link
             db.insertChallengeSession({
@@ -221,7 +223,7 @@ describe("calculateCommentUrlRisk", () => {
                     subplebbitAddress: "test-sub.eth",
                     timestamp: baseTimestamp - 1000,
                     protocolVersion: "1",
-                    signature: baseSignature,
+                    signature: otherSignature,
                     link: spamLink
                 }
             });
@@ -245,8 +247,9 @@ describe("calculateCommentUrlRisk", () => {
             const currentAuthor = "author1";
             const spamLink = "https://coordinated-campaign.com/spam";
 
-            // Add same link from 10 different authors
+            // Add same link from 10 different authors (each with unique public key)
             for (let i = 2; i <= 11; i++) {
+                const authorSignature = { ...baseSignature, publicKey: `author${i}-pk` };
                 db.insertChallengeSession({
                     challengeId: `coord-link-${i}`,
                     subplebbitPublicKey: "pk",
@@ -259,7 +262,7 @@ describe("calculateCommentUrlRisk", () => {
                         subplebbitAddress: "test-sub.eth",
                         timestamp: baseTimestamp - 1000 - i * 100,
                         protocolVersion: "1",
-                        signature: baseSignature,
+                        signature: authorSignature,
                         link: spamLink
                     }
                 });
@@ -436,8 +439,9 @@ describe("calculateCommentUrlRisk", () => {
 
     describe("database link methods", () => {
         it("findLinksByAuthor should return count of matching links", () => {
-            const authorAddress = "author1";
+            const authorPublicKey = "author1-pk";
             const link = "https://example.com/test";
+            const signature = { ...baseSignature, publicKey: authorPublicKey };
 
             db.insertChallengeSession({
                 challengeId: "link-1",
@@ -447,17 +451,18 @@ describe("calculateCommentUrlRisk", () => {
             db.insertComment({
                 challengeId: "link-1",
                 publication: {
-                    author: { address: authorAddress },
+                    author: { address: "author1" },
                     subplebbitAddress: "test-sub.eth",
                     timestamp: baseTimestamp - 1000,
                     protocolVersion: "1",
-                    signature: baseSignature,
+                    signature,
                     link
                 }
             });
 
+            // Query by signature public key (not author address)
             const count = db.findLinksByAuthor({
-                authorAddress,
+                authorPublicKey,
                 link,
                 sinceTimestamp: baseTimestamp - 86400
             });
@@ -466,11 +471,12 @@ describe("calculateCommentUrlRisk", () => {
         });
 
         it("findLinksByOthers should return count and unique authors", () => {
-            const authorAddress = "author1";
+            const authorPublicKey = "author1-pk";
             const link = "https://example.com/shared";
 
-            // Add links from 3 different other authors
+            // Add links from 3 different other authors (different public keys)
             for (let i = 2; i <= 4; i++) {
+                const otherSignature = { ...baseSignature, publicKey: `author${i}-pk` };
                 db.insertChallengeSession({
                     challengeId: `other-link-${i}`,
                     subplebbitPublicKey: "pk",
@@ -483,14 +489,15 @@ describe("calculateCommentUrlRisk", () => {
                         subplebbitAddress: "test-sub.eth",
                         timestamp: baseTimestamp - 1000,
                         protocolVersion: "1",
-                        signature: baseSignature,
+                        signature: otherSignature,
                         link
                     }
                 });
             }
 
+            // Query by signature public key (not author address)
             const result = db.findLinksByOthers({
-                authorAddress,
+                authorPublicKey,
                 link,
                 sinceTimestamp: baseTimestamp - 86400
             });
@@ -500,8 +507,9 @@ describe("calculateCommentUrlRisk", () => {
         });
 
         it("findLinksByOthers should not count same author", () => {
-            const authorAddress = "author1";
+            const authorPublicKey = "author1-pk";
             const link = "https://example.com/mylink";
+            const signature = { ...baseSignature, publicKey: authorPublicKey };
 
             db.insertChallengeSession({
                 challengeId: "same-author-link",
@@ -511,17 +519,18 @@ describe("calculateCommentUrlRisk", () => {
             db.insertComment({
                 challengeId: "same-author-link",
                 publication: {
-                    author: { address: authorAddress },
+                    author: { address: "author1" },
                     subplebbitAddress: "test-sub.eth",
                     timestamp: baseTimestamp - 1000,
                     protocolVersion: "1",
-                    signature: baseSignature,
+                    signature,
                     link
                 }
             });
 
+            // Query by signature public key (not author address)
             const result = db.findLinksByOthers({
-                authorAddress,
+                authorPublicKey,
                 link,
                 sinceTimestamp: baseTimestamp - 86400
             });

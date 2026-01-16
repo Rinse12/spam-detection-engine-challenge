@@ -1,5 +1,5 @@
 import type { RiskContext, RiskFactor } from "../types.js";
-import { getAuthorFromChallengeRequest } from "../utils.js";
+import { getAuthorFromChallengeRequest, getAuthorPublicKeyFromChallengeRequest } from "../utils.js";
 
 /**
  * Time thresholds in days for account age scoring.
@@ -45,10 +45,12 @@ const SCORES = {
 export function calculateAccountAge(ctx: RiskContext, weight: number): RiskFactor {
     const { challengeRequest, now, db } = ctx;
     const author = getAuthorFromChallengeRequest(challengeRequest);
+    const authorPublicKey = getAuthorPublicKeyFromChallengeRequest(challengeRequest);
     const subplebbitAuthor = author.subplebbit;
 
-    // Get first seen timestamp from our own database
-    const dbFirstSeen = db.getAuthorFirstSeenTimestamp(author.address);
+    // Get first seen timestamp from our own database using the author's public key
+    // (author.address can be a domain and is not cryptographically tied to the author)
+    const dbFirstSeen = db.getAuthorFirstSeenTimestamp(authorPublicKey);
     const subplebbitFirstComment = subplebbitAuthor?.firstCommentTimestamp;
 
     // Determine the effective first activity timestamp (use the older one)
