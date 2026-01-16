@@ -186,14 +186,12 @@ describe("calculateCommentContentTitleRisk", () => {
             expect(result.explanation).toContain("5 duplicate");
         });
 
-        it("should detect similar (not exact) content from same author via substring matching", () => {
+        it("should detect similar (not exact) content from same author via Jaccard similarity", () => {
             const authorAddress = "author1";
-            // The SQL query uses LIKE for substring matching
-            // One text contains the core of the other
+            // The SQL query uses Jaccard similarity (word overlap) to find similar content
             const originalContent = "Check out this amazing cryptocurrency investment opportunity";
             const similarContent = "Check out this amazing cryptocurrency investment opportunity for big profits today!";
-            // The original is a substring of the new one, so SQL LIKE will match
-            // Jaccard similarity will then confirm they're similar (high overlap)
+            // These have high word overlap, so Jaccard similarity will find them
 
             // Add existing comment with similar content
             db.insertChallengeSession({
@@ -224,8 +222,6 @@ describe("calculateCommentContentTitleRisk", () => {
 
             const result = calculateCommentContentTitleRisk(ctx, 0.18);
 
-            // The SQL LIKE finds this because similarContent contains originalContent
-            // Jaccard similarity confirms they're similar
             expect(result.score).toBeGreaterThan(0.2);
             expect(result.explanation).toContain("similar");
         });

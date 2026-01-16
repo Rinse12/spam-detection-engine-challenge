@@ -25,35 +25,10 @@ const SIMILARITY_WINDOW_SECONDS = 24 * 60 * 60;
 const SIMILARITY_THRESHOLD = 0.6;
 
 /**
- * Calculate text similarity using Jaccard similarity on word sets.
- * Returns a value between 0 (no similarity) and 1 (identical).
- *
- * Note: This runs in JavaScript after SQL returns candidate matches.
- * The SQL uses substring LIKE matching to find potential matches,
- * then this function calculates actual similarity.
+ * Threshold for considering content as near-exact match.
+ * 0.95 = 95% word overlap
  */
-function calculateTextSimilarity(text1: string, text2: string): number {
-    if (!text1 || !text2) return 0;
-
-    // Normalize and tokenize
-    const normalize = (s: string) =>
-        s
-            .toLowerCase()
-            .replace(/[^\w\s]/g, " ")
-            .split(/\s+/)
-            .filter((w) => w.length > 2);
-
-    const words1 = new Set(normalize(text1));
-    const words2 = new Set(normalize(text2));
-
-    if (words1.size === 0 || words2.size === 0) return 0;
-
-    // Calculate Jaccard similarity
-    const intersection = new Set([...words1].filter((x) => words2.has(x)));
-    const union = new Set([...words1, ...words2]);
-
-    return intersection.size / union.size;
-}
+const EXACT_MATCH_THRESHOLD = 0.95;
 
 /**
  * Count URLs in text content.
@@ -147,24 +122,23 @@ export function calculateCommentContentTitleRisk(ctx: RiskContext, weight: numbe
 
     // Check for similar content from the same author (self-spamming)
     if (content && content.trim().length > 10) {
+        // Query with lower threshold to get all candidates, then categorize by similarity level
         const similarFromAuthor = db.findSimilarContentByAuthor({
             authorAddress,
             content,
-            sinceTimestamp
+            sinceTimestamp,
+            similarityThreshold: SIMILARITY_THRESHOLD
         });
 
-        // Calculate similarity scores and count truly similar content
-        let highSimilarityCount = 0;
+        // Count by similarity level using scores from database
         let exactMatchCount = 0;
+        let highSimilarityCount = 0;
 
         for (const match of similarFromAuthor) {
-            if (match.content) {
-                const similarity = calculateTextSimilarity(content, match.content);
-                if (similarity >= 0.95) {
-                    exactMatchCount++;
-                } else if (similarity >= SIMILARITY_THRESHOLD) {
-                    highSimilarityCount++;
-                }
+            if (match.contentSimilarity >= EXACT_MATCH_THRESHOLD) {
+                exactMatchCount++;
+            } else if (match.contentSimilarity >= SIMILARITY_THRESHOLD) {
+                highSimilarityCount++;
             }
         }
 
@@ -193,23 +167,21 @@ export function calculateCommentContentTitleRisk(ctx: RiskContext, weight: numbe
         const similarFromOthers = db.findSimilarContentByOthers({
             authorAddress,
             content,
-            sinceTimestamp
+            sinceTimestamp,
+            similarityThreshold: SIMILARITY_THRESHOLD
         });
 
-        let othersHighSimilarityCount = 0;
         let othersExactMatchCount = 0;
+        let othersHighSimilarityCount = 0;
         const uniqueOtherAuthors = new Set<string>();
 
         for (const match of similarFromOthers) {
-            if (match.content) {
-                const similarity = calculateTextSimilarity(content, match.content);
-                if (similarity >= 0.95) {
-                    othersExactMatchCount++;
-                    uniqueOtherAuthors.add(match.authorAddress);
-                } else if (similarity >= SIMILARITY_THRESHOLD) {
-                    othersHighSimilarityCount++;
-                    uniqueOtherAuthors.add(match.authorAddress);
-                }
+            if (match.contentSimilarity >= EXACT_MATCH_THRESHOLD) {
+                othersExactMatchCount++;
+                uniqueOtherAuthors.add(match.authorAddress);
+            } else if (match.contentSimilarity >= SIMILARITY_THRESHOLD) {
+                othersHighSimilarityCount++;
+                uniqueOtherAuthors.add(match.authorAddress);
             }
         }
 
@@ -240,20 +212,18 @@ export function calculateCommentContentTitleRisk(ctx: RiskContext, weight: numbe
         const similarTitlesFromAuthor = db.findSimilarContentByAuthor({
             authorAddress,
             title,
-            sinceTimestamp
+            sinceTimestamp,
+            similarityThreshold: SIMILARITY_THRESHOLD
         });
 
         let titleMatchCount = 0;
         let titleSimilarCount = 0;
 
         for (const match of similarTitlesFromAuthor) {
-            if (match.title) {
-                const similarity = calculateTextSimilarity(title, match.title);
-                if (similarity >= 0.95) {
-                    titleMatchCount++;
-                } else if (similarity >= SIMILARITY_THRESHOLD) {
-                    titleSimilarCount++;
-                }
+            if (match.titleSimilarity >= EXACT_MATCH_THRESHOLD) {
+                titleMatchCount++;
+            } else if (match.titleSimilarity >= SIMILARITY_THRESHOLD) {
+                titleSimilarCount++;
             }
         }
 
@@ -274,20 +244,18 @@ export function calculateCommentContentTitleRisk(ctx: RiskContext, weight: numbe
         const similarTitlesFromOthers = db.findSimilarContentByOthers({
             authorAddress,
             title,
-            sinceTimestamp
+            sinceTimestamp,
+            similarityThreshold: SIMILARITY_THRESHOLD
         });
 
         let othersTitleMatchCount = 0;
         let othersTitleSimilarCount = 0;
 
         for (const match of similarTitlesFromOthers) {
-            if (match.title) {
-                const similarity = calculateTextSimilarity(title, match.title);
-                if (similarity >= 0.95) {
-                    othersTitleMatchCount++;
-                } else if (similarity >= SIMILARITY_THRESHOLD) {
-                    othersTitleSimilarCount++;
-                }
+            if (match.titleSimilarity >= EXACT_MATCH_THRESHOLD) {
+                othersTitleMatchCount++;
+            } else if (match.titleSimilarity >= SIMILARITY_THRESHOLD) {
+                othersTitleSimilarCount++;
             }
         }
 

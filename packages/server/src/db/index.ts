@@ -49,6 +49,52 @@ export class SpamDetectionDatabase {
 
         // Initialize schema
         this.db.exec(SCHEMA_SQL);
+
+        // Register custom SQL functions
+        this.registerCustomFunctions();
+    }
+
+    /**
+     * Register custom SQL functions for use in queries.
+     */
+    private registerCustomFunctions(): void {
+        // Jaccard similarity function for text comparison.
+        // Returns a value between 0 (no similarity) and 1 (identical).
+        // Uses word tokenization with words > 2 characters.
+        //
+        // TODO: This runs JS for every row scanned, which may not scale well
+        // with millions of comments. If performance becomes an issue, consider:
+        // - Pre-computed inverted word index table
+        // - MinHash/LSH signatures
+        // - External search engine (Meilisearch, OpenSearch)
+        this.db.function("jaccard_similarity", (text1: unknown, text2: unknown): number => {
+            if (typeof text1 !== "string" || typeof text2 !== "string") return 0;
+            if (!text1 || !text2) return 0;
+
+            // Normalize and tokenize: lowercase, remove punctuation, split on whitespace, keep words > 2 chars
+            const normalize = (s: string): Set<string> =>
+                new Set(
+                    s
+                        .toLowerCase()
+                        .replace(/[^\w\s]/g, " ")
+                        .split(/\s+/)
+                        .filter((w) => w.length > 2)
+                );
+
+            const words1 = normalize(text1);
+            const words2 = normalize(text2);
+
+            if (words1.size === 0 || words2.size === 0) return 0;
+
+            // Calculate Jaccard similarity: |intersection| / |union|
+            let intersectionSize = 0;
+            for (const word of words1) {
+                if (words2.has(word)) intersectionSize++;
+            }
+            const unionSize = words1.size + words2.size - intersectionSize;
+
+            return intersectionSize / unionSize;
+        });
     }
 
     /**
@@ -774,9 +820,10 @@ export class SpamDetectionDatabase {
 
     /**
      * Find similar comments by content or title from the same author.
-     * Returns comments that have:
-     * - Exact match (case-insensitive, trimmed)
-     * - Content that contains the search content as a substring (or vice versa)
+     * Uses Jaccard similarity (word overlap) to find similar content.
+     *
+     * Returns comments with their similarity scores. The caller should
+     * filter by the desired threshold (e.g., 0.6 for 60% similarity).
      *
      * Used to detect self-spamming with slight variations.
      */
@@ -785,6 +832,7 @@ export class SpamDetectionDatabase {
         content?: string;
         title?: string;
         sinceTimestamp?: number;
+        similarityThreshold?: number;
         limit?: number;
     }): Array<{
         challengeId: string;
@@ -792,51 +840,53 @@ export class SpamDetectionDatabase {
         title: string | null;
         subplebbitAddress: string;
         receivedAt: number;
+        contentSimilarity: number;
+        titleSimilarity: number;
     }> {
-        const { authorAddress, content, title, sinceTimestamp, limit = 100 } = params;
+        const { authorAddress, content, title, sinceTimestamp, similarityThreshold = 0.6, limit = 100 } = params;
 
         const conditions: string[] = ["json_extract(author, '$.address') = @authorAddress"];
-        const queryParams: Record<string, unknown> = { authorAddress, limit };
+        // Always include content and title params (even if null) since they're used in SELECT clause
+        const queryParams: Record<string, unknown> = {
+            authorAddress,
+            limit,
+            similarityThreshold,
+            content: content || null,
+            title: title || null
+        };
 
         if (sinceTimestamp) {
             conditions.push("receivedAt >= @sinceTimestamp");
             queryParams.sinceTimestamp = sinceTimestamp;
         }
 
-        // Build content/title matching conditions
-        // Match if: exact match OR one contains the other
-        const matchConditions: string[] = [];
-
-        if (content && content.trim().length > 10) {
-            const normalizedContent = content.trim().toLowerCase();
-            queryParams.content = normalizedContent;
-            queryParams.contentLike = `%${normalizedContent}%`;
-            matchConditions.push(`(
-                LOWER(TRIM(content)) = @content
-                OR LOWER(TRIM(content)) LIKE @contentLike
-                OR @content LIKE '%' || LOWER(TRIM(content)) || '%'
-            )`);
-        }
-
-        if (title && title.trim().length > 5) {
-            const normalizedTitle = title.trim().toLowerCase();
-            queryParams.title = normalizedTitle;
-            queryParams.titleLike = `%${normalizedTitle}%`;
-            matchConditions.push(`(
-                LOWER(TRIM(title)) = @title
-                OR LOWER(TRIM(title)) LIKE @titleLike
-                OR @title LIKE '%' || LOWER(TRIM(title)) || '%'
-            )`);
-        }
-
-        if (matchConditions.length === 0) {
+        // Need at least content or title to search
+        if ((!content || content.trim().length <= 10) && (!title || title.trim().length <= 5)) {
             return [];
         }
 
-        conditions.push(`(${matchConditions.join(" OR ")})`);
+        // Build similarity conditions - match if either content OR title is similar
+        const similarityConditions: string[] = [];
+
+        if (content && content.trim().length > 10) {
+            similarityConditions.push("jaccard_similarity(content, @content) >= @similarityThreshold");
+        }
+
+        if (title && title.trim().length > 5) {
+            similarityConditions.push("jaccard_similarity(title, @title) >= @similarityThreshold");
+        }
+
+        conditions.push(`(${similarityConditions.join(" OR ")})`);
 
         const query = `
-            SELECT challengeId, content, title, subplebbitAddress, receivedAt
+            SELECT
+                challengeId,
+                content,
+                title,
+                subplebbitAddress,
+                receivedAt,
+                jaccard_similarity(content, @content) as contentSimilarity,
+                jaccard_similarity(title, @title) as titleSimilarity
             FROM comments
             WHERE ${conditions.join(" AND ")}
             ORDER BY receivedAt DESC
@@ -849,14 +899,17 @@ export class SpamDetectionDatabase {
             title: string | null;
             subplebbitAddress: string;
             receivedAt: number;
+            contentSimilarity: number;
+            titleSimilarity: number;
         }>;
     }
 
     /**
      * Find similar comments by content or title from different authors.
-     * Returns comments that have:
-     * - Exact match (case-insensitive, trimmed)
-     * - Content that contains the search content as a substring (or vice versa)
+     * Uses Jaccard similarity (word overlap) to find similar content.
+     *
+     * Returns comments with their similarity scores. The caller should
+     * filter by the desired threshold (e.g., 0.6 for 60% similarity).
      *
      * Used to detect coordinated spam campaigns.
      */
@@ -865,6 +918,7 @@ export class SpamDetectionDatabase {
         content?: string;
         title?: string;
         sinceTimestamp?: number;
+        similarityThreshold?: number;
         limit?: number;
     }): Array<{
         challengeId: string;
@@ -873,47 +927,43 @@ export class SpamDetectionDatabase {
         title: string | null;
         subplebbitAddress: string;
         receivedAt: number;
+        contentSimilarity: number;
+        titleSimilarity: number;
     }> {
-        const { authorAddress, content, title, sinceTimestamp, limit = 100 } = params;
+        const { authorAddress, content, title, sinceTimestamp, similarityThreshold = 0.6, limit = 100 } = params;
 
         const conditions: string[] = ["json_extract(author, '$.address') != @authorAddress"];
-        const queryParams: Record<string, unknown> = { authorAddress, limit };
+        // Always include content and title params (even if null) since they're used in SELECT clause
+        const queryParams: Record<string, unknown> = {
+            authorAddress,
+            limit,
+            similarityThreshold,
+            content: content || null,
+            title: title || null
+        };
 
         if (sinceTimestamp) {
             conditions.push("receivedAt >= @sinceTimestamp");
             queryParams.sinceTimestamp = sinceTimestamp;
         }
 
-        // Build content/title matching conditions
-        const matchConditions: string[] = [];
-
-        if (content && content.trim().length > 10) {
-            const normalizedContent = content.trim().toLowerCase();
-            queryParams.content = normalizedContent;
-            queryParams.contentLike = `%${normalizedContent}%`;
-            matchConditions.push(`(
-                LOWER(TRIM(content)) = @content
-                OR LOWER(TRIM(content)) LIKE @contentLike
-                OR @content LIKE '%' || LOWER(TRIM(content)) || '%'
-            )`);
-        }
-
-        if (title && title.trim().length > 5) {
-            const normalizedTitle = title.trim().toLowerCase();
-            queryParams.title = normalizedTitle;
-            queryParams.titleLike = `%${normalizedTitle}%`;
-            matchConditions.push(`(
-                LOWER(TRIM(title)) = @title
-                OR LOWER(TRIM(title)) LIKE @titleLike
-                OR @title LIKE '%' || LOWER(TRIM(title)) || '%'
-            )`);
-        }
-
-        if (matchConditions.length === 0) {
+        // Need at least content or title to search
+        if ((!content || content.trim().length <= 10) && (!title || title.trim().length <= 5)) {
             return [];
         }
 
-        conditions.push(`(${matchConditions.join(" OR ")})`);
+        // Build similarity conditions - match if either content OR title is similar
+        const similarityConditions: string[] = [];
+
+        if (content && content.trim().length > 10) {
+            similarityConditions.push("jaccard_similarity(content, @content) >= @similarityThreshold");
+        }
+
+        if (title && title.trim().length > 5) {
+            similarityConditions.push("jaccard_similarity(title, @title) >= @similarityThreshold");
+        }
+
+        conditions.push(`(${similarityConditions.join(" OR ")})`);
 
         const query = `
             SELECT
@@ -922,7 +972,9 @@ export class SpamDetectionDatabase {
                 content,
                 title,
                 subplebbitAddress,
-                receivedAt
+                receivedAt,
+                jaccard_similarity(content, @content) as contentSimilarity,
+                jaccard_similarity(title, @title) as titleSimilarity
             FROM comments
             WHERE ${conditions.join(" AND ")}
             ORDER BY receivedAt DESC
@@ -936,6 +988,8 @@ export class SpamDetectionDatabase {
             title: string | null;
             subplebbitAddress: string;
             receivedAt: number;
+            contentSimilarity: number;
+            titleSimilarity: number;
         }>;
     }
 
