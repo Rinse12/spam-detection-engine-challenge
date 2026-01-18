@@ -221,6 +221,20 @@ For detailed documentation on how risk scoring works, including all factors, wei
 
 **[Risk Scoring Documentation](packages/server/src/risk-score/RISK_SCORING.md)**
 
+## Indexer
+
+The server includes a background indexer that crawls the plebbit network to build author reputation data. It:
+
+- Indexes subplebbits and their comments/posts
+- Follows `author.previousCommentCid` chains to discover new subs
+- Tracks modQueue to see which authors get accepted/rejected
+- Detects bans/removals by monitoring CommentUpdate availability
+- Provides network-wide author reputation data for risk scoring
+
+For detailed documentation on the indexer architecture and implementation, see:
+
+**[Indexer Documentation](packages/server/src/indexer/README.md)**
+
 **Thresholds (configurable per sub):**
 
 - `riskScore < autoAcceptThreshold` → Auto-accept
