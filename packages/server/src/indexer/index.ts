@@ -87,8 +87,8 @@ export class Indexer {
 
             // Initialize subplebbit indexer
             this.subplebbitIndexer = new SubplebbitIndexer(plebbit, this.db, {
-                onNewPreviousCid: (cid, previousCid) => {
-                    this.previousCidCrawler?.queueCrawl(cid, previousCid);
+                onNewPreviousCid: (previousCid) => {
+                    this.previousCidCrawler?.queueCrawl(previousCid);
                 }
             });
 
@@ -173,6 +173,18 @@ export class Indexer {
      */
     get running(): boolean {
         return this.isRunning;
+    }
+
+    /**
+     * Queue a previousCommentCid for background crawling.
+     * Called from /evaluate when a publication has author.previousCommentCid.
+     * Does nothing if indexer is not running or CID is already indexed.
+     */
+    queuePreviousCidCrawl(previousCid: string): void {
+        if (!this.isRunning || !this.previousCidCrawler) {
+            return;
+        }
+        this.previousCidCrawler.queueCrawl(previousCid);
     }
 }
 

@@ -32,13 +32,13 @@ export class SubplebbitIndexer {
     private db: Database;
     private queries: IndexerQueries;
     private isRunning = false;
-    private onNewPreviousCid?: (cid: string, previousCid: string) => void;
+    private onNewPreviousCid?: (previousCid: string) => void;
 
     constructor(
         plebbit: PlebbitInstance,
         db: Database,
         options: {
-            onNewPreviousCid?: (cid: string, previousCid: string) => void;
+            onNewPreviousCid?: (previousCid: string) => void;
         } = {}
     ) {
         this.plebbit = plebbit;
@@ -186,11 +186,7 @@ export class SubplebbitIndexer {
 
             // Fetch and store all comments
             const result = await fetchAndStoreSubplebbitComments(subplebbit, this.plebbit, this.db, {
-                onNewComment: (cid: string, previousCid: string | null) => {
-                    if (previousCid && this.onNewPreviousCid) {
-                        this.onNewPreviousCid(cid, previousCid);
-                    }
-                }
+                onNewPreviousCid: this.onNewPreviousCid
             });
 
             // Update cache markers

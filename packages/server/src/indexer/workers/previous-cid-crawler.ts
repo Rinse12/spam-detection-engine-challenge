@@ -97,15 +97,15 @@ export class PreviousCidCrawler {
 
     /**
      * Add a CID to the crawl queue.
-     * Called when a new comment with previousCommentCid is found.
+     * Called when a previousCommentCid is found that we haven't indexed yet.
      */
-    queueCrawl(cid: string, previousCid: string): void {
+    queueCrawl(previousCid: string): void {
         // Don't queue if we already have this comment indexed
         if (this.queries.hasIndexedCommentIpfs(previousCid)) {
             return;
         }
 
-        // Don't queue if already crawling
+        // Don't queue if already crawling or in queue
         if (this.crawlingCids.has(previousCid)) {
             return;
         }
@@ -158,8 +158,12 @@ export class PreviousCidCrawler {
                         }
                     }
 
-                    // Queue the next previousCommentCid if valid
-                    if (result.nextPreviousCid && result.hasCommentUpdate) {
+                    // Queue the next previousCommentCid if valid and not already indexed
+                    if (
+                        result.nextPreviousCid &&
+                        result.hasCommentUpdate &&
+                        !this.queries.hasIndexedCommentIpfs(result.nextPreviousCid)
+                    ) {
                         this.crawlQueue.push({
                             cid: result.nextPreviousCid,
                             depth: item.depth + 1

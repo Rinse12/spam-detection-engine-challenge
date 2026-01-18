@@ -49,7 +49,7 @@ export async function loadAllPostsFromSubplebbit(subplebbit: RemoteSubplebbit): 
 
     if (allCommentsInPreloadedPages) {
         // Use preloaded pages - try hot first, then any available
-        const preloadedPage = subplebbit.posts.pages.hot || subplebbit.posts.pages.new || Object.values(subplebbit.posts.pages)[0];
+        const preloadedPage = Object.values(subplebbit.posts.pages)[0];
         return preloadedPage?.comments || [];
     }
 
@@ -171,8 +171,8 @@ export async function fetchAndStoreSubplebbitComments(
     options: {
         /** Maximum depth for reply traversal (default: unlimited) */
         maxReplyDepth?: number;
-        /** Called when a new CID is found that needs previousCommentCid crawling */
-        onNewComment?: (cid: string, authorPreviousCid: string | null) => void;
+        /** Called when a previousCommentCid is found that we haven't indexed yet */
+        onNewPreviousCid?: (previousCid: string) => void;
     } = {}
 ): Promise<{ postsCount: number; repliesCount: number }> {
     const queries = new IndexerQueries(db);
@@ -194,10 +194,10 @@ export async function fetchAndStoreSubplebbitComments(
         // Store this comment
         storeCommentFromPage(pageComment, subAddress, queries);
 
-        // Notify about previousCommentCid for crawling
+        // Queue previousCommentCid for crawling if we haven't indexed it yet
         const previousCid = pageComment.author?.previousCommentCid;
-        if (options.onNewComment && previousCid) {
-            options.onNewComment(pageComment.cid, previousCid);
+        if (previousCid && options.onNewPreviousCid && !queries.hasIndexedCommentIpfs(previousCid)) {
+            options.onNewPreviousCid(previousCid);
         }
 
         let commentCount = 1;

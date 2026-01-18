@@ -137,7 +137,16 @@ export type CommentIpfsInsertParams = Omit<IndexedCommentIpfs, "author" | "signa
  */
 export type CommentUpdateInsertParams = Omit<
     IndexedCommentUpdate,
-    "author" | "removed" | "deleted" | "locked" | "pinned" | "approved" | "lastRepliesPageCid" | "fetchedAt" | "lastFetchFailedAt" | "fetchFailureCount"
+    | "author"
+    | "removed"
+    | "deleted"
+    | "locked"
+    | "pinned"
+    | "approved"
+    | "lastRepliesPageCid"
+    | "fetchedAt"
+    | "lastFetchFailedAt"
+    | "fetchFailureCount"
 > & {
     author: unknown | null;
     removed: boolean | null;

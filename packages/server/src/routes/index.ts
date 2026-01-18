@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import type { SpamDetectionDatabase } from "../db/index.js";
 import type { KeyManager } from "../crypto/keys.js";
+import type { Indexer } from "../indexer/index.js";
 import { registerEvaluateRoute } from "./evaluate.js";
 import { registerVerifyRoute } from "./verify.js";
 import { registerIframeRoute } from "./iframe.js";
@@ -13,18 +14,20 @@ export interface RouteOptions {
     turnstileSecretKey?: string;
     ipInfoToken?: string;
     keyManager: KeyManager;
+    indexer?: Indexer | null;
 }
 
 /**
  * Register all API routes on the Fastify instance.
  */
 export function registerRoutes(fastify: FastifyInstance, options: RouteOptions): void {
-    const { db, baseUrl, turnstileSiteKey, turnstileSecretKey, ipInfoToken, keyManager } = options;
+    const { db, baseUrl, turnstileSiteKey, turnstileSecretKey, ipInfoToken, keyManager, indexer } = options;
 
     // Register individual routes
     registerEvaluateRoute(fastify, {
         db,
-        baseUrl
+        baseUrl,
+        indexer
     });
     registerVerifyRoute(fastify, { db, keyManager });
     registerIframeRoute(fastify, { db, turnstileSiteKey, ipInfoToken });

@@ -82,6 +82,12 @@ export async function createServer(config: ServerConfig): Promise<SpamDetectionS
     // Create or load JWT signing keypair
     const keyManager = await createKeyManager(keyPath);
 
+    // Initialize indexer if enabled (before routes so it can be passed to them)
+    let indexer: Indexer | null = null;
+    if (enableIndexer) {
+        indexer = new Indexer(db.getDb());
+    }
+
     // Register routes
     registerRoutes(fastify, {
         db,
@@ -89,16 +95,11 @@ export async function createServer(config: ServerConfig): Promise<SpamDetectionS
         turnstileSiteKey,
         turnstileSecretKey,
         ipInfoToken,
-        keyManager
+        keyManager,
+        indexer
     });
 
     initPlebbitInstance();
-
-    // Initialize indexer if enabled
-    let indexer: Indexer | null = null;
-    if (enableIndexer) {
-        indexer = new Indexer(db.getDb());
-    }
 
     // Error handler
     fastify.setErrorHandler((error: FastifyError, request, reply) => {

@@ -9,7 +9,9 @@ import { randomUUID } from "crypto";
 import { verifySignedRequest } from "../security/request-signature.js";
 import { resolveSubplebbitPublicKey } from "../subplebbit-resolver.js";
 import { calculateRiskScore } from "../risk-score/index.js";
+import { getAuthorFromChallengeRequest } from "../risk-score/utils.js";
 import { IndexerQueries } from "../indexer/db/queries.js";
+import type { Indexer } from "../indexer/index.js";
 
 const CHALLENGE_EXPIRY_SECONDS = 3600; // 1 hour
 const MAX_REQUEST_SKEW_SECONDS = 5 * 60;
@@ -17,13 +19,14 @@ const MAX_REQUEST_SKEW_SECONDS = 5 * 60;
 export interface EvaluateRouteOptions {
     db: SpamDetectionDatabase;
     baseUrl: string;
+    indexer?: Indexer | null;
 }
 
 /**
  * Register the /api/v1/evaluate route.
  */
 export function registerEvaluateRoute(fastify: FastifyInstance, options: EvaluateRouteOptions): void {
-    const { db, baseUrl } = options;
+    const { db, baseUrl, indexer } = options;
 
     fastify.post(
         "/api/v1/evaluate",
@@ -138,6 +141,12 @@ export function registerEvaluateRoute(fastify: FastifyInstance, options: Evaluat
                 });
             }
             // Note: subplebbitEdit is not stored as it's not relevant for velocity tracking
+
+            // Queue author's previousCommentCid for background crawling (if indexer is enabled)
+            const author = getAuthorFromChallengeRequest(typedChallengeRequest);
+            if (author.previousCommentCid && indexer) {
+                indexer.queuePreviousCidCrawl(author.previousCommentCid);
+            }
 
             // Build response
             const response: EvaluateResponse = {
