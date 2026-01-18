@@ -10,9 +10,13 @@ const subplebbitCache = new Map<string, { publicKey: string; expiresAt: number }
 
 const CACHE_TTL_MS = 12 * 60 * 60 * 1000;
 
-const defaultLoader: PlebbitLoader = () => Plebbit();
+type PlebbitOptions = Parameters<typeof Plebbit>[0];
+let plebbitOptions: PlebbitOptions | undefined;
+let isTestLoaderActive = false;
 
-let plebbitLoader: PlebbitLoader = defaultLoader;
+const createDefaultLoader = (): PlebbitLoader => () => Plebbit(plebbitOptions);
+
+let plebbitLoader: PlebbitLoader = createDefaultLoader();
 
 export const getPlebbitInstance = (): Promise<PlebbitInstance> => {
     if (!plebbitPromise) {
@@ -59,10 +63,24 @@ export const setPlebbitLoaderForTest = (loader: PlebbitLoader): void => {
     plebbitLoader = loader;
     plebbitPromise = undefined;
     subplebbitCache.clear();
+    isTestLoaderActive = true;
 };
 
 export const resetPlebbitLoaderForTest = (): void => {
-    plebbitLoader = defaultLoader;
+    isTestLoaderActive = false;
+    plebbitLoader = createDefaultLoader();
     plebbitPromise = undefined;
     subplebbitCache.clear();
+};
+
+/**
+ * Set Plebbit options for the resolver.
+ * Must be called before initPlebbitInstance() or getPlebbitInstance().
+ */
+export const setPlebbitOptions = (options: PlebbitOptions | undefined): void => {
+    plebbitOptions = options;
+    // Only update the loader if not in test mode (test loader takes precedence)
+    if (!isTestLoaderActive) {
+        plebbitLoader = createDefaultLoader();
+    }
 };

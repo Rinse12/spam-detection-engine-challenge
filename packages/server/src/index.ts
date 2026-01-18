@@ -1,9 +1,12 @@
 import Fastify, { type FastifyInstance, type FastifyError } from "fastify";
 import { SpamDetectionDatabase, createDatabase } from "./db/index.js";
 import { registerRoutes } from "./routes/index.js";
-import { destroyPlebbitInstance, getPlebbitInstance, initPlebbitInstance } from "./subplebbit-resolver.js";
+import { destroyPlebbitInstance, getPlebbitInstance, initPlebbitInstance, setPlebbitOptions } from "./subplebbit-resolver.js";
 import { createKeyManager, type KeyManager } from "./crypto/keys.js";
 import { Indexer, stopIndexer } from "./indexer/index.js";
+import type Plebbit from "@plebbit/plebbit-js";
+
+const DEFAULT_PLEBBIT_RPC_URL = "ws://localhost:9138/";
 
 export interface ServerConfig {
     /** Port to listen on. Default: 3000 */
@@ -26,6 +29,10 @@ export interface ServerConfig {
     logging?: boolean;
     /** Enable indexer. Default: true */
     enableIndexer?: boolean;
+    /** Plebbit options passed to the Plebbit constructor. If plebbitRpcUrl is also provided, it will be merged. */
+    plebbitOptions?: Parameters<typeof Plebbit>[0];
+    /** Plebbit RPC WebSocket URL. Default: "ws://localhost:9138/". Convenience option merged into plebbitOptions. */
+    plebbitRpcUrl?: string;
 }
 
 export interface SpamDetectionServer {
@@ -51,8 +58,16 @@ export async function createServer(config: ServerConfig): Promise<SpamDetectionS
         turnstileSecretKey,
         ipInfoToken,
         logging = true,
-        enableIndexer = true
+        enableIndexer = true,
+        plebbitOptions: userPlebbitOptions,
+        plebbitRpcUrl = DEFAULT_PLEBBIT_RPC_URL
     } = config;
+
+    // Merge plebbitRpcUrl into plebbitOptions
+    const plebbitOptions = {
+        ...userPlebbitOptions,
+        plebbitRpcClientsOptions: [plebbitRpcUrl]
+    };
 
     if (!databasePath) {
         throw new Error("databasePath is required");
@@ -82,10 +97,13 @@ export async function createServer(config: ServerConfig): Promise<SpamDetectionS
     // Create or load JWT signing keypair
     const keyManager = await createKeyManager(keyPath);
 
+    // Set Plebbit options for the subplebbit resolver
+    setPlebbitOptions(plebbitOptions);
+
     // Initialize indexer if enabled (before routes so it can be passed to them)
     let indexer: Indexer | null = null;
     if (enableIndexer) {
-        indexer = new Indexer(db.getDb());
+        indexer = new Indexer(db.getDb(), { plebbitOptions });
     }
 
     // Register routes
@@ -176,7 +194,8 @@ if (isMainModule) {
         turnstileSiteKey: process.env.TURNSTILE_SITE_KEY,
         turnstileSecretKey: process.env.TURNSTILE_SECRET_KEY,
         ipInfoToken: process.env.IPINFO_TOKEN,
-        logging: process.env.LOG_LEVEL !== "silent"
+        logging: process.env.LOG_LEVEL !== "silent",
+        plebbitRpcUrl: process.env.PLEBBIT_RPC_URL
     })
         .then((server) => {
             // Graceful shutdown

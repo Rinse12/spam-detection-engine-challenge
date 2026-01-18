@@ -12,12 +12,9 @@ let isInitializing = false;
 let initPromise: Promise<PlebbitInstance> | null = null;
 
 /**
- * Options for creating the Plebbit instance.
+ * Plebbit options passed to the Plebbit constructor.
  */
-export interface PlebbitManagerOptions {
-    /** Plebbit options passed to constructor */
-    plebbitOptions?: Parameters<typeof Plebbit>[0];
-}
+export type PlebbitManagerOptions = Parameters<typeof Plebbit>[0];
 
 /**
  * Get or create the shared Plebbit instance.
@@ -54,9 +51,7 @@ export async function getPlebbit(options?: PlebbitManagerOptions): Promise<Plebb
  * Create a new Plebbit instance with appropriate options.
  */
 async function createPlebbitInstance(options?: PlebbitManagerOptions): Promise<PlebbitInstance> {
-    const plebbitOptions = options?.plebbitOptions ?? {};
-
-    const plebbit = await Plebbit(plebbitOptions);
+    const plebbit = await Plebbit(options);
 
     // Log initialization
     console.log("[PlebbitManager] Plebbit instance created");

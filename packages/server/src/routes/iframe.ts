@@ -110,4 +110,3 @@ function getClientIp(request: FastifyRequest): string | undefined {
     // Fall back to direct connection IP
     return request.ip;
 }
-
