@@ -91,7 +91,14 @@ describe("CombinedDataService", () => {
                     `INSERT INTO indexed_comments_ipfs (cid, subplebbitAddress, author, signature, timestamp, fetchedAt)
                  VALUES (?, ?, ?, ?, ?, ?)`
                 )
-                .run("Qm123", "sub2.eth", JSON.stringify({ address: "author1" }), JSON.stringify(baseSignature), baseTimestamp - 5000, baseTimestamp);
+                .run(
+                    "Qm123",
+                    "sub2.eth",
+                    JSON.stringify({ address: "author1" }),
+                    JSON.stringify(baseSignature),
+                    baseTimestamp - 5000,
+                    baseTimestamp
+                );
 
             const result = combinedData.getAuthorEarliestTimestamp("testAuthorPublicKey");
             // Should return the older indexer timestamp
@@ -158,7 +165,14 @@ describe("CombinedDataService", () => {
                     `INSERT INTO indexed_comments_ipfs (cid, subplebbitAddress, author, signature, timestamp, fetchedAt)
                  VALUES (?, ?, ?, ?, ?, ?)`
                 )
-                .run("Qm123", "sub1.eth", JSON.stringify({ address: "author1" }), JSON.stringify(baseSignature), baseTimestamp, baseTimestamp);
+                .run(
+                    "Qm123",
+                    "sub1.eth",
+                    JSON.stringify({ address: "author1" }),
+                    JSON.stringify(baseSignature),
+                    baseTimestamp,
+                    baseTimestamp
+                );
 
             rawDb
                 .prepare(
@@ -201,7 +215,14 @@ describe("CombinedDataService", () => {
                     `INSERT INTO indexed_comments_ipfs (cid, subplebbitAddress, author, signature, timestamp, fetchedAt)
                  VALUES (?, ?, ?, ?, ?, ?)`
                 )
-                .run("Qm123", "sub2.eth", JSON.stringify({ address: "author1" }), JSON.stringify(baseSignature), baseTimestamp, baseTimestamp);
+                .run(
+                    "Qm123",
+                    "sub2.eth",
+                    JSON.stringify({ address: "author1" }),
+                    JSON.stringify(baseSignature),
+                    baseTimestamp,
+                    baseTimestamp
+                );
 
             rawDb
                 .prepare(
@@ -253,7 +274,15 @@ describe("CombinedDataService", () => {
                         `INSERT INTO indexed_comments_ipfs (cid, subplebbitAddress, author, signature, timestamp, fetchedAt, parentCid)
                      VALUES (?, ?, ?, ?, ?, ?, ?)`
                     )
-                    .run(`Qm${i}`, "sub2.eth", JSON.stringify({ address: "author1" }), JSON.stringify(baseSignature), baseTimestamp - 200 - i, baseTimestamp, null);
+                    .run(
+                        `Qm${i}`,
+                        "sub2.eth",
+                        JSON.stringify({ address: "author1" }),
+                        JSON.stringify(baseSignature),
+                        baseTimestamp - 200 - i,
+                        baseTimestamp,
+                        null
+                    );
             }
 
             const result = combinedData.getAuthorVelocityStats("testAuthorPublicKey", "post");
@@ -332,7 +361,15 @@ describe("CombinedDataService", () => {
                         `INSERT INTO indexed_comments_ipfs (cid, subplebbitAddress, author, signature, timestamp, fetchedAt, link)
                      VALUES (?, ?, ?, ?, ?, ?, ?)`
                     )
-                    .run(`Qm${i}`, "sub2.eth", JSON.stringify({ address: "author1" }), JSON.stringify(baseSignature), baseTimestamp - 200 - i, baseTimestamp, "https://example.com");
+                    .run(
+                        `Qm${i}`,
+                        "sub2.eth",
+                        JSON.stringify({ address: "author1" }),
+                        JSON.stringify(baseSignature),
+                        baseTimestamp - 200 - i,
+                        baseTimestamp,
+                        "https://example.com"
+                    );
             }
 
             const result = combinedData.findLinksByAuthor({
@@ -378,7 +415,15 @@ describe("CombinedDataService", () => {
                         `INSERT INTO indexed_comments_ipfs (cid, subplebbitAddress, author, signature, timestamp, fetchedAt, link)
                      VALUES (?, ?, ?, ?, ?, ?, ?)`
                     )
-                    .run(`Qm${i}`, "sub2.eth", JSON.stringify({ address: "author2" }), JSON.stringify(otherAuthorSignature), baseTimestamp - 200 - i, baseTimestamp, "https://spam.com");
+                    .run(
+                        `Qm${i}`,
+                        "sub2.eth",
+                        JSON.stringify({ address: "author2" }),
+                        JSON.stringify(otherAuthorSignature),
+                        baseTimestamp - 200 - i,
+                        baseTimestamp,
+                        "https://spam.com"
+                    );
             }
 
             const result = combinedData.findLinksByOthers({

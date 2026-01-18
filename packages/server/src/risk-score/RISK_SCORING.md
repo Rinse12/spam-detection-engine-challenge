@@ -51,15 +51,16 @@ Risk factors query data from two separate database table sets:
 
 The `CombinedDataService` queries both sources and combines data using factor-specific strategies:
 
-| Factor                   | Combination Strategy                                    |
-| ------------------------ | ------------------------------------------------------- |
-| Account Age              | MIN (oldest timestamp from either source)               |
-| Karma                    | Per-subplebbit, use LATEST entry from either source     |
-| Velocity                 | SUM (combine counts from both sources)                  |
-| Content/Link Similarity  | UNION (query both sources)                              |
-| Network factors          | Indexer only (ban history, modqueue rejection, removal) |
+| Factor                  | Combination Strategy                                    |
+| ----------------------- | ------------------------------------------------------- |
+| Account Age             | MIN (oldest timestamp from either source)               |
+| Karma                   | Per-subplebbit, use LATEST entry from either source     |
+| Velocity                | SUM (combine counts from both sources)                  |
+| Content/Link Similarity | UNION (query both sources)                              |
+| Network factors         | Indexer only (ban history, modqueue rejection, removal) |
 
 This approach provides:
+
 - **Broader coverage**: Authors may have history in indexer even if they've never used this spam detection server
 - **Fresher data**: Engine data is real-time from `/evaluate` calls
 - **More accurate**: Uses the most relevant data for each factor type

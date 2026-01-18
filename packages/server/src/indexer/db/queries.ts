@@ -527,10 +527,7 @@ export class IndexerQueries {
      * Returns counts in the last hour and last 24 hours.
      * Only tracks posts and replies (comments) - votes/edits/moderations are not indexed.
      */
-    getAuthorVelocityFromIndexer(
-        authorPublicKey: string,
-        publicationType: "post" | "reply"
-    ): { lastHour: number; last24Hours: number } {
+    getAuthorVelocityFromIndexer(authorPublicKey: string, publicationType: "post" | "reply"): { lastHour: number; last24Hours: number } {
         const now = Math.floor(Date.now() / 1000);
         const oneHourAgo = now - 3600;
         const oneDayAgo = now - 86400;
@@ -742,12 +739,10 @@ export class IndexerQueries {
      * Find links from indexed comments.
      * Used for cross-subplebbit link spam detection.
      */
-    findLinksFromIndexer(params: {
-        link: string;
-        sinceTimestamp: number;
-        authorPublicKey?: string;
-        excludeAuthorPublicKey?: string;
-    }): { count: number; uniqueAuthors: number } {
+    findLinksFromIndexer(params: { link: string; sinceTimestamp: number; authorPublicKey?: string; excludeAuthorPublicKey?: string }): {
+        count: number;
+        uniqueAuthors: number;
+    } {
         const { link, sinceTimestamp, authorPublicKey, excludeAuthorPublicKey } = params;
 
         const conditions: string[] = ["i.timestamp >= @sinceTimestamp", "i.link IS NOT NULL", "LOWER(i.link) = LOWER(@link)"];
@@ -781,11 +776,7 @@ export class IndexerQueries {
     /**
      * Count links to a specific domain from indexed comments.
      */
-    countLinkDomainFromIndexer(params: {
-        domain: string;
-        sinceTimestamp: number;
-        authorPublicKey?: string;
-    }): number {
+    countLinkDomainFromIndexer(params: { domain: string; sinceTimestamp: number; authorPublicKey?: string }): number {
         const { domain, sinceTimestamp, authorPublicKey } = params;
 
         const conditions: string[] = [

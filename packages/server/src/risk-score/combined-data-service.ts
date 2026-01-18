@@ -420,11 +420,10 @@ export class CombinedDataService {
      * Find links posted by other authors from both sources.
      * Returns total count and unique authors across both sources.
      */
-    findLinksByOthers(params: {
-        excludeAuthorPublicKey: string;
-        link: string;
-        sinceTimestamp: number;
-    }): { count: number; uniqueAuthors: number } {
+    findLinksByOthers(params: { excludeAuthorPublicKey: string; link: string; sinceTimestamp: number }): {
+        count: number;
+        uniqueAuthors: number;
+    } {
         const engineResult = this.db.findLinksByOthers({
             authorPublicKey: params.excludeAuthorPublicKey,
             link: params.link,
