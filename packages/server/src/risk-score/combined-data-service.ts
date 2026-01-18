@@ -90,8 +90,10 @@ export class CombinedDataService {
             const indexer = indexerKarma.get(sub);
 
             if (engine && indexer) {
-                // Both sources have data - use the more recent one
-                if (engine.receivedAt >= indexer.fetchedAt) {
+                // Both sources have data - use the one with higher updatedAt
+                // Engine uses receivedAt (when we received the publication)
+                // Indexer uses updatedAt (when subplebbit updated the comment metadata)
+                if (engine.receivedAt >= indexer.updatedAt) {
                     result.set(sub, { postScore: engine.postScore, replyScore: engine.replyScore });
                 } else {
                     result.set(sub, { postScore: indexer.postScore, replyScore: indexer.replyScore });

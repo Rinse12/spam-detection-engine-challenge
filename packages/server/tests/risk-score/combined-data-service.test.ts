@@ -158,7 +158,7 @@ describe("CombinedDataService", () => {
                 }
             });
 
-            // Insert into indexer with newer fetchedAt
+            // Insert into indexer with newer updatedAt
             const rawDb = db.getDb();
             rawDb
                 .prepare(
@@ -176,14 +176,14 @@ describe("CombinedDataService", () => {
 
             rawDb
                 .prepare(
-                    `INSERT INTO indexed_comments_update (cid, author, fetchedAt)
-                 VALUES (?, ?, ?)`
+                    `INSERT INTO indexed_comments_update (cid, author, fetchedAt, updatedAt)
+                 VALUES (?, ?, ?, ?)`
                 )
-                .run("Qm123", JSON.stringify({ subplebbit: { postScore: 50, replyScore: 25 } }), baseTimestamp + 100);
+                .run("Qm123", JSON.stringify({ subplebbit: { postScore: 50, replyScore: 25 } }), baseTimestamp, baseTimestamp + 100);
 
             const result = combinedData.getAuthorKarmaBySubplebbit("testAuthorPublicKey");
             expect(result.size).toBe(1);
-            // Should use the indexer data since it has a more recent fetchedAt
+            // Should use the indexer data since it has a more recent updatedAt
             expect(result.get("sub1.eth")).toEqual({ postScore: 50, replyScore: 25 });
         });
 

@@ -479,33 +479,34 @@ export class IndexerQueries {
     /**
      * Get karma per subplebbit from indexed comments.
      * Returns author.subplebbit data (TRUSTED, from CommentUpdate).
-     * Only returns the most recent entry per subplebbit based on fetchedAt.
+     * Only returns the most recent entry per subplebbit based on updatedAt.
      */
     getAuthorKarmaBySubplebbitFromIndexer(
         authorPublicKey: string
-    ): Map<string, { postScore: number; replyScore: number; fetchedAt: number }> {
-        const karmaMap = new Map<string, { postScore: number; replyScore: number; fetchedAt: number }>();
+    ): Map<string, { postScore: number; replyScore: number; updatedAt: number }> {
+        const karmaMap = new Map<string, { postScore: number; replyScore: number; updatedAt: number }>();
 
         // Query indexed_comments_update joined with indexed_comments_ipfs
         // The author field in indexed_comments_update contains author.subplebbit (TRUSTED)
+        // Use updatedAt (when subplebbit last updated the comment) for recency comparison
         const rows = this.db
             .prepare(
                 `SELECT
                     i.subplebbitAddress,
                     COALESCE(json_extract(u.author, '$.subplebbit.postScore'), 0) as postScore,
                     COALESCE(json_extract(u.author, '$.subplebbit.replyScore'), 0) as replyScore,
-                    u.fetchedAt
+                    COALESCE(u.updatedAt, u.fetchedAt) as updatedAt
                  FROM indexed_comments_update u
                  JOIN indexed_comments_ipfs i ON u.cid = i.cid
                  WHERE json_extract(i.signature, '$.publicKey') = ?
                    AND u.author IS NOT NULL
-                 ORDER BY u.fetchedAt DESC`
+                 ORDER BY COALESCE(u.updatedAt, u.fetchedAt) DESC`
             )
             .all(authorPublicKey) as Array<{
             subplebbitAddress: string;
             postScore: number;
             replyScore: number;
-            fetchedAt: number;
+            updatedAt: number;
         }>;
 
         // Keep only the most recent entry per subplebbit
@@ -514,7 +515,7 @@ export class IndexerQueries {
                 karmaMap.set(row.subplebbitAddress, {
                     postScore: row.postScore,
                     replyScore: row.replyScore,
-                    fetchedAt: row.fetchedAt
+                    updatedAt: row.updatedAt
                 });
             }
         }
