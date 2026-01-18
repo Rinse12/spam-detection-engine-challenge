@@ -77,7 +77,12 @@ describe("EasyCommunitySpamBlocker challenge package", () => {
         const fetchMock = stubFetch(createResponse(createEvaluateResponse({ riskScore: 0.1 })));
         const challengeFile = ChallengeFileFactory({} as SubplebbitChallengeSetting);
 
-        const result = await challengeFile.getChallenge({ options: {} } as SubplebbitChallengeSetting, request, 0, subplebbit);
+        const result = await challengeFile.getChallenge({
+            challengeSettings: { options: {} } as SubplebbitChallengeSetting,
+            challengeRequestMessage: request,
+            challengeIndex: 0,
+            subplebbit
+        });
 
         expect(result).toEqual({ success: true });
         expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -91,7 +96,12 @@ describe("EasyCommunitySpamBlocker challenge package", () => {
         const fetchMock = stubFetch(createResponse(createEvaluateResponse({ riskScore: 0.1 })));
         const challengeFile = ChallengeFileFactory({} as SubplebbitChallengeSetting);
 
-        await challengeFile.getChallenge({ options: {} } as SubplebbitChallengeSetting, request, 0, subplebbit);
+        await challengeFile.getChallenge({
+            challengeSettings: { options: {} } as SubplebbitChallengeSetting,
+            challengeRequestMessage: request,
+            challengeIndex: 0,
+            subplebbit
+        });
 
         const payload = JSON.parse((fetchMock.mock.calls[0]?.[1]?.body ?? "{}") as string);
 
@@ -113,7 +123,12 @@ describe("EasyCommunitySpamBlocker challenge package", () => {
         const fetchMock = stubFetch(createResponse(createEvaluateResponse({ riskScore: 0.8, explanation: "Too risky" })));
         const challengeFile = ChallengeFileFactory({} as SubplebbitChallengeSetting);
 
-        const result = await challengeFile.getChallenge({ options: {} } as SubplebbitChallengeSetting, request, 0, subplebbit);
+        const result = await challengeFile.getChallenge({
+            challengeSettings: { options: {} } as SubplebbitChallengeSetting,
+            challengeRequestMessage: request,
+            challengeIndex: 0,
+            subplebbit
+        });
 
         expect(fetchMock).toHaveBeenCalledTimes(1);
         expect(result).toEqual({
@@ -126,7 +141,12 @@ describe("EasyCommunitySpamBlocker challenge package", () => {
         const fetchMock = stubFetch(createResponse(createEvaluateResponse({ riskScore: 0.5 })));
         const challengeFile = ChallengeFileFactory({} as SubplebbitChallengeSetting);
 
-        const result = await challengeFile.getChallenge({ options: {} } as SubplebbitChallengeSetting, request, 0, subplebbit);
+        const result = await challengeFile.getChallenge({
+            challengeSettings: { options: {} } as SubplebbitChallengeSetting,
+            challengeRequestMessage: request,
+            challengeIndex: 0,
+            subplebbit
+        });
 
         if (!("verify" in result)) {
             throw new Error("Expected a challenge response");
@@ -145,7 +165,12 @@ describe("EasyCommunitySpamBlocker challenge package", () => {
         const fetchMock = stubFetch(createResponse(evaluateResponse), createResponse(createVerifyResponse({ success: false })));
         const challengeFile = ChallengeFileFactory({} as SubplebbitChallengeSetting);
 
-        const result = await challengeFile.getChallenge({ options: {} } as SubplebbitChallengeSetting, request, 0, subplebbit);
+        const result = await challengeFile.getChallenge({
+            challengeSettings: { options: {} } as SubplebbitChallengeSetting,
+            challengeRequestMessage: request,
+            challengeIndex: 0,
+            subplebbit
+        });
 
         if (!("verify" in result)) {
             throw new Error("Expected a challenge response");
@@ -175,7 +200,12 @@ describe("EasyCommunitySpamBlocker challenge package", () => {
         );
         const challengeFile = ChallengeFileFactory({} as SubplebbitChallengeSetting);
 
-        const result = await challengeFile.getChallenge({ options: {} } as SubplebbitChallengeSetting, request, 0, subplebbit);
+        const result = await challengeFile.getChallenge({
+            challengeSettings: { options: {} } as SubplebbitChallengeSetting,
+            challengeRequestMessage: request,
+            challengeIndex: 0,
+            subplebbit
+        });
 
         if (!("verify" in result)) {
             throw new Error("Expected a challenge response");
@@ -190,12 +220,12 @@ describe("EasyCommunitySpamBlocker challenge package", () => {
         stubFetch(createResponse(createEvaluateResponse({ riskScore: 0.5 })), createResponse(createVerifyResponse({ ipRisk: 0.7 })));
         const challengeFile = ChallengeFileFactory({} as SubplebbitChallengeSetting);
 
-        const result = await challengeFile.getChallenge(
-            { options: { maxIpRisk: "0.4" } } as SubplebbitChallengeSetting,
-            request,
-            0,
+        const result = await challengeFile.getChallenge({
+            challengeSettings: { options: { maxIpRisk: "0.4" } } as SubplebbitChallengeSetting,
+            challengeRequestMessage: request,
+            challengeIndex: 0,
             subplebbit
-        );
+        });
 
         if (!("verify" in result)) {
             throw new Error("Expected a challenge response");
@@ -215,12 +245,12 @@ describe("EasyCommunitySpamBlocker challenge package", () => {
         );
         const challengeFile = ChallengeFileFactory({} as SubplebbitChallengeSetting);
 
-        const result = await challengeFile.getChallenge(
-            { options: { countryBlacklist: "us, ca" } } as SubplebbitChallengeSetting,
-            request,
-            0,
+        const result = await challengeFile.getChallenge({
+            challengeSettings: { options: { countryBlacklist: "us, ca" } } as SubplebbitChallengeSetting,
+            challengeRequestMessage: request,
+            challengeIndex: 0,
             subplebbit
-        );
+        });
 
         if (!("verify" in result)) {
             throw new Error("Expected a challenge response");
@@ -245,7 +275,12 @@ describe("EasyCommunitySpamBlocker challenge package", () => {
         );
         const challengeFile = ChallengeFileFactory({} as SubplebbitChallengeSetting);
 
-        const result = await challengeFile.getChallenge({ options } as SubplebbitChallengeSetting, request, 0, subplebbit);
+        const result = await challengeFile.getChallenge({
+            challengeSettings: { options } as SubplebbitChallengeSetting,
+            challengeRequestMessage: request,
+            challengeIndex: 0,
+            subplebbit
+        });
 
         if (!("verify" in result)) {
             throw new Error("Expected a challenge response");
@@ -268,7 +303,12 @@ describe("EasyCommunitySpamBlocker challenge package", () => {
         );
         const challengeFile = ChallengeFileFactory({} as SubplebbitChallengeSetting);
 
-        const result = await challengeFile.getChallenge({ options: {} } as SubplebbitChallengeSetting, request, 0, subplebbit);
+        const result = await challengeFile.getChallenge({
+            challengeSettings: { options: {} } as SubplebbitChallengeSetting,
+            challengeRequestMessage: request,
+            challengeIndex: 0,
+            subplebbit
+        });
 
         if (!("verify" in result)) {
             throw new Error("Expected a challenge response");
@@ -282,12 +322,12 @@ describe("EasyCommunitySpamBlocker challenge package", () => {
         const fetchMock = stubFetch(createResponse(createEvaluateResponse({ riskScore: 0.1 })));
         const challengeFile = ChallengeFileFactory({} as SubplebbitChallengeSetting);
 
-        await challengeFile.getChallenge(
-            { options: { serverUrl: "https://example.com/api///" } } as SubplebbitChallengeSetting,
-            request,
-            0,
+        await challengeFile.getChallenge({
+            challengeSettings: { options: { serverUrl: "https://example.com/api///" } } as SubplebbitChallengeSetting,
+            challengeRequestMessage: request,
+            challengeIndex: 0,
             subplebbit
-        );
+        });
 
         expect(fetchMock).toHaveBeenCalledWith("https://example.com/api/evaluate", expect.any(Object));
     });
@@ -296,16 +336,26 @@ describe("EasyCommunitySpamBlocker challenge package", () => {
         stubFetch(createResponse(createEvaluateResponse({ riskScore: 2 }) as unknown as EvaluateResponse));
         const challengeFile = ChallengeFileFactory({} as SubplebbitChallengeSetting);
 
-        await expect(challengeFile.getChallenge({ options: {} } as SubplebbitChallengeSetting, request, 0, subplebbit)).rejects.toThrow(
-            /Invalid evaluate response/i
-        );
+        await expect(
+            challengeFile.getChallenge({
+                challengeSettings: { options: {} } as SubplebbitChallengeSetting,
+                challengeRequestMessage: request,
+                challengeIndex: 0,
+                subplebbit
+            })
+        ).rejects.toThrow(/Invalid evaluate response/i);
     });
 
     it("throws on invalid verify responses", async () => {
         stubFetch(createResponse(createEvaluateResponse({ riskScore: 0.5 })), createResponse({}));
         const challengeFile = ChallengeFileFactory({} as SubplebbitChallengeSetting);
 
-        const result = await challengeFile.getChallenge({ options: {} } as SubplebbitChallengeSetting, request, 0, subplebbit);
+        const result = await challengeFile.getChallenge({
+            challengeSettings: { options: {} } as SubplebbitChallengeSetting,
+            challengeRequestMessage: request,
+            challengeIndex: 0,
+            subplebbit
+        });
 
         if (!("verify" in result)) {
             throw new Error("Expected a challenge response");
@@ -318,17 +368,27 @@ describe("EasyCommunitySpamBlocker challenge package", () => {
         stubFetch(createResponse({ error: "boom" }, { ok: false, status: 500 }));
         const challengeFile = ChallengeFileFactory({} as SubplebbitChallengeSetting);
 
-        await expect(challengeFile.getChallenge({ options: {} } as SubplebbitChallengeSetting, request, 0, subplebbit)).rejects.toThrow(
-            /EasyCommunitySpamBlocker server error \(500\).*boom/i
-        );
+        await expect(
+            challengeFile.getChallenge({
+                challengeSettings: { options: {} } as SubplebbitChallengeSetting,
+                challengeRequestMessage: request,
+                challengeIndex: 0,
+                subplebbit
+            })
+        ).rejects.toThrow(/EasyCommunitySpamBlocker server error \(500\).*boom/i);
     });
 
     it("throws when the server returns invalid JSON", async () => {
         stubFetch(createResponse(undefined, { ok: true, jsonThrows: true }));
         const challengeFile = ChallengeFileFactory({} as SubplebbitChallengeSetting);
 
-        await expect(challengeFile.getChallenge({ options: {} } as SubplebbitChallengeSetting, request, 0, subplebbit)).rejects.toThrow(
-            /Invalid JSON response/i
-        );
+        await expect(
+            challengeFile.getChallenge({
+                challengeSettings: { options: {} } as SubplebbitChallengeSetting,
+                challengeRequestMessage: request,
+                challengeIndex: 0,
+                subplebbit
+            })
+        ).rejects.toThrow(/Invalid JSON response/i);
     });
 });
