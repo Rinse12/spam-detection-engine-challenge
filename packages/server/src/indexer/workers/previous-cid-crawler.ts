@@ -159,11 +159,7 @@ export class PreviousCidCrawler {
                     }
 
                     // Queue the next previousCommentCid if valid and not already indexed
-                    if (
-                        result.nextPreviousCid &&
-                        result.hasCommentUpdate &&
-                        !this.queries.hasIndexedCommentIpfs(result.nextPreviousCid)
-                    ) {
+                    if (result.nextPreviousCid && result.hasCommentUpdate && !this.queries.hasIndexedCommentIpfs(result.nextPreviousCid)) {
                         this.crawlQueue.push({
                             cid: result.nextPreviousCid,
                             depth: item.depth + 1
