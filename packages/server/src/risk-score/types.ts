@@ -1,5 +1,6 @@
 import type { DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor } from "@plebbit/plebbit-js/dist/node/pubsub-messages/types.js";
 import type { SpamDetectionDatabase } from "../db/index.js";
+import type { CombinedDataService } from "./combined-data-service.js";
 
 /**
  * Individual risk factor result.
@@ -39,6 +40,8 @@ export interface RiskContext {
     hasIpInfo: boolean;
     /** Database access for querying historical data */
     db: SpamDetectionDatabase;
+    /** Combined data service for querying both engine and indexer tables */
+    combinedData: CombinedDataService;
 }
 
 /**

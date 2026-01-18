@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { calculateAccountAge } from "../../src/risk-score/factors/account-age.js";
 import { SpamDetectionDatabase } from "../../src/db/index.js";
+import { CombinedDataService } from "../../src/risk-score/combined-data-service.js";
 import type { RiskContext } from "../../src/risk-score/types.js";
 import type { DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor } from "@plebbit/plebbit-js/dist/node/pubsub-messages/types.js";
 
@@ -46,9 +47,11 @@ function createMockChallengeRequest(author: ReturnType<typeof createMockAuthor>)
 
 describe("calculateAccountAge", () => {
     let db: SpamDetectionDatabase;
+    let combinedData: CombinedDataService;
 
     beforeEach(() => {
         db = new SpamDetectionDatabase({ path: ":memory:" });
+        combinedData = new CombinedDataService(db);
     });
 
     afterEach(() => {
@@ -64,7 +67,8 @@ describe("calculateAccountAge", () => {
                 challengeRequest,
                 now: baseTimestamp,
                 hasIpInfo: false,
-                db
+                db,
+                combinedData
             };
 
             const result = calculateAccountAge(ctx, 0.17);
@@ -85,7 +89,8 @@ describe("calculateAccountAge", () => {
                 challengeRequest,
                 now: baseTimestamp,
                 hasIpInfo: false,
-                db
+                db,
+                combinedData
             };
 
             const result = calculateAccountAge(ctx, 0.17);
@@ -104,7 +109,8 @@ describe("calculateAccountAge", () => {
                 challengeRequest,
                 now: baseTimestamp,
                 hasIpInfo: false,
-                db
+                db,
+                combinedData
             };
 
             const result = calculateAccountAge(ctx, 0.17);
@@ -152,7 +158,8 @@ describe("calculateAccountAge", () => {
                 challengeRequest,
                 now: baseTimestamp,
                 hasIpInfo: false,
-                db
+                db,
+                combinedData
             };
 
             const result = calculateAccountAge(ctx, 0.17);
@@ -199,7 +206,8 @@ describe("calculateAccountAge", () => {
                 challengeRequest,
                 now: baseTimestamp,
                 hasIpInfo: false,
-                db
+                db,
+                combinedData
             };
 
             const result = calculateAccountAge(ctx, 0.17);
@@ -242,7 +250,8 @@ describe("calculateAccountAge", () => {
                 challengeRequest,
                 now: baseTimestamp,
                 hasIpInfo: false,
-                db
+                db,
+                combinedData
             };
 
             const result = calculateAccountAge(ctx, 0.17);
@@ -287,7 +296,8 @@ describe("calculateAccountAge", () => {
                 challengeRequest,
                 now: baseTimestamp,
                 hasIpInfo: false,
-                db
+                db,
+                combinedData
             };
 
             const result = calculateAccountAge(ctx, 0.17);
@@ -328,7 +338,8 @@ describe("calculateAccountAge", () => {
                 challengeRequest,
                 now: baseTimestamp,
                 hasIpInfo: false,
-                db
+                db,
+                combinedData
             };
 
             const result = calculateAccountAge(ctx, 0.17);
@@ -407,7 +418,8 @@ describe("calculateAccountAge", () => {
                 challengeRequest,
                 now: baseTimestamp,
                 hasIpInfo: false,
-                db
+                db,
+                combinedData
             };
 
             const result = calculateAccountAge(ctx, 0.17);

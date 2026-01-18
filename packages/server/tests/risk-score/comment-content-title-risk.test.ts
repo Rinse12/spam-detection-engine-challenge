@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { calculateCommentContentTitleRisk } from "../../src/risk-score/factors/comment-content-title-risk.js";
 import { SpamDetectionDatabase } from "../../src/db/index.js";
+import { CombinedDataService } from "../../src/risk-score/combined-data-service.js";
 import type { RiskContext } from "../../src/risk-score/types.js";
 import type { DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor } from "@plebbit/plebbit-js/dist/node/pubsub-messages/types.js";
 
@@ -58,9 +59,11 @@ function createMockVoteChallengeRequest(authorAddress: string): DecryptedChallen
 
 describe("calculateCommentContentTitleRisk", () => {
     let db: SpamDetectionDatabase;
+    let combinedData: CombinedDataService;
 
     beforeEach(() => {
         db = new SpamDetectionDatabase({ path: ":memory:" });
+        combinedData = new CombinedDataService(db);
     });
 
     afterEach(() => {
@@ -75,7 +78,8 @@ describe("calculateCommentContentTitleRisk", () => {
                 challengeRequest,
                 now: baseTimestamp,
                 hasIpInfo: false,
-                db
+                db,
+                combinedData
             };
 
             const result = calculateCommentContentTitleRisk(ctx, 0.18);
@@ -98,7 +102,8 @@ describe("calculateCommentContentTitleRisk", () => {
                 challengeRequest,
                 now: baseTimestamp,
                 hasIpInfo: false,
-                db
+                db,
+                combinedData
             };
 
             const result = calculateCommentContentTitleRisk(ctx, 0.18);
@@ -137,7 +142,8 @@ describe("calculateCommentContentTitleRisk", () => {
                 challengeRequest,
                 now: baseTimestamp,
                 hasIpInfo: false,
-                db
+                db,
+                combinedData
             };
 
             const result = calculateCommentContentTitleRisk(ctx, 0.18);
@@ -177,7 +183,8 @@ describe("calculateCommentContentTitleRisk", () => {
                 challengeRequest,
                 now: baseTimestamp,
                 hasIpInfo: false,
-                db
+                db,
+                combinedData
             };
 
             const result = calculateCommentContentTitleRisk(ctx, 0.18);
@@ -217,7 +224,8 @@ describe("calculateCommentContentTitleRisk", () => {
                 challengeRequest,
                 now: baseTimestamp,
                 hasIpInfo: false,
-                db
+                db,
+                combinedData
             };
 
             const result = calculateCommentContentTitleRisk(ctx, 0.18);
@@ -259,7 +267,8 @@ describe("calculateCommentContentTitleRisk", () => {
                 challengeRequest,
                 now: baseTimestamp,
                 hasIpInfo: false,
-                db
+                db,
+                combinedData
             };
 
             const result = calculateCommentContentTitleRisk(ctx, 0.18);
@@ -299,7 +308,8 @@ describe("calculateCommentContentTitleRisk", () => {
                 challengeRequest,
                 now: baseTimestamp,
                 hasIpInfo: false,
-                db
+                db,
+                combinedData
             };
 
             const result = calculateCommentContentTitleRisk(ctx, 0.18);
@@ -339,7 +349,8 @@ describe("calculateCommentContentTitleRisk", () => {
                 challengeRequest,
                 now: baseTimestamp,
                 hasIpInfo: false,
-                db
+                db,
+                combinedData
             };
 
             const result = calculateCommentContentTitleRisk(ctx, 0.18);
@@ -379,7 +390,8 @@ describe("calculateCommentContentTitleRisk", () => {
                 challengeRequest,
                 now: baseTimestamp,
                 hasIpInfo: false,
-                db
+                db,
+                combinedData
             };
 
             const result = calculateCommentContentTitleRisk(ctx, 0.18);
@@ -421,7 +433,8 @@ describe("calculateCommentContentTitleRisk", () => {
                 challengeRequest,
                 now: baseTimestamp,
                 hasIpInfo: false,
-                db
+                db,
+                combinedData
             };
 
             const result = calculateCommentContentTitleRisk(ctx, 0.18);
@@ -449,7 +462,8 @@ describe("calculateCommentContentTitleRisk", () => {
                 challengeRequest,
                 now: baseTimestamp,
                 hasIpInfo: false,
-                db
+                db,
+                combinedData
             };
 
             const result = calculateCommentContentTitleRisk(ctx, 0.18);
@@ -467,7 +481,8 @@ describe("calculateCommentContentTitleRisk", () => {
                 challengeRequest,
                 now: baseTimestamp,
                 hasIpInfo: false,
-                db
+                db,
+                combinedData
             };
 
             const result = calculateCommentContentTitleRisk(ctx, 0.18);
@@ -485,7 +500,8 @@ describe("calculateCommentContentTitleRisk", () => {
                 challengeRequest,
                 now: baseTimestamp,
                 hasIpInfo: false,
-                db
+                db,
+                combinedData
             };
 
             const result = calculateCommentContentTitleRisk(ctx, 0.18);

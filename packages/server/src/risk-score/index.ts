@@ -2,6 +2,7 @@ import type { DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor } from "@
 import type { SpamDetectionDatabase } from "../db/index.js";
 import type { RiskContext, RiskFactor, RiskScoreResult, WeightConfig } from "./types.js";
 import { WEIGHTS_NO_IP, WEIGHTS_WITH_IP } from "./types.js";
+import { CombinedDataService } from "./combined-data-service.js";
 import {
     calculateAccountAge,
     calculateAuthorReputation,
@@ -64,12 +65,16 @@ export function calculateRiskScore(options: CalculateRiskScoreOptions): RiskScor
     // Select weight configuration based on IP availability
     const weights = options.weights ?? (hasIpInfo ? WEIGHTS_WITH_IP : WEIGHTS_NO_IP);
 
+    // Create combined data service for querying both engine and indexer tables
+    const combinedData = new CombinedDataService(db);
+
     // Create context for factor calculators
     const ctx: RiskContext = {
         challengeRequest,
         now,
         hasIpInfo,
-        db
+        db,
+        combinedData
     };
 
     // Calculate all factors

@@ -89,7 +89,7 @@ function hasRepetitivePatterns(text: string): boolean {
  * For non-comment publications, returns a neutral score.
  */
 export function calculateCommentContentTitleRisk(ctx: RiskContext, weight: number): RiskFactor {
-    const { challengeRequest, db, now } = ctx;
+    const { challengeRequest, combinedData, now } = ctx;
 
     // Check if this is a comment (post or reply)
     const publicationType = getPublicationType(challengeRequest);
@@ -124,7 +124,7 @@ export function calculateCommentContentTitleRisk(ctx: RiskContext, weight: numbe
     // Check for similar content from the same author (self-spamming)
     if (content && content.trim().length > 10) {
         // Query with lower threshold to get all candidates, then categorize by similarity level
-        const similarFromAuthor = db.findSimilarContentByAuthor({
+        const similarFromAuthor = combinedData.findSimilarContentByAuthor({
             authorPublicKey,
             content,
             sinceTimestamp,
@@ -165,8 +165,8 @@ export function calculateCommentContentTitleRisk(ctx: RiskContext, weight: numbe
         }
 
         // Check for similar content from different authors (coordinated spam)
-        const similarFromOthers = db.findSimilarContentByOthers({
-            authorPublicKey,
+        const similarFromOthers = combinedData.findSimilarContentByOthers({
+            excludeAuthorPublicKey: authorPublicKey,
             content,
             sinceTimestamp,
             similarityThreshold: SIMILARITY_THRESHOLD
@@ -210,7 +210,7 @@ export function calculateCommentContentTitleRisk(ctx: RiskContext, weight: numbe
 
     // Check for similar titles from the same author (post title spam)
     if (title && title.trim().length > 5) {
-        const similarTitlesFromAuthor = db.findSimilarContentByAuthor({
+        const similarTitlesFromAuthor = combinedData.findSimilarContentByAuthor({
             authorPublicKey,
             title,
             sinceTimestamp,
@@ -242,8 +242,8 @@ export function calculateCommentContentTitleRisk(ctx: RiskContext, weight: numbe
         }
 
         // Check for similar titles from different authors
-        const similarTitlesFromOthers = db.findSimilarContentByOthers({
-            authorPublicKey,
+        const similarTitlesFromOthers = combinedData.findSimilarContentByOthers({
+            excludeAuthorPublicKey: authorPublicKey,
             title,
             sinceTimestamp,
             similarityThreshold: SIMILARITY_THRESHOLD

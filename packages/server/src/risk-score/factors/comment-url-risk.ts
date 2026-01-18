@@ -170,7 +170,7 @@ function detectSuspiciousUrlPatterns(url: string): string[] {
  * For non-comment publications or comments without links, returns a neutral score.
  */
 export function calculateCommentUrlRisk(ctx: RiskContext, weight: number): RiskFactor {
-    const { challengeRequest, db, now } = ctx;
+    const { challengeRequest, combinedData, now } = ctx;
 
     // Check if this is a comment (post or reply)
     const publicationType = getPublicationType(challengeRequest);
@@ -220,7 +220,7 @@ export function calculateCommentUrlRisk(ctx: RiskContext, weight: number): RiskF
         // ============================================
 
         // Check for same link from the same author
-        const sameAuthorLinks = db.findLinksByAuthor({
+        const sameAuthorLinks = combinedData.findLinksByAuthor({
             authorPublicKey,
             link: normalizedLink,
             sinceTimestamp
@@ -238,8 +238,8 @@ export function calculateCommentUrlRisk(ctx: RiskContext, weight: number): RiskF
         }
 
         // Check for same link from different authors (coordinated spam)
-        const otherAuthorsResult = db.findLinksByOthers({
-            authorPublicKey,
+        const otherAuthorsResult = combinedData.findLinksByOthers({
+            excludeAuthorPublicKey: authorPublicKey,
             link: normalizedLink,
             sinceTimestamp
         });
@@ -281,7 +281,7 @@ export function calculateCommentUrlRisk(ctx: RiskContext, weight: number): RiskF
         }
 
         // Check domain diversity - same domain posted repeatedly is suspicious
-        const domainCount = db.countLinkDomainByAuthor({
+        const domainCount = combinedData.countLinkDomainByAuthor({
             authorPublicKey,
             domain: extractDomain(link)!,
             sinceTimestamp

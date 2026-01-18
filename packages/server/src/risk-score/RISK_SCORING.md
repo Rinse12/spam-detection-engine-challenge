@@ -42,16 +42,39 @@ Since `author.address` can be a domain that the author controls but doesn't cryp
 
 The Ed25519 public key in the signature is the cryptographic identifier that truly identifies the author across all their publications.
 
+## Data Sources
+
+Risk factors query data from two separate database table sets:
+
+1. **Engine tables** (`comments`, `votes`, `commentEdits`, `commentModerations`): Populated by `/evaluate` endpoint when publications are submitted for spam detection
+2. **Indexer tables** (`indexed_comments_ipfs`, `indexed_comments_update`, `modqueue_*`): Populated by the background indexer which crawls subplebbits
+
+The `CombinedDataService` queries both sources and combines data using factor-specific strategies:
+
+| Factor                   | Combination Strategy                                    |
+| ------------------------ | ------------------------------------------------------- |
+| Account Age              | MIN (oldest timestamp from either source)               |
+| Karma                    | Per-subplebbit, use LATEST entry from either source     |
+| Velocity                 | SUM (combine counts from both sources)                  |
+| Content/Link Similarity  | UNION (query both sources)                              |
+| Network factors          | Indexer only (ban history, modqueue rejection, removal) |
+
+This approach provides:
+- **Broader coverage**: Authors may have history in indexer even if they've never used this spam detection server
+- **Fresher data**: Engine data is real-time from `/evaluate` calls
+- **More accurate**: Uses the most relevant data for each factor type
+
 ## Risk Factors
 
 ### 1. Account Age (Weight: 12% without IP, 8% with IP)
 
-Evaluates how long the author has been active, using the **older** of:
+Evaluates how long the author has been active, using the **oldest** of:
 
 1. `author.subplebbit.firstCommentTimestamp` (TRUSTED - from subplebbit)
-2. First seen timestamp from the spam detection database
+2. First seen timestamp from engine database (receivedAt)
+3. First publication timestamp from indexer database
 
-This dual-source approach ensures we capture the earliest known activity even when the subplebbit data is incomplete or when the spam detection system has older records.
+This multi-source approach ensures we capture the earliest known activity across all data sources.
 
 | Account Age | Risk Score | Description                            |
 | ----------- | ---------- | -------------------------------------- |
@@ -70,14 +93,15 @@ This dual-source approach ensures we capture the earliest known activity even wh
 Evaluates the author's accumulated karma (`postScore + replyScore`) using a weighted combination of:
 
 1. **Current subplebbit karma** (70% weight): From `author.subplebbit` (TRUSTED)
-2. **Other subplebbits karma** (30% weight): Aggregated from the spam detection database
+2. **Other subplebbits karma** (30% weight): Aggregated from combined engine + indexer data
 
 This dual-source approach gives priority to the author's reputation in the current subplebbit while still considering their cross-community reputation. A user who is problematic in one subplebbit won't automatically get a pass just because they have good karma elsewhere.
 
-**Karma aggregation from database:**
+**Karma aggregation from combined data sources:**
 
-- Only the **latest** karma per subplebbit is counted (avoids summing duplicates)
-- Karma is extracted from stored publications (comments, votes, edits, moderations)
+- Queries both engine tables and indexer tables
+- For each subplebbit, uses the **latest** entry based on timestamp (receivedAt for engine, fetchedAt for indexer)
+- Indexer data comes from `indexed_comments_update.author.subplebbit` which is TRUSTED (from CommentUpdate)
 - The current subplebbit's karma from the challenge request is always used (most recent and direct from subplebbit)
 
 **Weighted calculation:**
@@ -111,12 +135,14 @@ Evaluates whether the author has verified publication history in this subplebbit
 
 ### 4. Comment Content/Title Risk (Weight: 12% without IP, 8% with IP)
 
-Analyzes comment content and title for spam indicators by querying the database for similar past publications. **Only applies to comments (posts and replies)** - returns neutral score (0.5) for other publication types.
+Analyzes comment content and title for spam indicators by querying both engine and indexer databases for similar past publications. **Only applies to comments (posts and replies)** - returns neutral score (0.5) for other publication types.
 
 **Similarity detection uses:**
 
 1. SQL substring matching (LIKE) to find candidate matches
 2. Jaccard similarity on word sets to calculate actual similarity (threshold: 60%)
+
+**Note**: Results from both engine and indexer tables are combined to detect cross-subplebbit spam patterns.
 
 | Indicator                                      | Score Impact | Description                            |
 | ---------------------------------------------- | ------------ | -------------------------------------- |
@@ -154,7 +180,9 @@ Analyzes comment content and title for spam indicators by querying the database 
 
 ### 5. Comment URL/Link Risk (Weight: 10% without IP, 8% with IP)
 
-Analyzes `comment.link` (the dedicated link field for link posts) for spam indicators. This is separate from URLs found in `comment.content`. **Only applies to comments (posts and replies) that have a link** - returns neutral score (0.5) for other publications or comments without links.
+Analyzes `comment.link` (the dedicated link field for link posts) for spam indicators by querying both engine and indexer databases. This is separate from URLs found in `comment.content`. **Only applies to comments (posts and replies) that have a link** - returns neutral score (0.5) for other publications or comments without links.
+
+Link counts from both sources are **summed** to detect cross-subplebbit link spam campaigns.
 
 | Indicator                                         | Score Impact | Description                      |
 | ------------------------------------------------- | ------------ | -------------------------------- |
@@ -181,7 +209,9 @@ Analyzes `comment.link` (the dedicated link field for link posts) for spam indic
 
 ### 6. Velocity Risk (Weight: 8% without IP, 6% with IP)
 
-Measures how frequently an author is publishing to detect burst spam behavior. Queries the database to count actual publications by the author's **signature public key** in the last hour and last 24 hours.
+Measures how frequently an author is publishing to detect burst spam behavior. Queries both engine and indexer databases to count publications by the author's **signature public key** in the last hour and last 24 hours. Counts from both sources are **summed** to capture total network-wide activity.
+
+**Note**: Indexer only tracks posts and replies. Votes, edits, and moderations are counted from engine data only.
 
 The velocity risk score is the **maximum** of three checks:
 

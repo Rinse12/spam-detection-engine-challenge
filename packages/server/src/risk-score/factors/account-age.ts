@@ -43,14 +43,14 @@ const SCORES = {
  * - Accounts with no timestamp are treated as brand new (highest risk)
  */
 export function calculateAccountAge(ctx: RiskContext, weight: number): RiskFactor {
-    const { challengeRequest, now, db } = ctx;
+    const { challengeRequest, now, combinedData } = ctx;
     const author = getAuthorFromChallengeRequest(challengeRequest);
     const authorPublicKey = getAuthorPublicKeyFromChallengeRequest(challengeRequest);
     const subplebbitAuthor = author.subplebbit;
 
-    // Get first seen timestamp from our own database using the author's public key
-    // (author.address can be a domain and is not cryptographically tied to the author)
-    const dbFirstSeen = db.getAuthorFirstSeenTimestamp(authorPublicKey);
+    // Get first seen timestamp from combined data (engine + indexer)
+    // Uses the OLDEST timestamp from either source for accurate account age
+    const dbFirstSeen = combinedData.getAuthorEarliestTimestamp(authorPublicKey);
     const subplebbitFirstComment = subplebbitAuthor?.firstCommentTimestamp;
 
     // Determine the effective first activity timestamp (use the older one)

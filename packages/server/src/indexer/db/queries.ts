@@ -471,4 +471,354 @@ export class IndexerQueries {
 
         return result;
     }
+
+    // ============================================
+    // Risk Factor Query Methods (for CombinedDataService)
+    // ============================================
+
+    /**
+     * Get karma per subplebbit from indexed comments.
+     * Returns author.subplebbit data (TRUSTED, from CommentUpdate).
+     * Only returns the most recent entry per subplebbit based on fetchedAt.
+     */
+    getAuthorKarmaBySubplebbitFromIndexer(
+        authorPublicKey: string
+    ): Map<string, { postScore: number; replyScore: number; fetchedAt: number }> {
+        const karmaMap = new Map<string, { postScore: number; replyScore: number; fetchedAt: number }>();
+
+        // Query indexed_comments_update joined with indexed_comments_ipfs
+        // The author field in indexed_comments_update contains author.subplebbit (TRUSTED)
+        const rows = this.db
+            .prepare(
+                `SELECT
+                    i.subplebbitAddress,
+                    COALESCE(json_extract(u.author, '$.subplebbit.postScore'), 0) as postScore,
+                    COALESCE(json_extract(u.author, '$.subplebbit.replyScore'), 0) as replyScore,
+                    u.fetchedAt
+                 FROM indexed_comments_update u
+                 JOIN indexed_comments_ipfs i ON u.cid = i.cid
+                 WHERE json_extract(i.signature, '$.publicKey') = ?
+                   AND u.author IS NOT NULL
+                 ORDER BY u.fetchedAt DESC`
+            )
+            .all(authorPublicKey) as Array<{
+            subplebbitAddress: string;
+            postScore: number;
+            replyScore: number;
+            fetchedAt: number;
+        }>;
+
+        // Keep only the most recent entry per subplebbit
+        for (const row of rows) {
+            if (!karmaMap.has(row.subplebbitAddress)) {
+                karmaMap.set(row.subplebbitAddress, {
+                    postScore: row.postScore,
+                    replyScore: row.replyScore,
+                    fetchedAt: row.fetchedAt
+                });
+            }
+        }
+
+        return karmaMap;
+    }
+
+    /**
+     * Get velocity stats from indexed comments.
+     * Returns counts in the last hour and last 24 hours.
+     * Only tracks posts and replies (comments) - votes/edits/moderations are not indexed.
+     */
+    getAuthorVelocityFromIndexer(
+        authorPublicKey: string,
+        publicationType: "post" | "reply"
+    ): { lastHour: number; last24Hours: number } {
+        const now = Math.floor(Date.now() / 1000);
+        const oneHourAgo = now - 3600;
+        const oneDayAgo = now - 86400;
+
+        // Posts have depth=0 (or parentCid IS NULL), replies have depth>0 (or parentCid IS NOT NULL)
+        const depthCondition = publicationType === "post" ? "i.parentCid IS NULL" : "i.parentCid IS NOT NULL";
+
+        const lastHourResult = this.db
+            .prepare(
+                `SELECT COUNT(*) as count
+                 FROM indexed_comments_ipfs i
+                 WHERE json_extract(i.signature, '$.publicKey') = ?
+                   AND ${depthCondition}
+                   AND i.timestamp >= ?`
+            )
+            .get(authorPublicKey, oneHourAgo) as { count: number };
+
+        const last24HoursResult = this.db
+            .prepare(
+                `SELECT COUNT(*) as count
+                 FROM indexed_comments_ipfs i
+                 WHERE json_extract(i.signature, '$.publicKey') = ?
+                   AND ${depthCondition}
+                   AND i.timestamp >= ?`
+            )
+            .get(authorPublicKey, oneDayAgo) as { count: number };
+
+        return {
+            lastHour: lastHourResult.count,
+            last24Hours: last24HoursResult.count
+        };
+    }
+
+    /**
+     * Find similar content from indexed comments.
+     * Used for cross-subplebbit spam detection.
+     *
+     * Note: This method requires the jaccard_similarity function to be registered.
+     * The function should be registered on the database before calling this method.
+     */
+    findSimilarContentFromIndexer(params: {
+        content?: string;
+        title?: string;
+        sinceTimestamp: number;
+        authorPublicKey?: string;
+        excludeAuthorPublicKey?: string;
+        similarityThreshold?: number;
+        limit?: number;
+    }): Array<{
+        cid: string;
+        authorPublicKey: string;
+        content: string | null;
+        title: string | null;
+        subplebbitAddress: string;
+        timestamp: number;
+        contentSimilarity: number;
+        titleSimilarity: number;
+    }> {
+        const { content, title, sinceTimestamp, authorPublicKey, excludeAuthorPublicKey, similarityThreshold = 0.6, limit = 100 } = params;
+
+        // Need at least content or title to search
+        if ((!content || content.trim().length <= 10) && (!title || title.trim().length <= 5)) {
+            return [];
+        }
+
+        const conditions: string[] = ["i.timestamp >= @sinceTimestamp"];
+        const queryParams: Record<string, unknown> = {
+            sinceTimestamp,
+            limit,
+            similarityThreshold,
+            content: content || null,
+            title: title || null
+        };
+
+        if (authorPublicKey) {
+            conditions.push("json_extract(i.signature, '$.publicKey') = @authorPublicKey");
+            queryParams.authorPublicKey = authorPublicKey;
+        }
+
+        if (excludeAuthorPublicKey) {
+            conditions.push("json_extract(i.signature, '$.publicKey') != @excludeAuthorPublicKey");
+            queryParams.excludeAuthorPublicKey = excludeAuthorPublicKey;
+        }
+
+        // Build similarity conditions
+        const similarityConditions: string[] = [];
+
+        if (content && content.trim().length > 10) {
+            similarityConditions.push("jaccard_similarity(i.content, @content) >= @similarityThreshold");
+        }
+
+        if (title && title.trim().length > 5) {
+            similarityConditions.push("jaccard_similarity(i.title, @title) >= @similarityThreshold");
+        }
+
+        if (similarityConditions.length > 0) {
+            conditions.push(`(${similarityConditions.join(" OR ")})`);
+        }
+
+        const query = `
+            SELECT
+                i.cid,
+                json_extract(i.signature, '$.publicKey') as authorPublicKey,
+                i.content,
+                i.title,
+                i.subplebbitAddress,
+                i.timestamp,
+                jaccard_similarity(i.content, @content) as contentSimilarity,
+                jaccard_similarity(i.title, @title) as titleSimilarity
+            FROM indexed_comments_ipfs i
+            WHERE ${conditions.join(" AND ")}
+            ORDER BY i.timestamp DESC
+            LIMIT @limit
+        `;
+
+        return this.db.prepare(query).all(queryParams) as Array<{
+            cid: string;
+            authorPublicKey: string;
+            content: string | null;
+            title: string | null;
+            subplebbitAddress: string;
+            timestamp: number;
+            contentSimilarity: number;
+            titleSimilarity: number;
+        }>;
+    }
+
+    /**
+     * Find exact matching content from indexed comments.
+     * Faster than similarity search - used for exact duplicate detection.
+     */
+    findExactContentFromIndexer(params: {
+        content?: string;
+        title?: string;
+        sinceTimestamp: number;
+        authorPublicKey?: string;
+        excludeAuthorPublicKey?: string;
+        limit?: number;
+    }): Array<{
+        cid: string;
+        authorPublicKey: string;
+        content: string | null;
+        title: string | null;
+        subplebbitAddress: string;
+        timestamp: number;
+    }> {
+        const { content, title, sinceTimestamp, authorPublicKey, excludeAuthorPublicKey, limit = 100 } = params;
+
+        const conditions: string[] = ["i.timestamp >= @sinceTimestamp"];
+        const queryParams: Record<string, unknown> = {
+            sinceTimestamp,
+            limit
+        };
+
+        if (authorPublicKey) {
+            conditions.push("json_extract(i.signature, '$.publicKey') = @authorPublicKey");
+            queryParams.authorPublicKey = authorPublicKey;
+        }
+
+        if (excludeAuthorPublicKey) {
+            conditions.push("json_extract(i.signature, '$.publicKey') != @excludeAuthorPublicKey");
+            queryParams.excludeAuthorPublicKey = excludeAuthorPublicKey;
+        }
+
+        // Build content/title matching conditions
+        const contentConditions: string[] = [];
+
+        if (content && content.trim().length > 0) {
+            contentConditions.push("LOWER(TRIM(i.content)) = LOWER(TRIM(@content))");
+            queryParams.content = content;
+        }
+
+        if (title && title.trim().length > 0) {
+            contentConditions.push("LOWER(TRIM(i.title)) = LOWER(TRIM(@title))");
+            queryParams.title = title;
+        }
+
+        if (contentConditions.length === 0) {
+            return [];
+        }
+
+        conditions.push(`(${contentConditions.join(" OR ")})`);
+
+        const query = `
+            SELECT
+                i.cid,
+                json_extract(i.signature, '$.publicKey') as authorPublicKey,
+                i.content,
+                i.title,
+                i.subplebbitAddress,
+                i.timestamp
+            FROM indexed_comments_ipfs i
+            WHERE ${conditions.join(" AND ")}
+            ORDER BY i.timestamp DESC
+            LIMIT @limit
+        `;
+
+        return this.db.prepare(query).all(queryParams) as Array<{
+            cid: string;
+            authorPublicKey: string;
+            content: string | null;
+            title: string | null;
+            subplebbitAddress: string;
+            timestamp: number;
+        }>;
+    }
+
+    /**
+     * Find links from indexed comments.
+     * Used for cross-subplebbit link spam detection.
+     */
+    findLinksFromIndexer(params: {
+        link: string;
+        sinceTimestamp: number;
+        authorPublicKey?: string;
+        excludeAuthorPublicKey?: string;
+    }): { count: number; uniqueAuthors: number } {
+        const { link, sinceTimestamp, authorPublicKey, excludeAuthorPublicKey } = params;
+
+        const conditions: string[] = ["i.timestamp >= @sinceTimestamp", "i.link IS NOT NULL", "LOWER(i.link) = LOWER(@link)"];
+        const queryParams: Record<string, unknown> = {
+            sinceTimestamp,
+            link
+        };
+
+        if (authorPublicKey) {
+            conditions.push("json_extract(i.signature, '$.publicKey') = @authorPublicKey");
+            queryParams.authorPublicKey = authorPublicKey;
+        }
+
+        if (excludeAuthorPublicKey) {
+            conditions.push("json_extract(i.signature, '$.publicKey') != @excludeAuthorPublicKey");
+            queryParams.excludeAuthorPublicKey = excludeAuthorPublicKey;
+        }
+
+        const query = `
+            SELECT
+                COUNT(*) as count,
+                COUNT(DISTINCT json_extract(i.signature, '$.publicKey')) as uniqueAuthors
+            FROM indexed_comments_ipfs i
+            WHERE ${conditions.join(" AND ")}
+        `;
+
+        const result = this.db.prepare(query).get(queryParams) as { count: number; uniqueAuthors: number };
+        return result;
+    }
+
+    /**
+     * Count links to a specific domain from indexed comments.
+     */
+    countLinkDomainFromIndexer(params: {
+        domain: string;
+        sinceTimestamp: number;
+        authorPublicKey?: string;
+    }): number {
+        const { domain, sinceTimestamp, authorPublicKey } = params;
+
+        const conditions: string[] = [
+            "i.timestamp >= @sinceTimestamp",
+            "i.link IS NOT NULL",
+            `(
+                LOWER(i.link) LIKE '%://' || LOWER(@domain) || '/%'
+                OR LOWER(i.link) LIKE '%://' || LOWER(@domain) || '?%'
+                OR LOWER(i.link) LIKE '%://' || LOWER(@domain) || '#%'
+                OR LOWER(i.link) LIKE '%://www.' || LOWER(@domain) || '/%'
+                OR LOWER(i.link) LIKE '%://www.' || LOWER(@domain) || '?%'
+                OR LOWER(i.link) LIKE '%://www.' || LOWER(@domain) || '#%'
+                OR LOWER(i.link) = '%://' || LOWER(@domain)
+                OR LOWER(i.link) = '%://www.' || LOWER(@domain)
+            )`
+        ];
+        const queryParams: Record<string, unknown> = {
+            sinceTimestamp,
+            domain
+        };
+
+        if (authorPublicKey) {
+            conditions.push("json_extract(i.signature, '$.publicKey') = @authorPublicKey");
+            queryParams.authorPublicKey = authorPublicKey;
+        }
+
+        const query = `
+            SELECT COUNT(*) as count
+            FROM indexed_comments_ipfs i
+            WHERE ${conditions.join(" AND ")}
+        `;
+
+        const result = this.db.prepare(query).get(queryParams) as { count: number };
+        return result.count;
+    }
 }

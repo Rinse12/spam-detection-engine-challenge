@@ -67,9 +67,9 @@ export function calculateKarma(ctx: RiskContext, weight: number): RiskFactor {
     const currentSubKarma = currentPostScore + currentReplyScore;
     const currentSubplebbitAddress = publication.subplebbitAddress;
 
-    // Get aggregated karma from database (latest per subplebbit)
-    // Use the author's public key for identity tracking (author.address can be a domain)
-    const dbKarma = ctx.db.getAuthorKarmaBySubplebbit(authorPublicKey);
+    // Get karma from combined data (engine + indexer)
+    // Per-subplebbit, uses the LATEST entry from either source
+    const dbKarma = ctx.combinedData.getAuthorKarmaBySubplebbit(authorPublicKey);
 
     // Calculate karma from other subplebbits (excluding current sub)
     let otherSubsPostScore = 0;

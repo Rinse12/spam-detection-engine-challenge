@@ -103,13 +103,16 @@ export function registerEvaluateRoute(fastify: FastifyInstance, options: Evaluat
                 expiresAt
             });
 
-            // Register subplebbit for indexing
+            // Register subplebbit for indexing (only if not already registered)
             const indexerQueries = new IndexerQueries(db.getDb());
-            indexerQueries.upsertIndexedSubplebbit({
-                address: subplebbitAddress,
-                publicKey: subplebbitPublicKey,
-                discoveredVia: "evaluate_api"
-            });
+            const existingSubplebbit = indexerQueries.getIndexedSubplebbit(subplebbitAddress);
+            if (!existingSubplebbit) {
+                indexerQueries.upsertIndexedSubplebbit({
+                    address: subplebbitAddress,
+                    publicKey: subplebbitPublicKey,
+                    discoveredVia: "evaluate_api"
+                });
+            }
 
             // Calculate risk score using the risk-score module
             const riskScoreResult = calculateRiskScore({

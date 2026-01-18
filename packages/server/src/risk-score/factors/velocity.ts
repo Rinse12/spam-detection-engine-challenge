@@ -1,4 +1,4 @@
-import type { SpamDetectionDatabase } from "../../db/index.js";
+import type { CombinedDataService } from "../combined-data-service.js";
 import type { RiskContext, RiskFactor } from "../types.js";
 import { getAuthorPublicKeyFromChallengeRequest, getPublicationType, type PublicationType } from "../utils.js";
 
@@ -106,7 +106,7 @@ function calculateScoreFromVelocity(
  * Used to apply cross-type penalty when another type shows high velocity.
  */
 function getMaxVelocityFromOtherTypes(
-    db: SpamDetectionDatabase,
+    combinedData: CombinedDataService,
     authorPublicKey: string,
     excludeType: "post" | "reply" | "vote" | "commentEdit" | "commentModeration"
 ): { score: number; level: string; type: string } {
@@ -125,7 +125,7 @@ function getMaxVelocityFromOtherTypes(
     for (const type of types) {
         if (type === excludeType) continue;
 
-        const stats = db.getAuthorVelocityStats(authorPublicKey, type);
+        const stats = combinedData.getAuthorVelocityStats(authorPublicKey, type);
         const thresholds = THRESHOLDS[type];
         const { score, level } = calculateScoreFromVelocity(stats.lastHour, stats.last24Hours, thresholds);
 
@@ -143,10 +143,10 @@ function getMaxVelocityFromOtherTypes(
  * Calculate aggregate velocity score across all publication types.
  */
 function calculateAggregateVelocity(
-    db: SpamDetectionDatabase,
+    combinedData: CombinedDataService,
     authorPublicKey: string
 ): { score: number; level: string; lastHour: number; last24Hours: number } {
-    const aggregateStats = db.getAuthorAggregateVelocityStats(authorPublicKey);
+    const aggregateStats = combinedData.getAuthorAggregateVelocityStats(authorPublicKey);
     const { lastHour, last24Hours } = aggregateStats;
 
     const avgPerHour = last24Hours / 24;
@@ -188,7 +188,7 @@ function calculateAggregateVelocity(
  * 3. Cross-type penalty (if another type has higher velocity, blend 50% of that risk)
  */
 export function calculateVelocity(ctx: RiskContext, weight: number): RiskFactor {
-    const { challengeRequest, db } = ctx;
+    const { challengeRequest, combinedData } = ctx;
     // Use the author's cryptographic public key for identity tracking.
     // author.address can be a domain and is not cryptographically tied to the author.
     const authorPublicKey = getAuthorPublicKeyFromChallengeRequest(challengeRequest);
@@ -209,15 +209,15 @@ export function calculateVelocity(ctx: RiskContext, weight: number): RiskFactor 
     // At this point, pubType must be one of the tracked types (not subplebbitEdit)
     const trackedPubType = pubType as "post" | "reply" | "vote" | "commentEdit" | "commentModeration";
 
-    // 1. Calculate per-type velocity (existing logic)
-    const perTypeStats = db.getAuthorVelocityStats(authorPublicKey, trackedPubType);
+    // 1. Calculate per-type velocity from combined data (engine + indexer)
+    const perTypeStats = combinedData.getAuthorVelocityStats(authorPublicKey, trackedPubType);
     const perTypeResult = calculateScoreFromVelocity(perTypeStats.lastHour, perTypeStats.last24Hours, thresholds);
 
     // 2. Calculate aggregate velocity across all types
-    const aggregateResult = calculateAggregateVelocity(db, authorPublicKey);
+    const aggregateResult = calculateAggregateVelocity(combinedData, authorPublicKey);
 
     // 3. Get max velocity from other types for cross-type penalty
-    const otherTypesMax = getMaxVelocityFromOtherTypes(db, authorPublicKey, trackedPubType);
+    const otherTypesMax = getMaxVelocityFromOtherTypes(combinedData, authorPublicKey, trackedPubType);
 
     // 4. Apply cross-type penalty: blend 50% of higher velocity from other types
     let crossTypePenaltyScore = perTypeResult.score;
