@@ -6,12 +6,14 @@
 import type { Database } from "better-sqlite3";
 import type {
     AuthorNetworkStats,
+    CommentIpfsInsertParams,
+    CommentUpdateInsertParams,
     DiscoverySource,
     IndexedCommentIpfs,
     IndexedCommentUpdate,
     IndexedSubplebbit,
-    ModQueueCommentIpfs,
-    ModQueueCommentUpdate
+    ModQueueCommentUpdate,
+    ModQueueCommentUpdateInsertParams
 } from "../types.js";
 
 /**
@@ -107,19 +109,7 @@ export class IndexerQueries {
      * Insert an indexed comment IPFS record if it doesn't exist.
      * CommentIpfs is immutable, so we only insert once and never update.
      */
-    insertIndexedCommentIpfsIfNotExists(params: {
-        cid: string;
-        subplebbitAddress: string;
-        author: unknown;
-        signature: unknown;
-        parentCid: string | null;
-        content: string | null;
-        title: string | null;
-        link: string | null;
-        timestamp: number;
-        depth: number | null;
-        protocolVersion: string | null;
-    }): void {
+    insertIndexedCommentIpfsIfNotExists(params: CommentIpfsInsertParams): void {
         const now = Math.floor(Date.now() / 1000);
         this.db
             .prepare(
@@ -179,20 +169,7 @@ export class IndexerQueries {
     /**
      * Insert or update an indexed comment update record.
      */
-    upsertIndexedCommentUpdate(params: {
-        cid: string;
-        author: unknown | null;
-        upvoteCount: number | null;
-        downvoteCount: number | null;
-        replyCount: number | null;
-        removed: boolean | null;
-        deleted: boolean | null;
-        locked: boolean | null;
-        pinned: boolean | null;
-        approved: boolean | null;
-        updatedAt: number | null;
-        lastRepliesPageCid?: string | null;
-    }): void {
+    upsertIndexedCommentUpdate(params: CommentUpdateInsertParams): void {
         const now = Math.floor(Date.now() / 1000);
         this.db
             .prepare(
@@ -286,19 +263,7 @@ export class IndexerQueries {
     /**
      * Insert or update a modqueue comment IPFS record.
      */
-    upsertModQueueCommentIpfs(params: {
-        cid: string;
-        subplebbitAddress: string;
-        author: unknown;
-        signature: unknown;
-        parentCid: string | null;
-        content: string | null;
-        title: string | null;
-        link: string | null;
-        timestamp: number;
-        depth: number | null;
-        protocolVersion: string | null;
-    }): void {
+    upsertModQueueCommentIpfs(params: CommentIpfsInsertParams): void {
         const now = Math.floor(Date.now() / 1000);
         this.db
             .prepare(
@@ -333,13 +298,7 @@ export class IndexerQueries {
     /**
      * Insert or update a modqueue comment update record.
      */
-    upsertModQueueCommentUpdate(params: {
-        cid: string;
-        author: unknown | null;
-        protocolVersion: string | null;
-        number: number | null;
-        postNumber: number | null;
-    }): void {
+    upsertModQueueCommentUpdate(params: ModQueueCommentUpdateInsertParams): void {
         const now = Math.floor(Date.now() / 1000);
         this.db
             .prepare(

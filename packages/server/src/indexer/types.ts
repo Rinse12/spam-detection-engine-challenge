@@ -122,6 +122,41 @@ export type CommentIpfsWithCid = CommentIpfsType & { cid: string };
 export type CommentUpdateWithCid = CommentUpdateType & { cid: string };
 
 /**
+ * Input params for inserting a comment IPFS record.
+ * Uses the row type but with `unknown` for author/signature (pre-JSON serialization).
+ */
+export type CommentIpfsInsertParams = Omit<IndexedCommentIpfs, "author" | "signature" | "fetchedAt"> & {
+    author: unknown;
+    signature: unknown;
+};
+
+/**
+ * Input params for upserting a comment update record.
+ * Converts SQLite number booleans to JS booleans, uses unknown for author (pre-JSON serialization),
+ * and omits auto-generated fields.
+ */
+export type CommentUpdateInsertParams = Omit<
+    IndexedCommentUpdate,
+    "author" | "removed" | "deleted" | "locked" | "pinned" | "approved" | "lastRepliesPageCid" | "fetchedAt" | "lastFetchFailedAt" | "fetchFailureCount"
+> & {
+    author: unknown | null;
+    removed: boolean | null;
+    deleted: boolean | null;
+    locked: boolean | null;
+    pinned: boolean | null;
+    approved: boolean | null;
+    lastRepliesPageCid?: string | null;
+};
+
+/**
+ * Input params for upserting a modqueue comment update record.
+ * Uses unknown for author (pre-JSON serialization), omits auto-generated fields.
+ */
+export type ModQueueCommentUpdateInsertParams = Pick<ModQueueCommentUpdate, "cid" | "protocolVersion" | "number" | "postNumber"> & {
+    author: unknown | null;
+};
+
+/**
  * Author stats calculated from indexed data.
  */
 export interface AuthorNetworkStats {
