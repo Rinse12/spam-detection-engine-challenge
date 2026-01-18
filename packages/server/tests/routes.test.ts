@@ -577,3 +577,180 @@ describe("API Routes", () => {
         });
     });
 });
+
+// Cloudflare Turnstile test keys - work on any domain including localhost
+const TURNSTILE_TEST_SITE_KEY = "1x00000000000000000000AA"; // Always passes
+const TURNSTILE_TEST_SECRET_KEY = "1x0000000000000000000000000000000AA"; // Always passes validation
+const TURNSTILE_FAIL_SECRET_KEY = "2x0000000000000000000000000000000AA"; // Always fails validation
+
+describe("Turnstile E2E Flow", () => {
+    let server: SpamDetectionServer;
+
+    beforeEach(async () => {
+        const getSubplebbit = vi.fn().mockResolvedValue({ signature: { publicKey: testSigner.publicKey } });
+        setPlebbitLoaderForTest(async () => ({
+            getSubplebbit,
+            destroy: vi.fn().mockResolvedValue(undefined)
+        }));
+        server = await createServer({
+            port: 0,
+            logging: false,
+            databasePath: ":memory:",
+            baseUrl: "http://localhost:3000",
+            turnstileSiteKey: TURNSTILE_TEST_SITE_KEY,
+            turnstileSecretKey: TURNSTILE_TEST_SECRET_KEY
+        });
+        await server.fastify.ready();
+    });
+
+    afterEach(async () => {
+        await server.stop();
+        resetPlebbitLoaderForTest();
+    });
+
+    it("should complete full Turnstile flow with Cloudflare test keys", async () => {
+        // Step 1: Create challenge session via /evaluate
+        const evaluatePayload = await createEvaluatePayload({
+            authorOverrides: { address: "12D3KooWTurnstileE2E" }
+        });
+        const evalResponse = await server.fastify.inject({
+            method: "POST",
+            url: "/api/v1/evaluate",
+            payload: evaluatePayload
+        });
+
+        expect(evalResponse.statusCode).toBe(200);
+        const evalBody = evalResponse.json();
+        const challengeId = evalBody.challengeId;
+        expect(challengeId).toBeDefined();
+
+        // Step 2: Get iframe and verify it contains the test site key
+        const iframeResponse = await server.fastify.inject({
+            method: "GET",
+            url: `/api/v1/iframe/${challengeId}`
+        });
+
+        expect(iframeResponse.statusCode).toBe(200);
+        expect(iframeResponse.body).toContain(`data-sitekey="${TURNSTILE_TEST_SITE_KEY}"`);
+
+        // Step 3: Complete challenge with dummy token
+        // Cloudflare test secret key accepts any token when paired with test site key
+        const completeResponse = await server.fastify.inject({
+            method: "POST",
+            url: "/api/v1/challenge/complete",
+            payload: {
+                challengeId,
+                challengeResponse: "XXXX.DUMMY.TOKEN.XXXX",
+                challengeType: "turnstile"
+            }
+        });
+
+        expect(completeResponse.statusCode).toBe(200);
+        const completeBody = completeResponse.json();
+        expect(completeBody.success).toBe(true);
+        expect(completeBody.token).toBeDefined();
+        expect(typeof completeBody.token).toBe("string");
+
+        // Step 4: Verify the JWT token
+        const verifyPayload = await createVerifyPayload({
+            challengeId,
+            token: completeBody.token
+        });
+        const verifyResponse = await server.fastify.inject({
+            method: "POST",
+            url: "/api/v1/challenge/verify",
+            payload: verifyPayload
+        });
+
+        expect(verifyResponse.statusCode).toBe(200);
+        const verifyBody = verifyResponse.json();
+        expect(verifyBody.success).toBe(true);
+        expect(verifyBody.challengeType).toBe("turnstile");
+
+        // Verify session is marked as completed
+        const session = server.db.getChallengeSessionByChallengeId(challengeId);
+        expect(session?.status).toBe("completed");
+    });
+
+    it("should serve iframe with correct Turnstile site key", async () => {
+        const evaluatePayload = await createEvaluatePayload({
+            authorOverrides: { address: "12D3KooWSiteKeyTest" }
+        });
+        const evalResponse = await server.fastify.inject({
+            method: "POST",
+            url: "/api/v1/evaluate",
+            payload: evaluatePayload
+        });
+
+        const { challengeId } = evalResponse.json();
+
+        const iframeResponse = await server.fastify.inject({
+            method: "GET",
+            url: `/api/v1/iframe/${challengeId}`
+        });
+
+        expect(iframeResponse.statusCode).toBe(200);
+        expect(iframeResponse.headers["content-type"]).toContain("text/html");
+        expect(iframeResponse.body).toContain("cf-turnstile");
+        expect(iframeResponse.body).toContain(`data-sitekey="${TURNSTILE_TEST_SITE_KEY}"`);
+        expect(iframeResponse.body).toContain("onTurnstileSuccess");
+        expect(iframeResponse.body).toContain("onTurnstileError");
+    });
+});
+
+describe("Turnstile Failure Scenarios", () => {
+    let server: SpamDetectionServer;
+
+    beforeEach(async () => {
+        const getSubplebbit = vi.fn().mockResolvedValue({ signature: { publicKey: testSigner.publicKey } });
+        setPlebbitLoaderForTest(async () => ({
+            getSubplebbit,
+            destroy: vi.fn().mockResolvedValue(undefined)
+        }));
+        // Use the always-failing secret key
+        server = await createServer({
+            port: 0,
+            logging: false,
+            databasePath: ":memory:",
+            baseUrl: "http://localhost:3000",
+            turnstileSiteKey: TURNSTILE_TEST_SITE_KEY,
+            turnstileSecretKey: TURNSTILE_FAIL_SECRET_KEY
+        });
+        await server.fastify.ready();
+    });
+
+    afterEach(async () => {
+        await server.stop();
+        resetPlebbitLoaderForTest();
+    });
+
+    it("should return 401 when Turnstile verification fails", async () => {
+        // Create challenge
+        const evaluatePayload = await createEvaluatePayload({
+            authorOverrides: { address: "12D3KooWFailTest" }
+        });
+        const evalResponse = await server.fastify.inject({
+            method: "POST",
+            url: "/api/v1/evaluate",
+            payload: evaluatePayload
+        });
+
+        const { challengeId } = evalResponse.json();
+
+        // Try to complete with failing secret key
+        const completeResponse = await server.fastify.inject({
+            method: "POST",
+            url: "/api/v1/challenge/complete",
+            payload: {
+                challengeId,
+                challengeResponse: "XXXX.DUMMY.TOKEN.XXXX",
+                challengeType: "turnstile"
+            }
+        });
+
+        expect(completeResponse.statusCode).toBe(401);
+        const body = completeResponse.json();
+        expect(body.success).toBe(false);
+        expect(body.error).toContain("Turnstile verification failed");
+    });
+});
