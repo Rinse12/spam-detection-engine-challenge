@@ -364,6 +364,37 @@ export class SpamDetectionDatabase {
         };
     }
 
+    /**
+     * Get aggregate author velocity stats across ALL publication types.
+     * Returns total publication counts in the last hour and last 24 hours.
+     *
+     * This is used to detect overall activity bursts regardless of publication type.
+     * For example, an author with normal per-type velocity but high aggregate velocity
+     * (e.g., 5 posts + 10 replies + 80 votes = 95 total/hour) may still be a spammer.
+     *
+     * @param authorPublicKey - The Ed25519 public key from the publication's signature
+     */
+    getAuthorAggregateVelocityStats(authorPublicKey: string): { lastHour: number; last24Hours: number } {
+        const types: Array<"post" | "reply" | "vote" | "commentEdit" | "commentModeration"> = [
+            "post",
+            "reply",
+            "vote",
+            "commentEdit",
+            "commentModeration"
+        ];
+
+        let lastHour = 0;
+        let last24Hours = 0;
+
+        for (const type of types) {
+            const stats = this.getAuthorVelocityStats(authorPublicKey, type);
+            lastHour += stats.lastHour;
+            last24Hours += stats.last24Hours;
+        }
+
+        return { lastHour, last24Hours };
+    }
+
     // ============================================
     // Publication Insertion Methods
     // ============================================

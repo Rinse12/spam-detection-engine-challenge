@@ -183,7 +183,15 @@ Analyzes `comment.link` (the dedicated link field for link posts) for spam indic
 
 Measures how frequently an author is publishing to detect burst spam behavior. Queries the database to count actual publications by the author's **signature public key** in the last hour and last 24 hours.
 
-This factor uses publication-type-specific thresholds since different actions have different natural rates:
+The velocity risk score is the **maximum** of three checks:
+
+1. **Per-type velocity**: Publications of the current type vs type-specific thresholds
+2. **Aggregate velocity**: Total publications across ALL types vs aggregate thresholds
+3. **Cross-type penalty**: If another publication type has higher velocity, blend 50% of that risk
+
+#### Per-Type Thresholds
+
+Different publication types have different acceptable rates:
 
 **Post thresholds (comments without parentCid):**
 
@@ -230,7 +238,36 @@ This factor uses publication-type-specific thresholds since different actions ha
 | 11-15            | 0.70       | Suspicious rate        |
 | 25+              | 0.95       | Likely automated/bot   |
 
-The effective rate is calculated as the maximum of:
+#### Aggregate Velocity Thresholds
+
+Tracks total publications across ALL types combined. This catches authors who spread activity across multiple types to stay under individual thresholds.
+
+| Total Publications/Hour | Risk Score | Description          |
+| ----------------------- | ---------- | -------------------- |
+| 0-25                    | 0.10       | Normal activity      |
+| 26-50                   | 0.40       | Elevated activity    |
+| 51-80                   | 0.70       | Suspicious activity  |
+| 150+                    | 0.95       | Likely automated/bot |
+
+**Example**: An author with 5 posts + 10 replies + 40 votes + 5 edits + 5 moderations = 65 total/hour would be flagged as SUSPICIOUS (0.70) even if each individual type is within normal limits.
+
+#### Cross-Type Velocity Penalty
+
+When evaluating a publication, if another publication type has higher velocity risk, 50% of the difference is blended into the current type's score.
+
+**Formula**: `penalizedScore = currentScore + (otherMaxScore - currentScore) × 0.5`
+
+**Example**: An author submitting a new post (1 post/hr = NORMAL 0.10) but has 150 votes/hr (BOT_LIKE 0.95):
+
+- Per-type post score: 0.10
+- Vote velocity score: 0.95
+- Cross-type penalty: `0.10 + (0.95 - 0.10) × 0.5 = 0.525`
+
+This ensures that suspicious behavior in one publication type affects the risk assessment of other types.
+
+#### Effective Rate Calculation
+
+The effective rate for each check is the maximum of:
 
 - Publications of that type in the last hour
 - Average publications per hour over the last 24 hours

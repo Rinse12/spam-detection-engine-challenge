@@ -1,5 +1,9 @@
 import type { RiskFactor } from "../types.js";
 
+// TODO if ip is IP_TYPE_SCORES.RESIDENTIAL and it's the first time we see then it's probably a good thing and it's not a spam
+// if the same author using the IP address is not changing their IP address it's also a good thing
+// let me know if you have better thoughts of critque of this file
+
 /**
  * IP intelligence data from the IP provider.
  */

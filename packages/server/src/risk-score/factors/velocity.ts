@@ -1,3 +1,4 @@
+import type { SpamDetectionDatabase } from "../../db/index.js";
 import type { RiskContext, RiskFactor } from "../types.js";
 import { getAuthorPublicKeyFromChallengeRequest, getPublicationType, type PublicationType } from "../utils.js";
 
@@ -37,6 +38,24 @@ const THRESHOLDS = {
         BOT_LIKE: 25
     }
 };
+
+/**
+ * Thresholds for aggregate velocity across ALL publication types combined.
+ * Used to detect overall activity bursts regardless of type distribution.
+ */
+const AGGREGATE_THRESHOLDS = {
+    NORMAL: 25,
+    ELEVATED: 50,
+    SUSPICIOUS: 80,
+    BOT_LIKE: 150
+};
+
+/**
+ * Cross-type penalty blend factor.
+ * When another publication type has higher velocity risk, this percentage
+ * of the difference is blended into the current type's score.
+ */
+const CROSS_TYPE_PENALTY_BLEND = 0.5;
 
 /**
  * Risk scores for different velocity levels.
@@ -83,6 +102,77 @@ function calculateScoreFromVelocity(
 }
 
 /**
+ * Get the maximum velocity score from all OTHER publication types.
+ * Used to apply cross-type penalty when another type shows high velocity.
+ */
+function getMaxVelocityFromOtherTypes(
+    db: SpamDetectionDatabase,
+    authorPublicKey: string,
+    excludeType: "post" | "reply" | "vote" | "commentEdit" | "commentModeration"
+): { score: number; level: string; type: string } {
+    const types: Array<"post" | "reply" | "vote" | "commentEdit" | "commentModeration"> = [
+        "post",
+        "reply",
+        "vote",
+        "commentEdit",
+        "commentModeration"
+    ];
+
+    let maxScore = 0;
+    let maxLevel = "normal";
+    let maxType = "";
+
+    for (const type of types) {
+        if (type === excludeType) continue;
+
+        const stats = db.getAuthorVelocityStats(authorPublicKey, type);
+        const thresholds = THRESHOLDS[type];
+        const { score, level } = calculateScoreFromVelocity(stats.lastHour, stats.last24Hours, thresholds);
+
+        if (score > maxScore) {
+            maxScore = score;
+            maxLevel = level;
+            maxType = type;
+        }
+    }
+
+    return { score: maxScore, level: maxLevel, type: maxType };
+}
+
+/**
+ * Calculate aggregate velocity score across all publication types.
+ */
+function calculateAggregateVelocity(
+    db: SpamDetectionDatabase,
+    authorPublicKey: string
+): { score: number; level: string; lastHour: number; last24Hours: number } {
+    const aggregateStats = db.getAuthorAggregateVelocityStats(authorPublicKey);
+    const { lastHour, last24Hours } = aggregateStats;
+
+    const avgPerHour = last24Hours / 24;
+    const effectiveRate = Math.max(lastHour, avgPerHour);
+
+    let score: number;
+    let level: string;
+
+    if (effectiveRate <= AGGREGATE_THRESHOLDS.NORMAL) {
+        score = SCORES.NORMAL;
+        level = "normal";
+    } else if (effectiveRate <= AGGREGATE_THRESHOLDS.ELEVATED) {
+        score = SCORES.ELEVATED;
+        level = "elevated";
+    } else if (effectiveRate <= AGGREGATE_THRESHOLDS.SUSPICIOUS) {
+        score = SCORES.SUSPICIOUS;
+        level = "suspicious";
+    } else {
+        score = SCORES.BOT_LIKE;
+        level = "likely automated";
+    }
+
+    return { score, level, lastHour, last24Hours };
+}
+
+/**
  * Calculate risk score based on publication velocity.
  *
  * This factor tracks publication velocity by the author's cryptographic public key
@@ -91,6 +181,11 @@ function calculateScoreFromVelocity(
  *
  * Different publication types have different thresholds since posting frequency
  * expectations differ (e.g., votes are typically more frequent than posts).
+ *
+ * The final score is the maximum of:
+ * 1. Per-type velocity score (e.g., votes/hour vs vote thresholds)
+ * 2. Aggregate velocity score (total publications/hour across all types)
+ * 3. Cross-type penalty (if another type has higher velocity, blend 50% of that risk)
  */
 export function calculateVelocity(ctx: RiskContext, weight: number): RiskFactor {
     const { challengeRequest, db } = ctx;
@@ -114,16 +209,43 @@ export function calculateVelocity(ctx: RiskContext, weight: number): RiskFactor 
     // At this point, pubType must be one of the tracked types (not subplebbitEdit)
     const trackedPubType = pubType as "post" | "reply" | "vote" | "commentEdit" | "commentModeration";
 
-    // Query database for velocity stats
-    const velocityStats = db.getAuthorVelocityStats(authorPublicKey, trackedPubType);
-    const { lastHour, last24Hours } = velocityStats;
+    // 1. Calculate per-type velocity (existing logic)
+    const perTypeStats = db.getAuthorVelocityStats(authorPublicKey, trackedPubType);
+    const perTypeResult = calculateScoreFromVelocity(perTypeStats.lastHour, perTypeStats.last24Hours, thresholds);
 
-    const { score, level } = calculateScoreFromVelocity(lastHour, last24Hours, thresholds);
+    // 2. Calculate aggregate velocity across all types
+    const aggregateResult = calculateAggregateVelocity(db, authorPublicKey);
+
+    // 3. Get max velocity from other types for cross-type penalty
+    const otherTypesMax = getMaxVelocityFromOtherTypes(db, authorPublicKey, trackedPubType);
+
+    // 4. Apply cross-type penalty: blend 50% of higher velocity from other types
+    let crossTypePenaltyScore = perTypeResult.score;
+    let crossTypePenaltyApplied = false;
+    if (otherTypesMax.score > perTypeResult.score) {
+        crossTypePenaltyScore = perTypeResult.score + (otherTypesMax.score - perTypeResult.score) * CROSS_TYPE_PENALTY_BLEND;
+        crossTypePenaltyApplied = true;
+    }
+
+    // 5. Final score is the maximum of all three checks
+    const finalScore = Math.max(perTypeResult.score, aggregateResult.score, crossTypePenaltyScore);
+
+    // Build explanation with details about what triggered the score
+    const explanationParts: string[] = [];
+    explanationParts.push(`${trackedPubType}: ${perTypeStats.lastHour}/hr (${perTypeResult.level})`);
+
+    if (aggregateResult.score >= perTypeResult.score && aggregateResult.score > SCORES.NORMAL) {
+        explanationParts.push(`aggregate: ${aggregateResult.lastHour}/hr (${aggregateResult.level})`);
+    }
+
+    if (crossTypePenaltyApplied && crossTypePenaltyScore > perTypeResult.score) {
+        explanationParts.push(`cross-type penalty from ${otherTypesMax.type} (${otherTypesMax.level})`);
+    }
 
     return {
         name: "velocityRisk",
-        score,
+        score: finalScore,
         weight,
-        explanation: `Velocity (${trackedPubType}): ${lastHour}/hr, ${last24Hours}/24h (${level})`
+        explanation: `Velocity: ${explanationParts.join(", ")}`
     };
 }
