@@ -137,10 +137,7 @@ export class Indexer {
     /**
      * Add a subplebbit for indexing.
      */
-    async addSubplebbit(
-        address: string,
-        discoveredVia: "evaluate_api" | "previous_comment_cid" | "manual"
-    ): Promise<void> {
+    async addSubplebbit(address: string, discoveredVia: "evaluate_api" | "previous_comment_cid" | "manual"): Promise<void> {
         const queries = new IndexerQueries(this.db);
 
         // Insert into DB

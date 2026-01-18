@@ -27,11 +27,7 @@ export class IndexerQueries {
     /**
      * Insert or update an indexed subplebbit.
      */
-    upsertIndexedSubplebbit(params: {
-        address: string;
-        publicKey?: string;
-        discoveredVia: DiscoverySource;
-    }): void {
+    upsertIndexedSubplebbit(params: { address: string; publicKey?: string; discoveredVia: DiscoverySource }): void {
         const now = Math.floor(Date.now() / 1000);
         this.db
             .prepare(
@@ -243,9 +239,9 @@ export class IndexerQueries {
      * Used to skip re-fetching replies if unchanged.
      */
     getLastRepliesPageCid(cid: string): string | null {
-        const result = this.db
-            .prepare(`SELECT lastRepliesPageCid FROM indexed_comments_update WHERE cid = ?`)
-            .get(cid) as { lastRepliesPageCid: string | null } | undefined;
+        const result = this.db.prepare(`SELECT lastRepliesPageCid FROM indexed_comments_update WHERE cid = ?`).get(cid) as
+            | { lastRepliesPageCid: string | null }
+            | undefined;
         return result?.lastRepliesPageCid ?? null;
     }
 
@@ -255,9 +251,7 @@ export class IndexerQueries {
      */
     updateLastRepliesPageCid(cid: string, lastRepliesPageCid: string): void {
         this.db
-            .prepare(
-                `UPDATE indexed_comments_update SET lastRepliesPageCid = @lastRepliesPageCid WHERE cid = @cid`
-            )
+            .prepare(`UPDATE indexed_comments_update SET lastRepliesPageCid = @lastRepliesPageCid WHERE cid = @cid`)
             .run({ cid, lastRepliesPageCid });
     }
 

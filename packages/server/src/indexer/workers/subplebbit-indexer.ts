@@ -157,27 +157,17 @@ export class SubplebbitIndexer {
 
         // Check if subplebbit actually changed
         const currentUpdatedAt = subplebbit.updatedAt;
-        if (
-            currentUpdatedAt === subscription.lastSubplebbitUpdatedAt &&
-            subscription.lastSubplebbitUpdatedAt !== null
-        ) {
+        if (currentUpdatedAt === subscription.lastSubplebbitUpdatedAt && subscription.lastSubplebbitUpdatedAt !== null) {
             // Nothing changed
             return;
         }
 
         // Check if posts pageCids.new changed
         const currentPageCidNew = subplebbit.posts?.pageCids?.new ?? null;
-        if (
-            currentPageCidNew === subscription.lastPostsPageCidNew &&
-            subscription.lastPostsPageCidNew !== null
-        ) {
+        if (currentPageCidNew === subscription.lastPostsPageCidNew && subscription.lastPostsPageCidNew !== null) {
             // Posts haven't changed, only updatedAt (maybe other metadata)
             // Still update the cache marker
-            this.queries.updateSubplebbitCacheMarkers(
-                address,
-                currentPageCidNew,
-                currentUpdatedAt ?? null
-            );
+            this.queries.updateSubplebbitCacheMarkers(address, currentPageCidNew, currentUpdatedAt ?? null);
             subscription.lastSubplebbitUpdatedAt = currentUpdatedAt ?? null;
             return;
         }
@@ -195,32 +185,21 @@ export class SubplebbitIndexer {
             });
 
             // Fetch and store all comments
-            const result = await fetchAndStoreSubplebbitComments(
-                subplebbit,
-                this.plebbit,
-                this.db,
-                {
-                    onNewComment: (cid: string, previousCid: string | null) => {
-                        if (previousCid && this.onNewPreviousCid) {
-                            this.onNewPreviousCid(cid, previousCid);
-                        }
+            const result = await fetchAndStoreSubplebbitComments(subplebbit, this.plebbit, this.db, {
+                onNewComment: (cid: string, previousCid: string | null) => {
+                    if (previousCid && this.onNewPreviousCid) {
+                        this.onNewPreviousCid(cid, previousCid);
                     }
                 }
-            );
+            });
 
             // Update cache markers
-            this.queries.updateSubplebbitCacheMarkers(
-                address,
-                currentPageCidNew,
-                currentUpdatedAt ?? null
-            );
+            this.queries.updateSubplebbitCacheMarkers(address, currentPageCidNew, currentUpdatedAt ?? null);
 
             subscription.lastPostsPageCidNew = currentPageCidNew;
             subscription.lastSubplebbitUpdatedAt = currentUpdatedAt ?? null;
 
-            console.log(
-                `[SubplebbitIndexer] Indexed ${result.postsCount} posts from ${address}`
-            );
+            console.log(`[SubplebbitIndexer] Indexed ${result.postsCount} posts from ${address}`);
         } catch (error) {
             console.error(`[SubplebbitIndexer] Error fetching comments from ${address}:`, error);
             this.queries.recordSubplebbitError(address, String(error));
@@ -228,9 +207,7 @@ export class SubplebbitIndexer {
             // Check if we should disable indexing
             const sub = this.queries.getIndexedSubplebbit(address);
             if (sub && sub.consecutiveErrors >= DEFAULT_INDEXER_CONFIG.maxConsecutiveErrors) {
-                console.warn(
-                    `[SubplebbitIndexer] Disabling indexing for ${address} after ${sub.consecutiveErrors} consecutive errors`
-                );
+                console.warn(`[SubplebbitIndexer] Disabling indexing for ${address} after ${sub.consecutiveErrors} consecutive errors`);
                 this.queries.disableSubplebbitIndexing(address);
                 await this.unsubscribeFromSubplebbit(address);
             }
@@ -262,10 +239,7 @@ export class SubplebbitIndexer {
      * Add a new subplebbit for indexing.
      * Called when a sub is discovered via evaluate API or previousCommentCid.
      */
-    async addSubplebbit(
-        address: string,
-        discoveredVia: "evaluate_api" | "previous_comment_cid" | "manual"
-    ): Promise<void> {
+    async addSubplebbit(address: string, discoveredVia: "evaluate_api" | "previous_comment_cid" | "manual"): Promise<void> {
         // Insert into DB
         this.queries.upsertIndexedSubplebbit({
             address,

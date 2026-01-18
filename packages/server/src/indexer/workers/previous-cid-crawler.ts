@@ -149,9 +149,7 @@ export class PreviousCidCrawler {
                     if (result.subplebbitAddress) {
                         const existingSub = this.queries.getIndexedSubplebbit(result.subplebbitAddress);
                         if (!existingSub) {
-                            console.log(
-                                `[PreviousCidCrawler] Discovered new subplebbit: ${result.subplebbitAddress}`
-                            );
+                            console.log(`[PreviousCidCrawler] Discovered new subplebbit: ${result.subplebbitAddress}`);
                             this.queries.upsertIndexedSubplebbit({
                                 address: result.subplebbitAddress,
                                 discoveredVia: "previous_comment_cid"
@@ -199,9 +197,7 @@ export class PreviousCidCrawler {
                         }
                     });
                 }),
-                new Promise<boolean>((resolve) =>
-                    setTimeout(() => resolve(false), this.crawlTimeout)
-                )
+                new Promise<boolean>((resolve) => setTimeout(() => resolve(false), this.crawlTimeout))
             ]);
 
             // Store the comment data

@@ -58,9 +58,7 @@ export class ModQueueTracker {
             this.storeModQueueItem(item, address);
         }
 
-        console.log(
-            `[ModQueueTracker] Processed ${modQueueItems.length} modQueue items for ${address}`
-        );
+        console.log(`[ModQueueTracker] Processed ${modQueueItems.length} modQueue items for ${address}`);
     }
 
     /**

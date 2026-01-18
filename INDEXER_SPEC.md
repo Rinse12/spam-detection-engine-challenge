@@ -3,6 +3,7 @@
 ## Overview
 
 Add an active indexer to the spam detection engine that:
+
 1. Indexes subplebbits and their comments/posts
 2. Follows `author.previousCommentCid` chains to discover new subs
 3. Tracks modQueue to see which authors get accepted/rejected
@@ -22,12 +23,14 @@ Add an active indexer to the spam detection engine that:
 ### CommentIpfs vs CommentUpdate
 
 **CommentIpfs** (immutable, from `comment.raw.comment`):
+
 - `content`, `title`, `link`, `timestamp`, `parentCid`, `depth`
 - `author` - full author object including `author.address`, `author.previousCommentCid`
 - `signature` - includes `signature.publicKey` (author identity)
 - `subplebbitAddress`, `protocolVersion`
 
 **CommentUpdate** (mutable, from `comment.raw.commentUpdate`):
+
 - `upvoteCount`, `downvoteCount`, `replyCount`
 - `removed`, `deleted`, `pinned`, `locked`, `approved`
 - `author` - ONLY contains `author.subplebbit` data (karma, bans, flair), NOT `author.address`
@@ -174,19 +177,25 @@ packages/server/src/risk-score/factors/
 ## Implementation Steps
 
 ### Step 1: Database Schema
+
 Add new tables to `packages/server/src/db/schema.ts`.
 
 ### Step 2: Indexer Module Structure
+
 Create the directory structure and basic files.
 
 ### Step 3: Plebbit Manager
+
 Implement singleton Plebbit instance in `plebbit-manager.ts`:
+
 ```typescript
 let plebbitInstance: Plebbit | null = null;
 
 export async function getPlebbit(): Promise<Plebbit> {
     if (!plebbitInstance) {
-        plebbitInstance = await Plebbit({ /* options */ });
+        plebbitInstance = await Plebbit({
+            /* options */
+        });
     }
     return plebbitInstance;
 }
@@ -200,17 +209,20 @@ export async function stopPlebbit(): Promise<void> {
 ```
 
 ### Step 4: Page Queue
+
 Implement queue with max 10 concurrent fetches in `page-queue.ts`.
 
 ### Step 5: Subplebbit Indexer
+
 In `subplebbit-indexer.ts`:
+
 - Get enabled subs from DB
 - Call `plebbit.getSubplebbit(address)` and subscribe with `sub.on('update')`
 - On update, check if `sub.updatedAt` or `sub.posts.pageCids.new` changed
 - If changed, queue page fetches
 
 ```typescript
-sub.on('update', () => {
+sub.on("update", () => {
     if (sub.updatedAt === lastSubplebbitUpdatedAt) return;
     if (sub.posts.pageCids.new === lastPostsPageCidNew) return;
     queuePageFetch(sub.posts.pageCids.new);
@@ -218,6 +230,7 @@ sub.on('update', () => {
 ```
 
 ### Step 6: Comment Fetcher
+
 In `comment-fetcher.ts`, follow the pattern from plebbit-js `loadAllUniquePostsUnderSubplebbit`:
 
 ```typescript
@@ -230,22 +243,27 @@ if (Object.keys(sub.posts.pageCids).length === 0 && Object.keys(sub.posts.pages)
 ```
 
 For each comment:
+
 - Store `comment.raw.comment` (CommentIpfs) in `indexed_comments_ipfs`
 - If `comment.raw.commentUpdate` exists, store in `indexed_comments_update`
 - If CommentUpdate unavailable, increment `fetchFailureCount`
 
 ### Step 7: ModQueue Tracker
+
 In `modqueue-tracker.ts`:
+
 - Iterate through `subplebbit.modQueue.pageCids`
 - Store `comment.comment` in `modqueue_comments_ipfs`
 - Store `comment.commentUpdate` in `modqueue_comments_update`
 - On subsequent updates, check if CIDs disappeared from modQueue:
-  - Try fetching full CommentUpdate
-  - If found → accepted
-  - If not found → rejected
+    - Try fetching full CommentUpdate
+    - If found → accepted
+    - If not found → rejected
 
 ### Step 8: Previous CID Crawler
+
 In `previous-cid-crawler.ts`:
+
 - When storing a comment, check `json_extract(author, '$.previousCommentCid')`
 - Use `plebbit.createComment({ cid })` then `await comment.update()` with 60s timeout
 - Only consider valid if CommentUpdate loads successfully
@@ -258,8 +276,8 @@ async function crawlPreviousCid(cid: string, plebbit: Plebbit) {
     try {
         await comment.update();
         await Promise.race([
-            new Promise(resolve => comment.on('update', resolve)),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 60000))
+            new Promise((resolve) => comment.on("update", resolve)),
+            new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 60000))
         ]);
         return {
             ipfs: comment.raw.comment,
@@ -273,20 +291,25 @@ async function crawlPreviousCid(cid: string, plebbit: Plebbit) {
 ```
 
 ### Step 9: Modify /evaluate Endpoint
+
 In `packages/server/src/routes/evaluate.ts`, insert into `indexed_subplebbits` when a sub calls the API:
 
 ```typescript
-db.prepare(`
+db.prepare(
+    `
     INSERT INTO indexed_subplebbits (address, discoveredVia, discoveredAt)
     VALUES (?, 'evaluate_api', ?)
     ON CONFLICT(address) DO NOTHING
-`).run(subplebbitAddress, Math.floor(Date.now() / 1000));
+`
+).run(subplebbitAddress, Math.floor(Date.now() / 1000));
 ```
 
 ### Step 10: Initialize on Server Startup
+
 In `packages/server/src/index.ts`, start the indexer when server starts.
 
 ### Step 11: Risk Scoring Factors
+
 Add new factors that query the indexed data:
 
 ```sql
@@ -321,6 +344,7 @@ WHERE json_extract(i.signature, '$.publicKey') = ?
 ```
 
 ### Step 12: Update Risk Scoring
+
 - Add new weight entries in `types.ts`
 - Import and call new factors in `index.ts`
 - Update `RISK_SCORING.md`
@@ -328,18 +352,19 @@ WHERE json_extract(i.signature, '$.publicKey') = ?
 ## Reference: plebbit-js Patterns
 
 See `/home/user2/Nextcloud/projects/plebbit/plebbit-js/src/test/test-util.ts`:
+
 - `loadAllUniquePostsUnderSubplebbit` - how to load all posts
 - `loadAllUniqueCommentsUnderCommentInstance` - how to load all replies
 - `loadAllPages` - pagination helper
 
 ## Files to Modify
 
-| File | Change |
-|------|--------|
-| `packages/server/src/db/schema.ts` | Add 5 new tables |
-| `packages/server/src/db/index.ts` | Add indexer queries |
-| `packages/server/src/routes/evaluate.ts` | Insert into indexed_subplebbits |
-| `packages/server/src/index.ts` | Initialize indexer on startup |
-| `packages/server/src/risk-score/types.ts` | Add new weight entries |
-| `packages/server/src/risk-score/index.ts` | Import new factors |
-| `packages/server/src/risk-score/RISK_SCORING.md` | Document new factors |
+| File                                             | Change                          |
+| ------------------------------------------------ | ------------------------------- |
+| `packages/server/src/db/schema.ts`               | Add 5 new tables                |
+| `packages/server/src/db/index.ts`                | Add indexer queries             |
+| `packages/server/src/routes/evaluate.ts`         | Insert into indexed_subplebbits |
+| `packages/server/src/index.ts`                   | Initialize indexer on startup   |
+| `packages/server/src/risk-score/types.ts`        | Add new weight entries          |
+| `packages/server/src/risk-score/index.ts`        | Import new factors              |
+| `packages/server/src/risk-score/RISK_SCORING.md` | Document new factors            |

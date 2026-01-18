@@ -98,7 +98,6 @@ export async function loadAllRepliesFromComment(comment: Comment): Promise<PageT
     return [];
 }
 
-
 /**
  * Store a comment from page data into the database.
  * Handles both CommentIpfs and CommentUpdate storage.
@@ -210,8 +209,7 @@ export async function fetchAndStoreSubplebbitComments(
         }
 
         // Load and store replies if the comment has pageCids to fetch
-        const currentRepliesPageCid =
-            pageComment.replies?.pageCids?.new || Object.values(pageComment.replies?.pageCids || {})[0];
+        const currentRepliesPageCid = pageComment.replies?.pageCids?.new || Object.values(pageComment.replies?.pageCids || {})[0];
 
         if (currentRepliesPageCid) {
             // Check if we've already indexed this comment's replies with the same pageCid
