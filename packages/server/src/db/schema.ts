@@ -115,4 +115,109 @@ CREATE TABLE IF NOT EXISTS ipRecords (
 );
 
 CREATE INDEX IF NOT EXISTS idx_ipRecords_ipAddress ON ipRecords(ipAddress);
+
+-- ============================================================================
+-- INDEXER TABLES
+-- ============================================================================
+
+-- Tracked subplebbits
+CREATE TABLE IF NOT EXISTS indexed_subplebbits (
+    address TEXT PRIMARY KEY,
+    publicKey TEXT,
+    discoveredVia TEXT NOT NULL,  -- 'evaluate_api' | 'previous_comment_cid' | 'manual'
+    discoveredAt INTEGER NOT NULL,
+    indexingEnabled INTEGER DEFAULT 1,
+    lastPostsPageCidNew TEXT,        -- To detect changes (pageCids.new)
+    lastSubplebbitUpdatedAt INTEGER, -- subplebbit.updatedAt - skip if unchanged
+    consecutiveErrors INTEGER DEFAULT 0,
+    lastError TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_indexed_subplebbits_enabled ON indexed_subplebbits(indexingEnabled);
+
+-- CommentIpfs data (immutable, from comment.raw.comment)
+CREATE TABLE IF NOT EXISTS indexed_comments_ipfs (
+    cid TEXT PRIMARY KEY,
+    subplebbitAddress TEXT NOT NULL,
+    author TEXT NOT NULL,                  -- JSON: full author object
+    signature TEXT NOT NULL,               -- JSON: full signature (publicKey inside)
+    parentCid TEXT,                        -- null = post, set = reply
+    content TEXT,
+    title TEXT,
+    link TEXT,
+    timestamp INTEGER NOT NULL,
+    depth INTEGER,                         -- 0 = post, >0 = reply
+    protocolVersion TEXT,
+    fetchedAt INTEGER NOT NULL,
+    FOREIGN KEY (subplebbitAddress) REFERENCES indexed_subplebbits(address)
+);
+
+CREATE INDEX IF NOT EXISTS idx_comments_ipfs_author_pubkey ON indexed_comments_ipfs(
+    (json_extract(signature, '$.publicKey'))
+);
+CREATE INDEX IF NOT EXISTS idx_comments_ipfs_sub ON indexed_comments_ipfs(subplebbitAddress);
+
+-- CommentUpdate data (mutable, from comment.raw.commentUpdate)
+-- Note: author only has subplebbit data, NOT author.address
+-- Note: signature is from sub, not needed
+CREATE TABLE IF NOT EXISTS indexed_comments_update (
+    cid TEXT PRIMARY KEY,
+    author TEXT,                           -- JSON: author.subplebbit data only
+    upvoteCount INTEGER,
+    downvoteCount INTEGER,
+    replyCount INTEGER,
+    removed INTEGER,
+    deleted INTEGER,
+    locked INTEGER,
+    pinned INTEGER,
+    approved INTEGER,                      -- true = approved, false = disapproved
+    updatedAt INTEGER,                     -- for change detection (NULL if never fetched)
+    lastRepliesPageCid TEXT,               -- replies.pageCids.new (or first) - skip re-fetching if unchanged
+    fetchedAt INTEGER,                     -- last successful fetch (NULL if never succeeded)
+    lastFetchFailedAt INTEGER,
+    fetchFailureCount INTEGER DEFAULT 0,   -- reset to 0 on success
+    FOREIGN KEY (cid) REFERENCES indexed_comments_ipfs(cid)
+);
+
+CREATE INDEX IF NOT EXISTS idx_comments_update_removed ON indexed_comments_update(removed) WHERE removed = 1;
+CREATE INDEX IF NOT EXISTS idx_comments_update_approved ON indexed_comments_update(approved) WHERE approved IS NOT NULL;
+
+-- ModQueue CommentIpfs (from modQueue page comment.comment)
+CREATE TABLE IF NOT EXISTS modqueue_comments_ipfs (
+    cid TEXT PRIMARY KEY,
+    subplebbitAddress TEXT NOT NULL,
+    author TEXT NOT NULL,                  -- JSON: full author object
+    signature TEXT NOT NULL,               -- JSON: full signature (publicKey inside)
+    parentCid TEXT,
+    content TEXT,
+    title TEXT,
+    link TEXT,
+    timestamp INTEGER NOT NULL,
+    depth INTEGER,
+    protocolVersion TEXT,
+    firstSeenAt INTEGER NOT NULL,
+    FOREIGN KEY (subplebbitAddress) REFERENCES indexed_subplebbits(address)
+);
+
+CREATE INDEX IF NOT EXISTS idx_modqueue_ipfs_author ON modqueue_comments_ipfs(
+    (json_extract(signature, '$.publicKey'))
+);
+
+-- ModQueue CommentUpdate (CommentUpdateForChallengeVerification)
+-- Note: signature is from sub, not needed. author only has subplebbit data.
+CREATE TABLE IF NOT EXISTS modqueue_comments_update (
+    cid TEXT PRIMARY KEY,
+    author TEXT,                           -- JSON: author.subplebbit data only
+    protocolVersion TEXT,
+    number INTEGER,
+    postNumber INTEGER,
+    pendingApproval INTEGER NOT NULL,      -- always 1 while in modQueue
+    lastSeenAt INTEGER NOT NULL,
+    resolved INTEGER DEFAULT 0,
+    resolvedAt INTEGER,
+    accepted INTEGER,                      -- true if full CommentUpdate exists after resolution
+    FOREIGN KEY (cid) REFERENCES modqueue_comments_ipfs(cid)
+);
+
+CREATE INDEX IF NOT EXISTS idx_modqueue_update_pending ON modqueue_comments_update(resolved) WHERE resolved = 0;
 `;
