@@ -9,6 +9,7 @@ import { randomUUID } from "crypto";
 import { verifySignedRequest } from "../security/request-signature.js";
 import { resolveSubplebbitPublicKey } from "../subplebbit-resolver.js";
 import { calculateRiskScore } from "../risk-score/index.js";
+import { IndexerQueries } from "../indexer/db/queries.js";
 
 const CHALLENGE_EXPIRY_SECONDS = 3600; // 1 hour
 const MAX_REQUEST_SKEW_SECONDS = 5 * 60;
@@ -97,6 +98,14 @@ export function registerEvaluateRoute(fastify: FastifyInstance, options: Evaluat
                 challengeId,
                 subplebbitPublicKey,
                 expiresAt
+            });
+
+            // Register subplebbit for indexing
+            const indexerQueries = new IndexerQueries(db.getDb());
+            indexerQueries.upsertIndexedSubplebbit({
+                address: subplebbitAddress,
+                publicKey: subplebbitPublicKey,
+                discoveredVia: "evaluate_api"
             });
 
             // Calculate risk score using the risk-score module

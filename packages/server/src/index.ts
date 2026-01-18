@@ -3,6 +3,7 @@ import { SpamDetectionDatabase, createDatabase } from "./db/index.js";
 import { registerRoutes } from "./routes/index.js";
 import { destroyPlebbitInstance, getPlebbitInstance, initPlebbitInstance } from "./subplebbit-resolver.js";
 import { createKeyManager, type KeyManager } from "./crypto/keys.js";
+import { Indexer, stopIndexer } from "./indexer/index.js";
 
 export interface ServerConfig {
     /** Port to listen on. Default: 3000 */
@@ -23,12 +24,15 @@ export interface ServerConfig {
     ipInfoToken?: string;
     /** Enable request logging. Default: true */
     logging?: boolean;
+    /** Enable indexer. Default: true */
+    enableIndexer?: boolean;
 }
 
 export interface SpamDetectionServer {
     fastify: FastifyInstance;
     db: SpamDetectionDatabase;
     keyManager: KeyManager;
+    indexer: Indexer | null;
     start(): Promise<string>;
     stop(): Promise<void>;
 }
@@ -46,7 +50,8 @@ export async function createServer(config: ServerConfig): Promise<SpamDetectionS
         turnstileSiteKey,
         turnstileSecretKey,
         ipInfoToken,
-        logging = true
+        logging = true,
+        enableIndexer = true
     } = config;
 
     if (!databasePath) {
@@ -89,6 +94,12 @@ export async function createServer(config: ServerConfig): Promise<SpamDetectionS
 
     initPlebbitInstance();
 
+    // Initialize indexer if enabled
+    let indexer: Indexer | null = null;
+    if (enableIndexer) {
+        indexer = new Indexer(db.getDb());
+    }
+
     // Error handler
     fastify.setErrorHandler((error: FastifyError, request, reply) => {
         fastify.log.error(error);
@@ -104,13 +115,28 @@ export async function createServer(config: ServerConfig): Promise<SpamDetectionS
         fastify,
         db,
         keyManager,
+        indexer,
 
         async start(): Promise<string> {
             const address = await fastify.listen({ port, host });
+
+            // Start indexer after server is listening
+            if (indexer) {
+                indexer.start().catch((err) => {
+                    console.error("Failed to start indexer:", err);
+                });
+            }
+
             return address;
         },
 
         async stop(): Promise<void> {
+            // Stop indexer first
+            if (indexer) {
+                await indexer.stop();
+            }
+            await stopIndexer();
+
             await fastify.close();
             db.close();
             await destroyPlebbitInstance();

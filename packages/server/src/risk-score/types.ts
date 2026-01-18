@@ -54,6 +54,12 @@ export interface WeightConfig {
     karmaScore: number;
     ipRisk: number;
     walletVelocity: number;
+    /** Network-wide ban history from indexed data */
+    networkBanHistory: number;
+    /** ModQueue rejection rate from indexed data */
+    modqueueRejectionRate: number;
+    /** Network-wide removal rate from indexed data */
+    networkRemovalRate: number;
 }
 
 /**
@@ -61,14 +67,17 @@ export interface WeightConfig {
  * Total: 1.0
  */
 export const WEIGHTS_NO_IP: WeightConfig = {
-    authorReputation: 0.22,
-    commentContentTitleRisk: 0.15,
-    commentUrlRisk: 0.12,
-    velocityRisk: 0.1,
-    accountAge: 0.15,
-    karmaScore: 0.11,
+    authorReputation: 0.18,
+    commentContentTitleRisk: 0.12,
+    commentUrlRisk: 0.1,
+    velocityRisk: 0.08,
+    accountAge: 0.12,
+    karmaScore: 0.1,
     ipRisk: 0,
-    walletVelocity: 0.15
+    walletVelocity: 0.12,
+    networkBanHistory: 0.06,
+    modqueueRejectionRate: 0.06,
+    networkRemovalRate: 0.06
 };
 
 /**
@@ -76,12 +85,15 @@ export const WEIGHTS_NO_IP: WeightConfig = {
  * Total: 1.0
  */
 export const WEIGHTS_WITH_IP: WeightConfig = {
-    authorReputation: 0.18,
-    commentContentTitleRisk: 0.1,
-    commentUrlRisk: 0.1,
-    velocityRisk: 0.07,
-    accountAge: 0.1,
-    karmaScore: 0.07,
-    ipRisk: 0.23,
-    walletVelocity: 0.15
+    authorReputation: 0.14,
+    commentContentTitleRisk: 0.08,
+    commentUrlRisk: 0.08,
+    velocityRisk: 0.06,
+    accountAge: 0.08,
+    karmaScore: 0.06,
+    ipRisk: 0.2,
+    walletVelocity: 0.12,
+    networkBanHistory: 0.06,
+    modqueueRejectionRate: 0.06,
+    networkRemovalRate: 0.06
 };

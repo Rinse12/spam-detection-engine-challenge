@@ -6,3 +6,4 @@ export { calculateIpRisk, estimateIpType, type IpIntelligence } from "./ip-risk.
 export { calculateKarma } from "./karma.js";
 export { calculateVelocity } from "./velocity.js";
 export { calculateWalletVelocity } from "./wallet-velocity.js";
+export { calculateNetworkBanHistory, calculateModqueueRejectionRate, calculateNetworkRemovalRate } from "./network-risk.js";

@@ -11,6 +11,9 @@ import {
     calculateKarma,
     calculateVelocity,
     calculateWalletVelocity,
+    calculateNetworkBanHistory,
+    calculateModqueueRejectionRate,
+    calculateNetworkRemovalRate,
     type IpIntelligence
 } from "./factors/index.js";
 
@@ -44,6 +47,9 @@ export interface CalculateRiskScoreOptions {
  * - Velocity Risk: How frequently the author is publishing
  * - Wallet Velocity: Publication rate per wallet address (detects coordinated spam)
  * - IP Risk: Analysis of IP type (VPN, Tor, proxy, datacenter)
+ * - Network Ban History: How many subs the author has been banned from
+ * - ModQueue Rejection Rate: What percentage of modQueue submissions get rejected
+ * - Network Removal Rate: What percentage of comments get removed across all subs
  *
  * When IP information is available, weights are redistributed to include
  * IP risk analysis. Without IP info, the other factors receive higher weights.
@@ -75,7 +81,10 @@ export function calculateRiskScore(options: CalculateRiskScoreOptions): RiskScor
         calculateCommentUrlRisk(ctx, weights.commentUrlRisk),
         calculateVelocity(ctx, weights.velocityRisk),
         calculateWalletVelocity(ctx, weights.walletVelocity),
-        calculateIpRisk(ipIntelligence, weights.ipRisk)
+        calculateIpRisk(ipIntelligence, weights.ipRisk),
+        calculateNetworkBanHistory(ctx, weights.networkBanHistory),
+        calculateModqueueRejectionRate(ctx, weights.modqueueRejectionRate),
+        calculateNetworkRemovalRate(ctx, weights.networkRemovalRate)
     ];
 
     // Calculate weighted sum
