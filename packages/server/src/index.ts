@@ -179,11 +179,8 @@ const isMainModule =
     process.argv[1]?.endsWith("/server/src/index.ts");
 
 if (isMainModule) {
-    const databasePath = process.env.DATABASE_PATH;
-    if (!databasePath) {
-        console.error("DATABASE_PATH is required to start the server.");
-        process.exit(1);
-    }
+    // Default to data directory in project root if DATABASE_PATH not provided
+    const databasePath = process.env.DATABASE_PATH ?? new URL("../../../data/spam_detection.db", import.meta.url).pathname;
 
     createServer({
         port: parseInt(process.env.PORT ?? "3000", 10),
