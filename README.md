@@ -54,14 +54,14 @@ The request body is CBOR-encoded (not JSON). This preserves `Uint8Array` types d
 // subplebbitAddress is required; author.subplebbit is optional (undefined for first-time publishers)
 // The signature is created by CBOR-encoding the signed properties, then signing with Ed25519
 {
-  challengeRequest: DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor;
-  timestamp: number; // Unix timestamp (seconds)
-  signature: {
-    signature: Uint8Array; // Ed25519 signature of CBOR-encoded signed properties
-    publicKey: Uint8Array; // 32-byte Ed25519 public key
-    type: "ed25519";
-    signedPropertyNames: ["challengeRequest", "timestamp"];
-  };
+    challengeRequest: DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor;
+    timestamp: number; // Unix timestamp (seconds)
+    signature: {
+        signature: Uint8Array; // Ed25519 signature of CBOR-encoded signed properties
+        publicKey: Uint8Array; // 32-byte Ed25519 public key
+        type: "ed25519";
+        signedPropertyNames: ["challengeRequest", "timestamp"];
+    }
 }
 ```
 
@@ -94,15 +94,15 @@ Called by the subplebbit's challenge code to verify a token submitted by the aut
 
 ```typescript
 {
-  challengeId: string;
-  token: string; // Token from iframe, submitted by author in challengeAnswer
-  timestamp: number; // Unix timestamp (seconds)
-  signature: {
-    signature: Uint8Array; // Ed25519 signature of CBOR-encoded signed properties
-    publicKey: Uint8Array; // 32-byte Ed25519 public key
-    type: "ed25519";
-    signedPropertyNames: ["challengeId", "token", "timestamp"];
-  };
+    challengeId: string;
+    token: string; // Token from iframe, submitted by author in challengeAnswer
+    timestamp: number; // Unix timestamp (seconds)
+    signature: {
+        signature: Uint8Array; // Ed25519 signature of CBOR-encoded signed properties
+        publicKey: Uint8Array; // 32-byte Ed25519 public key
+        type: "ed25519";
+        signedPropertyNames: ["challengeId", "token", "timestamp"];
+    }
 }
 ```
 

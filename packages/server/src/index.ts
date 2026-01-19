@@ -91,18 +91,14 @@ export async function createServer(config: ServerConfig): Promise<SpamDetectionS
     });
 
     // Add CBOR content type parser
-    fastify.addContentTypeParser(
-        "application/cbor",
-        { parseAs: "buffer" },
-        (_request: FastifyRequest, payload: Buffer, done) => {
-            try {
-                const decoded = cborg.decode(payload);
-                done(null, decoded);
-            } catch (err) {
-                done(err as Error, undefined);
-            }
+    fastify.addContentTypeParser("application/cbor", { parseAs: "buffer" }, (_request: FastifyRequest, payload: Buffer, done) => {
+        try {
+            const decoded = cborg.decode(payload);
+            done(null, decoded);
+        } catch (err) {
+            done(err as Error, undefined);
         }
-    );
+    });
 
     fastify.decorate("getPlebbitInstance", getPlebbitInstance);
 

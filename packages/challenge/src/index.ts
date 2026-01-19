@@ -202,7 +202,12 @@ const getChallenge = async (args: GetChallengeArgs): Promise<ChallengeInput | Ch
     log.trace("getChallenge args: challengeSettings=%o, challengeRequestMessage=%o", challengeSettings, challengeRequestMessage);
 
     const options = parseOptions(challengeSettings);
-    log("Parsed options: serverUrl=%s, autoAcceptThreshold=%s, autoRejectThreshold=%s", options.serverUrl, options.autoAcceptThreshold, options.autoRejectThreshold);
+    log(
+        "Parsed options: serverUrl=%s, autoAcceptThreshold=%s, autoRejectThreshold=%s",
+        options.serverUrl,
+        options.autoAcceptThreshold,
+        options.autoRejectThreshold
+    );
 
     const signer = subplebbit?.signer;
 
@@ -229,7 +234,12 @@ const getChallenge = async (args: GetChallengeArgs): Promise<ChallengeInput | Ch
         "evaluate"
     );
     const riskScore = evaluateResponse.riskScore;
-    log("Evaluate response: riskScore=%s, challengeId=%s, explanation=%s", formatRiskScore(riskScore), evaluateResponse.challengeId, evaluateResponse.explanation);
+    log(
+        "Evaluate response: riskScore=%s, challengeId=%s, explanation=%s",
+        formatRiskScore(riskScore),
+        evaluateResponse.challengeId,
+        evaluateResponse.explanation
+    );
 
     if (riskScore < options.autoAcceptThreshold) {
         log("Auto-accepting publication (riskScore %s < autoAcceptThreshold %s)", formatRiskScore(riskScore), options.autoAcceptThreshold);
@@ -272,8 +282,14 @@ const getChallenge = async (args: GetChallengeArgs): Promise<ChallengeInput | Ch
             }),
             "verify"
         );
-        log("Verify response: success=%s, error=%s, ipRisk=%s, ipAddressCountry=%s, ipTypeEstimation=%s",
-            verifyResponse.success, verifyResponse.error, verifyResponse.ipRisk, verifyResponse.ipAddressCountry, verifyResponse.ipTypeEstimation);
+        log(
+            "Verify response: success=%s, error=%s, ipRisk=%s, ipAddressCountry=%s, ipTypeEstimation=%s",
+            verifyResponse.success,
+            verifyResponse.error,
+            verifyResponse.ipRisk,
+            verifyResponse.ipAddressCountry,
+            verifyResponse.ipTypeEstimation
+        );
 
         if (!verifyResponse.success) {
             log("Challenge verification failed: %s", verifyResponse.error || "unknown error");

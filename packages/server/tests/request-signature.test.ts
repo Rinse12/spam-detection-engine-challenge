@@ -126,9 +126,7 @@ describe("verifySignedRequest with CBOR", () => {
             timestamp: 1234567890
         };
 
-        await expect(verifySignedRequest(tamperedPayload, signature)).rejects.toThrow(
-            "Request signature is invalid"
-        );
+        await expect(verifySignedRequest(tamperedPayload, signature)).rejects.toThrow("Request signature is invalid");
     });
 
     it("should reject signature with wrong public key", async () => {
@@ -147,9 +145,7 @@ describe("verifySignedRequest with CBOR", () => {
             publicKey: keypair2.publicKey
         };
 
-        await expect(verifySignedRequest(propsToSign, signatureWithWrongKey)).rejects.toThrow(
-            "Request signature is invalid"
-        );
+        await expect(verifySignedRequest(propsToSign, signatureWithWrongKey)).rejects.toThrow("Request signature is invalid");
     });
 
     it("should reject signature with tampered signature bytes", async () => {
@@ -167,9 +163,7 @@ describe("verifySignedRequest with CBOR", () => {
             signature: new Uint8Array(64) // All zeros - invalid
         };
 
-        await expect(verifySignedRequest(propsToSign, tamperedSignature)).rejects.toThrow(
-            "Request signature is invalid"
-        );
+        await expect(verifySignedRequest(propsToSign, tamperedSignature)).rejects.toThrow("Request signature is invalid");
     });
 
     it("should reject when signedPropertyNames is empty", async () => {
@@ -185,9 +179,7 @@ describe("verifySignedRequest with CBOR", () => {
             signedPropertyNames: []
         };
 
-        await expect(verifySignedRequest(payload, signature)).rejects.toThrow(
-            "Request signature has no signed fields"
-        );
+        await expect(verifySignedRequest(payload, signature)).rejects.toThrow("Request signature has no signed fields");
     });
 
     it("should only verify signed properties (extra properties ignored)", async () => {

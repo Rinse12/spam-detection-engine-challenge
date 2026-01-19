@@ -17,13 +17,8 @@ export const signBufferEd25519 = async (bufferToSign: Uint8Array, privateKeyBase
     return ed.sign(bufferToSign, privateKeyBuffer);
 };
 
-export const verifyBufferEd25519 = async (
-    bufferToSign: Uint8Array,
-    bufferSignature: Uint8Array,
-    publicKey: Uint8Array | string
-) => {
-    const publicKeyBuffer =
-        typeof publicKey === "string" ? uint8ArrayFromString(publicKey, "base64") : publicKey;
+export const verifyBufferEd25519 = async (bufferToSign: Uint8Array, bufferSignature: Uint8Array, publicKey: Uint8Array | string) => {
+    const publicKeyBuffer = typeof publicKey === "string" ? uint8ArrayFromString(publicKey, "base64") : publicKey;
     return ed.verify(bufferSignature, bufferToSign, publicKeyBuffer);
 };
 

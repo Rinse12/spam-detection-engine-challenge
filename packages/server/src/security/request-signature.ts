@@ -14,10 +14,7 @@ const requestSignatureError = (message: string) => {
     return error;
 };
 
-export const verifySignedRequest = async (
-    payload: Record<string, unknown>,
-    signature: CborRequestSignature
-): Promise<void> => {
+export const verifySignedRequest = async (payload: Record<string, unknown>, signature: CborRequestSignature): Promise<void> => {
     const signedKeys = signature.signedPropertyNames ?? [];
 
     if (!signedKeys.length) {
