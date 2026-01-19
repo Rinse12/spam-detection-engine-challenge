@@ -3,7 +3,6 @@ import * as cborg from "cborg";
 import { SpamDetectionDatabase, createDatabase } from "./db/index.js";
 import { registerRoutes } from "./routes/index.js";
 import { destroyPlebbitInstance, getPlebbitInstance, initPlebbitInstance, setPlebbitOptions } from "./subplebbit-resolver.js";
-import { createKeyManager, type KeyManager } from "./crypto/keys.js";
 import { Indexer, stopIndexer } from "./indexer/index.js";
 import type Plebbit from "@plebbit/plebbit-js";
 
@@ -18,8 +17,6 @@ export interface ServerConfig {
     baseUrl?: string;
     /** Path to SQLite database file. Use ":memory:" for in-memory. */
     databasePath: string;
-    /** Path to store the server's JWT signing keypair. Auto-generates if not exists. */
-    keyPath?: string;
     /** Cloudflare Turnstile site key */
     turnstileSiteKey?: string;
     /** Cloudflare Turnstile secret key */
@@ -39,7 +36,6 @@ export interface ServerConfig {
 export interface SpamDetectionServer {
     fastify: FastifyInstance;
     db: SpamDetectionDatabase;
-    keyManager: KeyManager;
     indexer: Indexer | null;
     start(): Promise<string>;
     stop(): Promise<void>;
@@ -54,7 +50,6 @@ export async function createServer(config: ServerConfig): Promise<SpamDetectionS
         host = "0.0.0.0",
         baseUrl = `http://localhost:${port}`,
         databasePath,
-        keyPath,
         turnstileSiteKey,
         turnstileSecretKey,
         ipInfoToken,
@@ -85,6 +80,15 @@ export async function createServer(config: ServerConfig): Promise<SpamDetectionS
                           translateTime: "HH:MM:ss Z",
                           ignore: "pid,hostname"
                       }
+                  },
+                  serializers: {
+                      // Redact signature bytes from request body to prevent terminal spam
+                      req: (req) => ({
+                          method: req.method,
+                          url: req.url,
+                          hostname: req.hostname,
+                          remoteAddress: req.ip
+                      })
                   }
               }
             : false
@@ -105,9 +109,6 @@ export async function createServer(config: ServerConfig): Promise<SpamDetectionS
     // Create database
     const db = createDatabase(databasePath);
 
-    // Create or load JWT signing keypair
-    const keyManager = await createKeyManager(keyPath);
-
     // Set Plebbit options for the subplebbit resolver
     setPlebbitOptions(plebbitOptions);
 
@@ -124,7 +125,6 @@ export async function createServer(config: ServerConfig): Promise<SpamDetectionS
         turnstileSiteKey,
         turnstileSecretKey,
         ipInfoToken,
-        keyManager,
         indexer
     });
 
@@ -144,7 +144,6 @@ export async function createServer(config: ServerConfig): Promise<SpamDetectionS
     return {
         fastify,
         db,
-        keyManager,
         indexer,
 
         async start(): Promise<string> {
@@ -198,7 +197,6 @@ if (isMainModule) {
         host: process.env.HOST ?? "0.0.0.0",
         baseUrl: process.env.BASE_URL,
         databasePath,
-        keyPath: process.env.JWT_KEY_PATH,
         turnstileSiteKey: process.env.TURNSTILE_SITE_KEY,
         turnstileSecretKey: process.env.TURNSTILE_SECRET_KEY,
         ipInfoToken: process.env.IPINFO_TOKEN,

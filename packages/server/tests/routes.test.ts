@@ -4,7 +4,6 @@ import * as cborg from "cborg";
 import { fromString as uint8ArrayFromString } from "uint8arrays/from-string";
 import { signBufferEd25519, getPublicKeyFromPrivateKey } from "../src/plebbit-js-signer.js";
 import { resetPlebbitLoaderForTest, setPlebbitLoaderForTest } from "../src/subplebbit-resolver.js";
-import { signChallengeToken, createTokenPayload } from "../src/crypto/jwt.js";
 
 const baseTimestamp = Math.floor(Date.now() / 1000);
 const baseSignature = {
@@ -136,16 +135,14 @@ const createEvaluatePayload = async ({
 };
 
 const createVerifyPayload = async ({
-    challengeId,
-    token,
+    sessionId,
     signer = testSigner
 }: {
-    challengeId: string;
-    token: string;
+    sessionId: string;
     signer?: typeof testSigner;
 }) => {
     const timestamp = Math.floor(Date.now() / 1000);
-    const propsToSign = { challengeId, token, timestamp };
+    const propsToSign = { sessionId, timestamp };
     const signature = await createRequestSignature(propsToSign, signer);
 
     return { ...propsToSign, signature };
@@ -199,7 +196,7 @@ describe("API Routes", () => {
             expect(body.riskScore).toBeDefined();
             expect(body.riskScore).toBeGreaterThanOrEqual(0);
             expect(body.riskScore).toBeLessThanOrEqual(1);
-            expect(body.challengeId).toBeDefined();
+            expect(body.sessionId).toBeDefined();
             expect(body.challengeUrl).toBeDefined();
             expect(body.challengeUrl).toContain("/api/v1/iframe/");
             expect(body.challengeExpiresAt).toBeDefined();
@@ -210,7 +207,7 @@ describe("API Routes", () => {
             const response = await injectCbor(server.fastify, "POST", "/api/v1/evaluate", validRequest);
 
             const body = response.json();
-            const session = server.db.getChallengeSessionByChallengeId(body.challengeId);
+            const session = server.db.getChallengeSessionBySessionId(body.sessionId);
 
             expect(session).toBeDefined();
             expect(session?.subplebbitPublicKey).toBe(testSigner.publicKey);
@@ -276,7 +273,7 @@ describe("API Routes", () => {
             expect(body.riskScore).toBeDefined();
             expect(body.riskScore).toBeGreaterThanOrEqual(0);
             expect(body.riskScore).toBeLessThanOrEqual(1);
-            expect(body.challengeId).toBeDefined();
+            expect(body.sessionId).toBeDefined();
         });
 
         it("should return 400 for invalid request body", async () => {
@@ -395,12 +392,12 @@ describe("API Routes", () => {
             expect(response.statusCode).toBe(200);
             const body = response.json();
             expect(body.riskScore).toBeDefined();
-            expect(body.challengeId).toBeDefined();
+            expect(body.sessionId).toBeDefined();
         });
     });
 
     describe("POST /api/v1/challenge/verify", () => {
-        let challengeId: string;
+        let sessionId: string;
 
         beforeEach(async () => {
             // Create a challenge session first
@@ -411,19 +408,14 @@ describe("API Routes", () => {
             const evalResponse = await injectCbor(server.fastify, "POST", "/api/v1/evaluate", evaluatePayload);
 
             const evalBody = evalResponse.json();
-            challengeId = evalBody.challengeId;
+            sessionId = evalBody.sessionId;
         });
 
-        it("should verify valid token", async () => {
-            // Generate a valid JWT using the server's key manager
-            const privateKey = await server.keyManager.getPrivateKey();
-            const tokenPayload = createTokenPayload(challengeId);
-            const validToken = await signChallengeToken(tokenPayload, privateKey);
+        it("should return success when challenge is completed", async () => {
+            // Mark the challenge as completed (simulating /complete was called)
+            server.db.updateChallengeSessionStatus(sessionId, "completed", Math.floor(Date.now() / 1000));
 
-            const payload = await createVerifyPayload({
-                challengeId,
-                token: validToken
-            });
+            const payload = await createVerifyPayload({ sessionId });
             const response = await injectCbor(server.fastify, "POST", "/api/v1/challenge/verify", payload);
 
             expect(response.statusCode).toBe(200);
@@ -432,27 +424,20 @@ describe("API Routes", () => {
             expect(body.challengeType).toBe("turnstile");
         });
 
-        it("should mark session as completed after verification", async () => {
-            // Generate a valid JWT using the server's key manager
-            const privateKey = await server.keyManager.getPrivateKey();
-            const tokenPayload = createTokenPayload(challengeId);
-            const validToken = await signChallengeToken(tokenPayload, privateKey);
+        it("should return 400 when challenge is still pending", async () => {
+            // Session is created as "pending" by default
+            const payload = await createVerifyPayload({ sessionId });
+            const response = await injectCbor(server.fastify, "POST", "/api/v1/challenge/verify", payload);
 
-            const payload = await createVerifyPayload({
-                challengeId,
-                token: validToken
-            });
-            await injectCbor(server.fastify, "POST", "/api/v1/challenge/verify", payload);
-
-            const session = server.db.getChallengeSessionByChallengeId(challengeId);
-            expect(session?.status).toBe("completed");
-            expect(session?.completedAt).toBeDefined();
+            expect(response.statusCode).toBe(400);
+            const body = response.json();
+            expect(body.success).toBe(false);
+            expect(body.error).toContain("not yet completed");
         });
 
         it("should return 404 for non-existent challenge", async () => {
             const payload = await createVerifyPayload({
-                challengeId: "non-existent-challenge-id",
-                token: "some-token-12345"
+                sessionId: "non-existent-challenge-id"
             });
             const response = await injectCbor(server.fastify, "POST", "/api/v1/challenge/verify", payload);
 
@@ -462,36 +447,12 @@ describe("API Routes", () => {
             expect(body.error).toContain("not found");
         });
 
-        it("should return 409 for already completed challenge", async () => {
-            // Generate a valid JWT using the server's key manager
-            const privateKey = await server.keyManager.getPrivateKey();
-            const tokenPayload = createTokenPayload(challengeId);
-            const validToken = await signChallengeToken(tokenPayload, privateKey);
-
-            const firstPayload = await createVerifyPayload({
-                challengeId,
-                token: validToken
-            });
-            // Complete the challenge first
-            await injectCbor(server.fastify, "POST", "/api/v1/challenge/verify", firstPayload);
-
-            // Try to verify again
-            const secondPayload = await createVerifyPayload({
-                challengeId,
-                token: validToken
-            });
-            const response = await injectCbor(server.fastify, "POST", "/api/v1/challenge/verify", secondPayload);
-
-            expect(response.statusCode).toBe(409);
-            const body = response.json();
-            expect(body.success).toBe(false);
-            expect(body.error).toContain("already completed");
-        });
-
         it("should return 401 for mismatched signer", async () => {
+            // Mark as completed first
+            server.db.updateChallengeSessionStatus(sessionId, "completed", Math.floor(Date.now() / 1000));
+
             const payload = await createVerifyPayload({
-                challengeId,
-                token: "valid-token-placeholder-12345",
+                sessionId,
                 signer: alternateSigner
             });
             const response = await injectCbor(server.fastify, "POST", "/api/v1/challenge/verify", payload);
@@ -502,32 +463,22 @@ describe("API Routes", () => {
             expect(body.error).toContain("signature");
         });
 
-        it("should return 401 for invalid token", async () => {
-            const payload = await createVerifyPayload({
-                challengeId,
-                token: "not-a-valid-jwt-token" // Invalid JWT format
-            });
+        it("should return 400 for failed challenge", async () => {
+            // Mark challenge as failed
+            server.db.updateChallengeSessionStatus(sessionId, "failed", Math.floor(Date.now() / 1000));
+
+            const payload = await createVerifyPayload({ sessionId });
             const response = await injectCbor(server.fastify, "POST", "/api/v1/challenge/verify", payload);
 
-            expect(response.statusCode).toBe(401);
+            expect(response.statusCode).toBe(400);
             const body = response.json();
             expect(body.success).toBe(false);
-            // JWT library throws "Invalid Compact JWS" for malformed tokens
-            expect(body.error).toBeDefined();
-        });
-
-        it("should return 400 for missing fields", async () => {
-            const response = await injectCbor(server.fastify, "POST", "/api/v1/challenge/verify", {
-                challengeId
-                // Missing token
-            });
-
-            expect(response.statusCode).toBe(400);
+            expect(body.error).toContain("failed");
         });
     });
 
-    describe("GET /api/v1/iframe/:challengeId", () => {
-        let challengeId: string;
+    describe("GET /api/v1/iframe/:sessionId", () => {
+        let sessionId: string;
 
         beforeEach(async () => {
             // Create a challenge session first
@@ -538,13 +489,13 @@ describe("API Routes", () => {
             const evalResponse = await injectCbor(server.fastify, "POST", "/api/v1/evaluate", evaluatePayload);
 
             const evalBody = evalResponse.json();
-            challengeId = evalBody.challengeId;
+            sessionId = evalBody.sessionId;
         });
 
         it("should serve iframe HTML for valid challenge", async () => {
             const response = await server.fastify.inject({
                 method: "GET",
-                url: `/api/v1/iframe/${challengeId}`
+                url: `/api/v1/iframe/${sessionId}`
             });
 
             expect(response.statusCode).toBe(200);
@@ -552,7 +503,7 @@ describe("API Routes", () => {
             expect(response.body).toContain("<!DOCTYPE html>");
             expect(response.body).toContain("Verify you are human");
             expect(response.body).toContain("cf-turnstile");
-            expect(response.body).toContain(challengeId);
+            expect(response.body).toContain(sessionId);
         });
 
         it("should return 404 for non-existent challenge", async () => {
@@ -566,11 +517,11 @@ describe("API Routes", () => {
 
         it("should return 409 for already completed challenge", async () => {
             // Complete the challenge first
-            server.db.updateChallengeSessionStatus(challengeId, "completed", Math.floor(Date.now() / 1000));
+            server.db.updateChallengeSessionStatus(sessionId, "completed", Math.floor(Date.now() / 1000));
 
             const response = await server.fastify.inject({
                 method: "GET",
-                url: `/api/v1/iframe/${challengeId}`
+                url: `/api/v1/iframe/${sessionId}`
             });
 
             expect(response.statusCode).toBe(409);
@@ -617,13 +568,13 @@ describe("Turnstile E2E Flow", () => {
 
         expect(evalResponse.statusCode).toBe(200);
         const evalBody = evalResponse.json();
-        const challengeId = evalBody.challengeId;
-        expect(challengeId).toBeDefined();
+        const sessionId = evalBody.sessionId;
+        expect(sessionId).toBeDefined();
 
         // Step 2: Get iframe and verify it contains the test site key
         const iframeResponse = await server.fastify.inject({
             method: "GET",
-            url: `/api/v1/iframe/${challengeId}`
+            url: `/api/v1/iframe/${sessionId}`
         });
 
         expect(iframeResponse.statusCode).toBe(200);
@@ -635,7 +586,7 @@ describe("Turnstile E2E Flow", () => {
             method: "POST",
             url: "/api/v1/challenge/complete",
             payload: {
-                challengeId,
+                sessionId,
                 challengeResponse: "XXXX.DUMMY.TOKEN.XXXX",
                 challengeType: "turnstile"
             }
@@ -644,14 +595,10 @@ describe("Turnstile E2E Flow", () => {
         expect(completeResponse.statusCode).toBe(200);
         const completeBody = completeResponse.json();
         expect(completeBody.success).toBe(true);
-        expect(completeBody.token).toBeDefined();
-        expect(typeof completeBody.token).toBe("string");
+        // No token returned - completion is tracked server-side
 
-        // Step 4: Verify the JWT token
-        const verifyPayload = await createVerifyPayload({
-            challengeId,
-            token: completeBody.token
-        });
+        // Step 4: Verify the challenge is completed (server checks DB status)
+        const verifyPayload = await createVerifyPayload({ sessionId });
         const verifyResponse = await injectCbor(server.fastify, "POST", "/api/v1/challenge/verify", verifyPayload);
 
         expect(verifyResponse.statusCode).toBe(200);
@@ -660,7 +607,7 @@ describe("Turnstile E2E Flow", () => {
         expect(verifyBody.challengeType).toBe("turnstile");
 
         // Verify session is marked as completed
-        const session = server.db.getChallengeSessionByChallengeId(challengeId);
+        const session = server.db.getChallengeSessionBySessionId(sessionId);
         expect(session?.status).toBe("completed");
     });
 
@@ -670,11 +617,11 @@ describe("Turnstile E2E Flow", () => {
         });
         const evalResponse = await injectCbor(server.fastify, "POST", "/api/v1/evaluate", evaluatePayload);
 
-        const { challengeId } = evalResponse.json();
+        const { sessionId } = evalResponse.json();
 
         const iframeResponse = await server.fastify.inject({
             method: "GET",
-            url: `/api/v1/iframe/${challengeId}`
+            url: `/api/v1/iframe/${sessionId}`
         });
 
         expect(iframeResponse.statusCode).toBe(200);
@@ -719,14 +666,14 @@ describe("Turnstile Failure Scenarios", () => {
         });
         const evalResponse = await injectCbor(server.fastify, "POST", "/api/v1/evaluate", evaluatePayload);
 
-        const { challengeId } = evalResponse.json();
+        const { sessionId } = evalResponse.json();
 
         // Try to complete with failing secret key
         const completeResponse = await server.fastify.inject({
             method: "POST",
             url: "/api/v1/challenge/complete",
             payload: {
-                challengeId,
+                sessionId,
                 challengeResponse: "XXXX.DUMMY.TOKEN.XXXX",
                 challengeType: "turnstile"
             }

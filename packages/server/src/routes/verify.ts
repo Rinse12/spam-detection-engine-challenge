@@ -1,22 +1,19 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import type { VerifyResponse } from "@easy-community-spam-blocker/shared";
 import type { SpamDetectionDatabase } from "../db/index.js";
-import type { KeyManager } from "../crypto/keys.js";
 import { VerifyRequestSchema, type VerifyRequest } from "./schemas.js";
 import { verifySignedRequest } from "../security/request-signature.js";
-import { verifyChallengeToken, type ChallengeTokenPayload } from "../crypto/jwt.js";
 import { toString as uint8ArrayToString } from "uint8arrays/to-string";
 
 export interface VerifyRouteOptions {
     db: SpamDetectionDatabase;
-    keyManager: KeyManager;
 }
 
 /**
  * Register the /api/v1/challenge/verify route.
  */
 export function registerVerifyRoute(fastify: FastifyInstance, options: VerifyRouteOptions): void {
-    const { db, keyManager } = options;
+    const { db } = options;
 
     fastify.post(
         "/api/v1/challenge/verify",
@@ -32,7 +29,7 @@ export function registerVerifyRoute(fastify: FastifyInstance, options: VerifyRou
                 };
             }
 
-            const { challengeId, token, signature, timestamp } = parseResult.data;
+            const { sessionId, signature, timestamp } = parseResult.data;
 
             const now = Math.floor(Date.now() / 1000);
             const maxSkewSeconds = 5 * 60;
@@ -45,7 +42,7 @@ export function registerVerifyRoute(fastify: FastifyInstance, options: VerifyRou
             }
 
             try {
-                await verifySignedRequest({ challengeId, token, timestamp }, signature);
+                await verifySignedRequest({ sessionId, timestamp }, signature);
             } catch (error) {
                 reply.status((error as { statusCode?: number }).statusCode ?? 401);
                 return {
@@ -55,7 +52,7 @@ export function registerVerifyRoute(fastify: FastifyInstance, options: VerifyRou
             }
 
             // Look up challenge session
-            const session = db.getChallengeSessionByChallengeId(challengeId);
+            const session = db.getChallengeSessionBySessionId(sessionId);
 
             if (!session) {
                 reply.status(404);
@@ -71,15 +68,6 @@ export function registerVerifyRoute(fastify: FastifyInstance, options: VerifyRou
                 return {
                     success: false,
                     error: "Challenge session has expired"
-                };
-            }
-
-            // Check if challenge was already completed or failed
-            if (session.status !== "pending") {
-                reply.status(409);
-                return {
-                    success: false,
-                    error: `Challenge session is already ${session.status}`
                 };
             }
 
@@ -101,37 +89,27 @@ export function registerVerifyRoute(fastify: FastifyInstance, options: VerifyRou
                 };
             }
 
-            // Verify the JWT token
-            let tokenPayload: ChallengeTokenPayload;
-            try {
-                const publicKey = await keyManager.getPublicKey();
-                tokenPayload = await verifyChallengeToken(token, publicKey);
-
-                // Verify challengeId matches
-                if (tokenPayload.challengeId !== challengeId) {
-                    db.updateChallengeSessionStatus(challengeId, "failed");
-                    reply.status(401);
-                    return {
-                        success: false,
-                        error: "Token challenge ID mismatch"
-                    };
-                }
-            } catch (error) {
-                // Mark session as failed
-                db.updateChallengeSessionStatus(challengeId, "failed");
-
-                reply.status(401);
+            // Check challenge completion status (server-side tracking, no JWT needed)
+            if (session.status === "pending") {
+                reply.status(400);
                 return {
                     success: false,
-                    error: error instanceof Error ? error.message : "Invalid token"
+                    error: "Challenge not yet completed"
                 };
             }
 
-            // Mark session as completed
-            db.updateChallengeSessionStatus(challengeId, "completed", now);
+            if (session.status === "failed") {
+                reply.status(400);
+                return {
+                    success: false,
+                    error: "Challenge failed"
+                };
+            }
+
+            // session.status === "completed" - success!
 
             // Get IP record if available
-            const ipRecord = db.getIpRecordByChallengeId(challengeId); // TODO shouldn't it always be defined since /verify is called after iframe?
+            const ipRecord = db.getIpRecordBySessionId(sessionId); // TODO shouldn't it always be defined since /verify is called after iframe?
 
             // Build response with IP intelligence data if available
             const response: VerifyResponse = {

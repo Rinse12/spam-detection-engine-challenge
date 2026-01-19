@@ -137,12 +137,12 @@ describe("calculateCommentUrlRisk", () => {
 
             // Add existing comment with same link
             db.insertChallengeSession({
-                challengeId: "prev-link-1",
+                sessionId: "prev-link-1",
                 subplebbitPublicKey: "pk",
                 expiresAt: baseTimestamp + 3600
             });
             db.insertComment({
-                challengeId: "prev-link-1",
+                sessionId: "prev-link-1",
                 publication: {
                     author: { address: authorAddress },
                     subplebbitAddress: "test-sub.eth",
@@ -176,12 +176,12 @@ describe("calculateCommentUrlRisk", () => {
             // Add 5 existing comments with same link
             for (let i = 0; i < 5; i++) {
                 db.insertChallengeSession({
-                    challengeId: `prev-link-${i}`,
+                    sessionId: `prev-link-${i}`,
                     subplebbitPublicKey: "pk",
                     expiresAt: baseTimestamp + 3600
                 });
                 db.insertComment({
-                    challengeId: `prev-link-${i}`,
+                    sessionId: `prev-link-${i}`,
                     publication: {
                         author: { address: authorAddress },
                         subplebbitAddress: "test-sub.eth",
@@ -220,12 +220,12 @@ describe("calculateCommentUrlRisk", () => {
 
             // Add existing comment from different author with same link
             db.insertChallengeSession({
-                challengeId: "other-author-link",
+                sessionId: "other-author-link",
                 subplebbitPublicKey: "pk",
                 expiresAt: baseTimestamp + 3600
             });
             db.insertComment({
-                challengeId: "other-author-link",
+                sessionId: "other-author-link",
                 publication: {
                     author: { address: otherAuthor },
                     subplebbitAddress: "test-sub.eth",
@@ -260,12 +260,12 @@ describe("calculateCommentUrlRisk", () => {
             for (let i = 2; i <= 11; i++) {
                 const authorSignature = { ...baseSignature, publicKey: `author${i}-pk` };
                 db.insertChallengeSession({
-                    challengeId: `coord-link-${i}`,
+                    sessionId: `coord-link-${i}`,
                     subplebbitPublicKey: "pk",
                     expiresAt: baseTimestamp + 3600
                 });
                 db.insertComment({
-                    challengeId: `coord-link-${i}`,
+                    sessionId: `coord-link-${i}`,
                     publication: {
                         author: { address: `author${i}` },
                         subplebbitAddress: "test-sub.eth",
@@ -373,12 +373,12 @@ describe("calculateCommentUrlRisk", () => {
 
             // Add old comment outside 24h window
             db.insertChallengeSession({
-                challengeId: "old-link",
+                sessionId: "old-link",
                 subplebbitPublicKey: "pk",
                 expiresAt: baseTimestamp + 3600
             });
             db.insertComment({
-                challengeId: "old-link",
+                sessionId: "old-link",
                 publication: {
                     author: { address: authorAddress },
                     subplebbitAddress: "test-sub.eth",
@@ -389,7 +389,7 @@ describe("calculateCommentUrlRisk", () => {
                 }
             });
             // Set receivedAt to 2 days ago
-            db.getDb().prepare("UPDATE comments SET receivedAt = ? WHERE challengeId = ?").run(twoDaysAgo, "old-link");
+            db.getDb().prepare("UPDATE comments SET receivedAt = ? WHERE sessionId = ?").run(twoDaysAgo, "old-link");
 
             const challengeRequest = createMockChallengeRequest(authorAddress, link);
 
@@ -417,12 +417,12 @@ describe("calculateCommentUrlRisk", () => {
 
             // Add existing comment with tracking params
             db.insertChallengeSession({
-                challengeId: "link-with-tracking",
+                sessionId: "link-with-tracking",
                 subplebbitPublicKey: "pk",
                 expiresAt: baseTimestamp + 3600
             });
             db.insertComment({
-                challengeId: "link-with-tracking",
+                sessionId: "link-with-tracking",
                 publication: {
                     author: { address: authorAddress },
                     subplebbitAddress: "test-sub.eth",
@@ -460,12 +460,12 @@ describe("calculateCommentUrlRisk", () => {
             const signature = { ...baseSignature, publicKey: authorPublicKey };
 
             db.insertChallengeSession({
-                challengeId: "link-1",
+                sessionId: "link-1",
                 subplebbitPublicKey: "pk",
                 expiresAt: baseTimestamp + 3600
             });
             db.insertComment({
-                challengeId: "link-1",
+                sessionId: "link-1",
                 publication: {
                     author: { address: "author1" },
                     subplebbitAddress: "test-sub.eth",
@@ -494,12 +494,12 @@ describe("calculateCommentUrlRisk", () => {
             for (let i = 2; i <= 4; i++) {
                 const otherSignature = { ...baseSignature, publicKey: `author${i}-pk` };
                 db.insertChallengeSession({
-                    challengeId: `other-link-${i}`,
+                    sessionId: `other-link-${i}`,
                     subplebbitPublicKey: "pk",
                     expiresAt: baseTimestamp + 3600
                 });
                 db.insertComment({
-                    challengeId: `other-link-${i}`,
+                    sessionId: `other-link-${i}`,
                     publication: {
                         author: { address: `author${i}` },
                         subplebbitAddress: "test-sub.eth",
@@ -528,12 +528,12 @@ describe("calculateCommentUrlRisk", () => {
             const signature = { ...baseSignature, publicKey: authorPublicKey };
 
             db.insertChallengeSession({
-                challengeId: "same-author-link",
+                sessionId: "same-author-link",
                 subplebbitPublicKey: "pk",
                 expiresAt: baseTimestamp + 3600
             });
             db.insertComment({
-                challengeId: "same-author-link",
+                sessionId: "same-author-link",
                 publication: {
                     author: { address: "author1" },
                     subplebbitAddress: "test-sub.eth",

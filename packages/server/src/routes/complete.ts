@@ -1,19 +1,15 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import type { SpamDetectionDatabase } from "../db/index.js";
-import type { KeyManager } from "../crypto/keys.js";
 import { CompleteRequestSchema, type CompleteRequest } from "./schemas.js";
-import { signChallengeToken, createTokenPayload } from "../crypto/jwt.js";
 import { verifyTurnstileToken } from "../challenges/turnstile.js";
 
 export interface CompleteRouteOptions {
     db: SpamDetectionDatabase;
-    keyManager: KeyManager;
     turnstileSecretKey?: string;
 }
 
 export interface CompleteResponse {
     success: boolean;
-    token?: string;
     error?: string;
 }
 
@@ -22,7 +18,7 @@ export interface CompleteResponse {
  * Called by the iframe after the user solves the CAPTCHA.
  */
 export function registerCompleteRoute(fastify: FastifyInstance, options: CompleteRouteOptions): void {
-    const { db, keyManager, turnstileSecretKey } = options;
+    const { db, turnstileSecretKey } = options;
 
     fastify.post(
         "/api/v1/challenge/complete",
@@ -38,10 +34,10 @@ export function registerCompleteRoute(fastify: FastifyInstance, options: Complet
                 };
             }
 
-            const { challengeId, challengeResponse, challengeType } = parseResult.data;
+            const { sessionId, challengeResponse, challengeType } = parseResult.data;
 
             // Look up challenge session
-            const session = db.getChallengeSessionByChallengeId(challengeId);
+            const session = db.getChallengeSessionBySessionId(sessionId);
 
             if (!session) {
                 reply.status(404);
@@ -103,24 +99,12 @@ export function registerCompleteRoute(fastify: FastifyInstance, options: Complet
                 request.log.warn({ challengeType: effectiveChallengeType }, "Challenge type not yet implemented, skipping verification");
             }
 
-            // Create and sign JWT token
-            try {
-                const privateKey = await keyManager.getPrivateKey();
-                const payload = createTokenPayload(challengeId);
-                const token = await signChallengeToken(payload, privateKey);
+            // Mark challenge as completed in database
+            db.updateChallengeSessionStatus(sessionId, "completed", now);
 
-                return {
-                    success: true,
-                    token
-                };
-            } catch (error) {
-                request.log.error({ err: error }, "Failed to sign JWT token");
-                reply.status(500);
-                return {
-                    success: false,
-                    error: "Failed to generate token"
-                };
-            }
+            return {
+                success: true
+            };
         }
     );
 }

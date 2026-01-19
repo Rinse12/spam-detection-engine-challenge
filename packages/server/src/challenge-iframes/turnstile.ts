@@ -9,7 +9,7 @@ export interface TurnstileIframeOptions extends IframeGeneratorOptions {
  * Generate iframe HTML with Cloudflare Turnstile CAPTCHA.
  */
 export function generateTurnstileIframe(options: TurnstileIframeOptions): string {
-    const { challengeId, siteKey = "PLACEHOLDER_SITE_KEY" } = options;
+    const { sessionId, siteKey = "PLACEHOLDER_SITE_KEY" } = options;
 
     return `<!DOCTYPE html>
 <html lang="en">
@@ -89,7 +89,7 @@ export function generateTurnstileIframe(options: TurnstileIframeOptions): string
   </div>
 
   <script>
-    const challengeId = ${JSON.stringify(challengeId)};
+    const sessionId = ${JSON.stringify(sessionId)};
     const statusEl = document.getElementById('status');
 
     function showStatus(message, type) {
@@ -100,30 +100,29 @@ export function generateTurnstileIframe(options: TurnstileIframeOptions): string
     function onTurnstileSuccess(turnstileToken) {
       showStatus('Verification successful! Completing...', 'loading');
 
-      // Call server to get signed JWT
+      // Call server to mark challenge as completed
       fetch('/api/v1/challenge/complete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          challengeId: challengeId,
+          sessionId: sessionId,
           challengeResponse: turnstileToken,
           challengeType: 'turnstile'
         })
       })
       .then(function(response) { return response.json(); })
       .then(function(data) {
-        if (data.success && data.token) {
-          // Send JWT to parent window
+        if (data.success) {
+          // Notify parent window (for clients that embed the iframe)
           window.parent.postMessage({
-            type: 'challenge-complete',
-            token: data.token
+            type: 'challenge-complete'
           }, '*');
-          showStatus('Verification complete!', 'success');
+          showStatus('Verification complete! You may close this window.', 'success');
         } else {
           showStatus('Verification failed: ' + (data.error || 'Unknown error'), 'error');
           window.parent.postMessage({
             type: 'challenge-error',
-            error: data.error || 'Token generation failed'
+            error: data.error || 'Verification failed'
           }, '*');
         }
       })

@@ -2,7 +2,7 @@ import Database from "better-sqlite3";
 import { SCHEMA_SQL } from "./schema.js";
 
 export interface ChallengeSession {
-    challengeId: string;
+    sessionId: string;
     /** Ed25519 public key of the subplebbit that created this session. Used to verify the same subplebbit completes the challenge. */
     subplebbitPublicKey: string | null;
     status: "pending" | "completed" | "failed";
@@ -14,7 +14,7 @@ export interface ChallengeSession {
 }
 
 export interface IpRecord {
-    challengeId: string;
+    sessionId: string;
     ipAddress: string;
     isVpn: number | null;
     isProxy: number | null;
@@ -119,19 +119,19 @@ export class SpamDetectionDatabase {
      * Insert a new challenge session.
      */
     insertChallengeSession(params: {
-        challengeId: string;
+        sessionId: string;
         /** Ed25519 public key of the subplebbit */
         subplebbitPublicKey: string;
         expiresAt: number;
     }): ChallengeSession {
         const stmt = this.db.prepare(`
       INSERT INTO challengeSessions (
-        challengeId,
+        sessionId,
         subplebbitPublicKey,
         expiresAt
       )
       VALUES (
-        @challengeId,
+        @sessionId,
         @subplebbitPublicKey,
         @expiresAt
       )
@@ -139,31 +139,31 @@ export class SpamDetectionDatabase {
 
         stmt.run(params);
 
-        return this.getChallengeSessionByChallengeId(params.challengeId)!;
+        return this.getChallengeSessionBySessionId(params.sessionId)!;
     }
 
     /**
-     * Get a challenge session by its challenge ID.
+     * Get a challenge session by its session ID.
      */
-    getChallengeSessionByChallengeId(challengeId: string): ChallengeSession | undefined {
+    getChallengeSessionBySessionId(sessionId: string): ChallengeSession | undefined {
         const stmt = this.db.prepare(`
-      SELECT * FROM challengeSessions WHERE challengeId = ?
+      SELECT * FROM challengeSessions WHERE sessionId = ?
     `);
-        return stmt.get(challengeId) as ChallengeSession | undefined;
+        return stmt.get(sessionId) as ChallengeSession | undefined;
     }
 
     /**
      * Update the status of a challenge session.
      */
-    updateChallengeSessionStatus(challengeId: string, status: "pending" | "completed" | "failed", completedAt?: number): boolean {
+    updateChallengeSessionStatus(sessionId: string, status: "pending" | "completed" | "failed", completedAt?: number): boolean {
         const stmt = this.db.prepare(`
       UPDATE challengeSessions
       SET status = @status, completedAt = @completedAt
-      WHERE challengeId = @challengeId
+      WHERE sessionId = @sessionId
     `);
 
         const result = stmt.run({
-            challengeId,
+            sessionId,
             status,
             completedAt: completedAt ?? null
         });
@@ -174,15 +174,15 @@ export class SpamDetectionDatabase {
     /**
      * Update when the author accessed the iframe.
      */
-    updateChallengeSessionIframeAccess(challengeId: string, authorAccessedIframeAt: number): boolean {
+    updateChallengeSessionIframeAccess(sessionId: string, authorAccessedIframeAt: number): boolean {
         const stmt = this.db.prepare(`
       UPDATE challengeSessions
       SET authorAccessedIframeAt = @authorAccessedIframeAt
-      WHERE challengeId = @challengeId
+      WHERE sessionId = @sessionId
     `);
 
         const result = stmt.run({
-            challengeId,
+            sessionId,
             authorAccessedIframeAt
         });
 
@@ -197,7 +197,7 @@ export class SpamDetectionDatabase {
      * Insert an IP record for a challenge.
      */
     insertIpRecord(params: {
-        challengeId: string;
+        sessionId: string;
         ipAddress: string;
         isVpn?: boolean;
         isProxy?: boolean;
@@ -207,12 +207,12 @@ export class SpamDetectionDatabase {
         timestamp: number;
     }): IpRecord {
         const stmt = this.db.prepare(`
-      INSERT INTO ipRecords (challengeId, ipAddress, isVpn, isProxy, isTor, isDatacenter, countryCode, timestamp)
-      VALUES (@challengeId, @ipAddress, @isVpn, @isProxy, @isTor, @isDatacenter, @countryCode, @timestamp)
+      INSERT INTO ipRecords (sessionId, ipAddress, isVpn, isProxy, isTor, isDatacenter, countryCode, timestamp)
+      VALUES (@sessionId, @ipAddress, @isVpn, @isProxy, @isTor, @isDatacenter, @countryCode, @timestamp)
     `);
 
         stmt.run({
-            challengeId: params.challengeId,
+            sessionId: params.sessionId,
             ipAddress: params.ipAddress,
             isVpn: params.isVpn !== undefined ? (params.isVpn ? 1 : 0) : null,
             isProxy: params.isProxy !== undefined ? (params.isProxy ? 1 : 0) : null,
@@ -222,24 +222,24 @@ export class SpamDetectionDatabase {
             timestamp: params.timestamp
         });
 
-        return this.getIpRecordByChallengeId(params.challengeId)!;
+        return this.getIpRecordBySessionId(params.sessionId)!;
     }
 
     /**
-     * Get an IP record by challenge ID.
+     * Get an IP record by session ID.
      */
-    getIpRecordByChallengeId(challengeId: string): IpRecord | undefined {
+    getIpRecordBySessionId(sessionId: string): IpRecord | undefined {
         const stmt = this.db.prepare(`
-      SELECT * FROM ipRecords WHERE challengeId = ?
+      SELECT * FROM ipRecords WHERE sessionId = ?
     `);
-        return stmt.get(challengeId) as IpRecord | undefined;
+        return stmt.get(sessionId) as IpRecord | undefined;
     }
 
     /**
      * Update IP intelligence data for an existing IP record.
      */
     updateIpRecordIntelligence(
-        challengeId: string,
+        sessionId: string,
         params: {
             isVpn?: boolean;
             isProxy?: boolean;
@@ -257,11 +257,11 @@ export class SpamDetectionDatabase {
         isDatacenter = COALESCE(@isDatacenter, isDatacenter),
         countryCode = COALESCE(@countryCode, countryCode),
         timestamp = @timestamp
-      WHERE challengeId = @challengeId
+      WHERE sessionId = @sessionId
     `);
 
         const result = stmt.run({
-            challengeId,
+            sessionId,
             isVpn: params.isVpn !== undefined ? (params.isVpn ? 1 : 0) : null,
             isProxy: params.isProxy !== undefined ? (params.isProxy ? 1 : 0) : null,
             isTor: params.isTor !== undefined ? (params.isTor ? 1 : 0) : null,
@@ -403,7 +403,7 @@ export class SpamDetectionDatabase {
      * Insert a comment publication.
      */
     insertComment(params: {
-        challengeId: string;
+        sessionId: string;
         publication: {
             author: unknown;
             subplebbitAddress: string;
@@ -425,18 +425,18 @@ export class SpamDetectionDatabase {
     }): void {
         const stmt = this.db.prepare(`
             INSERT INTO comments (
-                challengeId, author, subplebbitAddress, parentCid, content, link,
+                sessionId, author, subplebbitAddress, parentCid, content, link,
                 linkWidth, linkHeight, postCid, signature, title, timestamp,
                 linkHtmlTagName, flair, spoiler, protocolVersion, nsfw
             ) VALUES (
-                @challengeId, @author, @subplebbitAddress, @parentCid, @content, @link,
+                @sessionId, @author, @subplebbitAddress, @parentCid, @content, @link,
                 @linkWidth, @linkHeight, @postCid, @signature, @title, @timestamp,
                 @linkHtmlTagName, @flair, @spoiler, @protocolVersion, @nsfw
             )
         `);
 
         stmt.run({
-            challengeId: params.challengeId,
+            sessionId: params.sessionId,
             author: JSON.stringify(params.publication.author),
             subplebbitAddress: params.publication.subplebbitAddress,
             parentCid: params.publication.parentCid ?? null,
@@ -460,7 +460,7 @@ export class SpamDetectionDatabase {
      * Insert a vote publication.
      */
     insertVote(params: {
-        challengeId: string;
+        sessionId: string;
         publication: {
             author: unknown;
             subplebbitAddress: string;
@@ -473,16 +473,16 @@ export class SpamDetectionDatabase {
     }): void {
         const stmt = this.db.prepare(`
             INSERT INTO votes (
-                challengeId, author, subplebbitAddress, commentCid, signature,
+                sessionId, author, subplebbitAddress, commentCid, signature,
                 protocolVersion, vote, timestamp
             ) VALUES (
-                @challengeId, @author, @subplebbitAddress, @commentCid, @signature,
+                @sessionId, @author, @subplebbitAddress, @commentCid, @signature,
                 @protocolVersion, @vote, @timestamp
             )
         `);
 
         stmt.run({
-            challengeId: params.challengeId,
+            sessionId: params.sessionId,
             author: JSON.stringify(params.publication.author),
             subplebbitAddress: params.publication.subplebbitAddress,
             commentCid: params.publication.commentCid,
@@ -497,7 +497,7 @@ export class SpamDetectionDatabase {
      * Insert a comment edit publication.
      */
     insertCommentEdit(params: {
-        challengeId: string;
+        sessionId: string;
         publication: {
             author: unknown;
             subplebbitAddress: string;
@@ -515,16 +515,16 @@ export class SpamDetectionDatabase {
     }): void {
         const stmt = this.db.prepare(`
             INSERT INTO commentEdits (
-                challengeId, author, subplebbitAddress, commentCid, signature,
+                sessionId, author, subplebbitAddress, commentCid, signature,
                 protocolVersion, content, reason, deleted, flair, spoiler, nsfw, timestamp
             ) VALUES (
-                @challengeId, @author, @subplebbitAddress, @commentCid, @signature,
+                @sessionId, @author, @subplebbitAddress, @commentCid, @signature,
                 @protocolVersion, @content, @reason, @deleted, @flair, @spoiler, @nsfw, @timestamp
             )
         `);
 
         stmt.run({
-            challengeId: params.challengeId,
+            sessionId: params.sessionId,
             author: JSON.stringify(params.publication.author),
             subplebbitAddress: params.publication.subplebbitAddress,
             commentCid: params.publication.commentCid,
@@ -544,7 +544,7 @@ export class SpamDetectionDatabase {
      * Insert a comment moderation publication.
      */
     insertCommentModeration(params: {
-        challengeId: string;
+        sessionId: string;
         publication: {
             author: unknown;
             subplebbitAddress: string;
@@ -557,16 +557,16 @@ export class SpamDetectionDatabase {
     }): void {
         const stmt = this.db.prepare(`
             INSERT INTO commentModerations (
-                challengeId, author, subplebbitAddress, commentCid, commentModeration,
+                sessionId, author, subplebbitAddress, commentCid, commentModeration,
                 signature, protocolVersion, timestamp
             ) VALUES (
-                @challengeId, @author, @subplebbitAddress, @commentCid, @commentModeration,
+                @sessionId, @author, @subplebbitAddress, @commentCid, @commentModeration,
                 @signature, @protocolVersion, @timestamp
             )
         `);
 
         stmt.run({
-            challengeId: params.challengeId,
+            sessionId: params.sessionId,
             author: JSON.stringify(params.publication.author),
             subplebbitAddress: params.publication.subplebbitAddress,
             commentCid: params.publication.commentCid,
@@ -813,7 +813,7 @@ export class SpamDetectionDatabase {
         sinceTimestamp?: number;
         limit?: number;
     }): Array<{
-        challengeId: string;
+        sessionId: string;
         authorPublicKey: string;
         content: string | null;
         title: string | null;
@@ -827,7 +827,7 @@ export class SpamDetectionDatabase {
         const queryParams: Record<string, unknown> = {};
 
         if (excludeChallengeId) {
-            conditions.push("challengeId != @excludeChallengeId");
+            conditions.push("sessionId != @excludeChallengeId");
             queryParams.excludeChallengeId = excludeChallengeId;
         }
 
@@ -862,7 +862,7 @@ export class SpamDetectionDatabase {
 
         const query = `
             SELECT
-                challengeId,
+                sessionId,
                 json_extract(signature, '$.publicKey') as authorPublicKey,
                 content,
                 title,
@@ -877,7 +877,7 @@ export class SpamDetectionDatabase {
         queryParams.limit = limit;
 
         return this.db.prepare(query).all(queryParams) as Array<{
-            challengeId: string;
+            sessionId: string;
             authorPublicKey: string;
             content: string | null;
             title: string | null;
@@ -905,7 +905,7 @@ export class SpamDetectionDatabase {
         similarityThreshold?: number;
         limit?: number;
     }): Array<{
-        challengeId: string;
+        sessionId: string;
         content: string | null;
         title: string | null;
         subplebbitAddress: string;
@@ -950,7 +950,7 @@ export class SpamDetectionDatabase {
 
         const query = `
             SELECT
-                challengeId,
+                sessionId,
                 content,
                 title,
                 subplebbitAddress,
@@ -964,7 +964,7 @@ export class SpamDetectionDatabase {
         `;
 
         return this.db.prepare(query).all(queryParams) as Array<{
-            challengeId: string;
+            sessionId: string;
             content: string | null;
             title: string | null;
             subplebbitAddress: string;
@@ -993,7 +993,7 @@ export class SpamDetectionDatabase {
         similarityThreshold?: number;
         limit?: number;
     }): Array<{
-        challengeId: string;
+        sessionId: string;
         authorPublicKey: string;
         content: string | null;
         title: string | null;
@@ -1039,7 +1039,7 @@ export class SpamDetectionDatabase {
 
         const query = `
             SELECT
-                challengeId,
+                sessionId,
                 json_extract(signature, '$.publicKey') as authorPublicKey,
                 content,
                 title,
@@ -1054,7 +1054,7 @@ export class SpamDetectionDatabase {
         `;
 
         return this.db.prepare(query).all(queryParams) as Array<{
-            challengeId: string;
+            sessionId: string;
             authorPublicKey: string;
             content: string | null;
             title: string | null;

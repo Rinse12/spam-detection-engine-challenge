@@ -16,13 +16,13 @@ describe("SpamDetectionDatabase", () => {
     describe("challenge sessions", () => {
         it("should create and retrieve a challenge session", () => {
             const session = db.insertChallengeSession({
-                challengeId: "test-challenge-123",
+                sessionId: "test-challenge-123",
                 subplebbitPublicKey,
                 expiresAt: Math.floor(Date.now() / 1000) + 3600
             });
 
             expect(session).toBeDefined();
-            expect(session.challengeId).toBe("test-challenge-123");
+            expect(session.sessionId).toBe("test-challenge-123");
             expect(session.subplebbitPublicKey).toBe(subplebbitPublicKey);
             expect(session.status).toBe("pending");
             expect(session.authorAccessedIframeAt).toBeNull();
@@ -30,24 +30,24 @@ describe("SpamDetectionDatabase", () => {
 
         it("should retrieve session by challenge ID", () => {
             db.insertChallengeSession({
-                challengeId: "test-challenge-456",
+                sessionId: "test-challenge-456",
                 subplebbitPublicKey,
                 expiresAt: Math.floor(Date.now() / 1000) + 3600
             });
 
-            const session = db.getChallengeSessionByChallengeId("test-challenge-456");
+            const session = db.getChallengeSessionBySessionId("test-challenge-456");
             expect(session).toBeDefined();
-            expect(session?.challengeId).toBe("test-challenge-456");
+            expect(session?.sessionId).toBe("test-challenge-456");
         });
 
         it("should return undefined for non-existent challenge ID", () => {
-            const session = db.getChallengeSessionByChallengeId("non-existent-challenge");
+            const session = db.getChallengeSessionBySessionId("non-existent-challenge");
             expect(session).toBeUndefined();
         });
 
         it("should update challenge session status", () => {
             db.insertChallengeSession({
-                challengeId: "test-challenge-789",
+                sessionId: "test-challenge-789",
                 subplebbitPublicKey,
                 expiresAt: Math.floor(Date.now() / 1000) + 3600
             });
@@ -57,14 +57,14 @@ describe("SpamDetectionDatabase", () => {
 
             expect(updated).toBe(true);
 
-            const session = db.getChallengeSessionByChallengeId("test-challenge-789");
+            const session = db.getChallengeSessionBySessionId("test-challenge-789");
             expect(session?.status).toBe("completed");
             expect(session?.completedAt).toBe(now);
         });
 
         it("should update iframe access timestamp", () => {
             db.insertChallengeSession({
-                challengeId: "iframe-test",
+                sessionId: "iframe-test",
                 subplebbitPublicKey,
                 expiresAt: Math.floor(Date.now() / 1000) + 3600
             });
@@ -74,7 +74,7 @@ describe("SpamDetectionDatabase", () => {
 
             expect(updated).toBe(true);
 
-            const session = db.getChallengeSessionByChallengeId("iframe-test");
+            const session = db.getChallengeSessionBySessionId("iframe-test");
             expect(session?.authorAccessedIframeAt).toBe(now);
         });
     });
@@ -83,21 +83,21 @@ describe("SpamDetectionDatabase", () => {
         it("should create an IP record", () => {
             // First create a challenge session (required for foreign key)
             db.insertChallengeSession({
-                challengeId: "challenge-123",
+                sessionId: "challenge-123",
                 subplebbitPublicKey,
                 expiresAt: Math.floor(Date.now() / 1000) + 3600
             });
 
             const now = Math.floor(Date.now() / 1000);
             const record = db.insertIpRecord({
-                challengeId: "challenge-123",
+                sessionId: "challenge-123",
                 ipAddress: "192.168.1.1",
                 countryCode: "US",
                 timestamp: now
             });
 
             expect(record).toBeDefined();
-            expect(record.challengeId).toBe("challenge-123");
+            expect(record.sessionId).toBe("challenge-123");
             expect(record.ipAddress).toBe("192.168.1.1");
             expect(record.countryCode).toBe("US");
             expect(record.isVpn).toBeNull();
@@ -106,20 +106,20 @@ describe("SpamDetectionDatabase", () => {
 
         it("should retrieve IP record by challenge ID", () => {
             db.insertChallengeSession({
-                challengeId: "lookup-challenge",
+                sessionId: "lookup-challenge",
                 subplebbitPublicKey,
                 expiresAt: Math.floor(Date.now() / 1000) + 3600
             });
 
             const now = Math.floor(Date.now() / 1000);
             db.insertIpRecord({
-                challengeId: "lookup-challenge",
+                sessionId: "lookup-challenge",
                 ipAddress: "172.16.0.1",
                 isTor: true,
                 timestamp: now
             });
 
-            const record = db.getIpRecordByChallengeId("lookup-challenge");
+            const record = db.getIpRecordBySessionId("lookup-challenge");
             expect(record).toBeDefined();
             expect(record?.ipAddress).toBe("172.16.0.1");
             expect(record?.isTor).toBe(1);
@@ -127,14 +127,14 @@ describe("SpamDetectionDatabase", () => {
 
         it("should store IP type flags correctly", () => {
             db.insertChallengeSession({
-                challengeId: "flags-challenge",
+                sessionId: "flags-challenge",
                 subplebbitPublicKey,
                 expiresAt: Math.floor(Date.now() / 1000) + 3600
             });
 
             const now = Math.floor(Date.now() / 1000);
             const record = db.insertIpRecord({
-                challengeId: "flags-challenge",
+                sessionId: "flags-challenge",
                 ipAddress: "8.8.8.8",
                 isVpn: true,
                 isProxy: true,
@@ -151,14 +151,14 @@ describe("SpamDetectionDatabase", () => {
 
         it("should update IP intelligence data", () => {
             db.insertChallengeSession({
-                challengeId: "intel-challenge",
+                sessionId: "intel-challenge",
                 subplebbitPublicKey,
                 expiresAt: Math.floor(Date.now() / 1000) + 3600
             });
 
             const now = Math.floor(Date.now() / 1000);
             db.insertIpRecord({
-                challengeId: "intel-challenge",
+                sessionId: "intel-challenge",
                 ipAddress: "10.0.0.1",
                 timestamp: now
             });
@@ -172,7 +172,7 @@ describe("SpamDetectionDatabase", () => {
 
             expect(updated).toBe(true);
 
-            const record = db.getIpRecordByChallengeId("intel-challenge");
+            const record = db.getIpRecordBySessionId("intel-challenge");
             expect(record?.isVpn).toBe(1);
             expect(record?.countryCode).toBe("DE");
             expect(record?.timestamp).toBe(laterTime);

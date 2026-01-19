@@ -23,7 +23,7 @@ export interface KarmaRecord {
  * Similar content match from either source.
  */
 export interface SimilarContentMatch {
-    /** Unique identifier - challengeId for engine, cid for indexer */
+    /** Unique identifier - sessionId for engine, cid for indexer */
     id: string;
     /** Source of this match */
     source: "engine" | "indexer";
@@ -182,7 +182,7 @@ export class CombinedDataService {
 
         const results: SimilarContentMatch[] = [];
 
-        // Query engine (uses challengeId as identifier)
+        // Query engine (uses sessionId as identifier)
         if (authorPublicKey) {
             // Same author - exact matches
             const engineMatches = this.db.findSimilarComments({
@@ -195,7 +195,7 @@ export class CombinedDataService {
             for (const match of engineMatches) {
                 if (match.authorPublicKey === authorPublicKey) {
                     results.push({
-                        id: match.challengeId,
+                        id: match.sessionId,
                         source: "engine",
                         authorPublicKey: match.authorPublicKey,
                         content: match.content,
@@ -219,7 +219,7 @@ export class CombinedDataService {
             for (const match of engineMatches) {
                 if (match.authorPublicKey !== excludeAuthorPublicKey) {
                     results.push({
-                        id: match.challengeId,
+                        id: match.sessionId,
                         source: "engine",
                         authorPublicKey: match.authorPublicKey,
                         content: match.content,
@@ -290,7 +290,7 @@ export class CombinedDataService {
 
         for (const match of engineMatches) {
             results.push({
-                id: match.challengeId,
+                id: match.sessionId,
                 source: "engine",
                 authorPublicKey,
                 content: match.content,
@@ -359,7 +359,7 @@ export class CombinedDataService {
 
         for (const match of engineMatches) {
             results.push({
-                id: match.challengeId,
+                id: match.sessionId,
                 source: "engine",
                 authorPublicKey: match.authorPublicKey,
                 content: match.content,

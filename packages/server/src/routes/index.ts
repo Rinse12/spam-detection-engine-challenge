@@ -1,6 +1,5 @@
 import type { FastifyInstance } from "fastify";
 import type { SpamDetectionDatabase } from "../db/index.js";
-import type { KeyManager } from "../crypto/keys.js";
 import type { Indexer } from "../indexer/index.js";
 import { registerEvaluateRoute } from "./evaluate.js";
 import { registerVerifyRoute } from "./verify.js";
@@ -13,7 +12,6 @@ export interface RouteOptions {
     turnstileSiteKey?: string;
     turnstileSecretKey?: string;
     ipInfoToken?: string;
-    keyManager: KeyManager;
     indexer?: Indexer | null;
 }
 
@@ -21,7 +19,7 @@ export interface RouteOptions {
  * Register all API routes on the Fastify instance.
  */
 export function registerRoutes(fastify: FastifyInstance, options: RouteOptions): void {
-    const { db, baseUrl, turnstileSiteKey, turnstileSecretKey, ipInfoToken, keyManager, indexer } = options;
+    const { db, baseUrl, turnstileSiteKey, turnstileSecretKey, ipInfoToken, indexer } = options;
 
     // Register individual routes
     registerEvaluateRoute(fastify, {
@@ -29,9 +27,9 @@ export function registerRoutes(fastify: FastifyInstance, options: RouteOptions):
         baseUrl,
         indexer
     });
-    registerVerifyRoute(fastify, { db, keyManager });
+    registerVerifyRoute(fastify, { db });
     registerIframeRoute(fastify, { db, turnstileSiteKey, ipInfoToken });
-    registerCompleteRoute(fastify, { db, keyManager, turnstileSecretKey });
+    registerCompleteRoute(fastify, { db, turnstileSecretKey });
 
     // Health check endpoint
     fastify.get("/health", async () => {

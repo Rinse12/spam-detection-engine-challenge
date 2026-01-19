@@ -142,15 +142,15 @@ describe("calculateKarma", () => {
             const challengeRequest = createMockChallengeRequest(author, "current-sub.eth");
 
             // Add high karma from another sub in DB
-            const challengeId = "other-sub-comment";
+            const sessionId = "other-sub-comment";
             db.insertChallengeSession({
-                challengeId,
+                sessionId,
                 subplebbitPublicKey: "pk",
                 expiresAt: baseTimestamp + 3600
             });
 
             db.insertComment({
-                challengeId,
+                sessionId,
                 publication: {
                     author: {
                         address: author.address,
@@ -190,15 +190,15 @@ describe("calculateKarma", () => {
             const challengeRequest = createMockChallengeRequest(author, "current-sub.eth");
 
             // Add high karma from another sub in DB
-            const challengeId = "other-sub-comment";
+            const sessionId = "other-sub-comment";
             db.insertChallengeSession({
-                challengeId,
+                sessionId,
                 subplebbitPublicKey: "pk",
                 expiresAt: baseTimestamp + 3600
             });
 
             db.insertComment({
-                challengeId,
+                sessionId,
                 publication: {
                     author: {
                         address: author.address,
@@ -241,13 +241,13 @@ describe("calculateKarma", () => {
             // Add old comment with low karma from other-sub
             const oldChallengeId = "old-comment";
             db.insertChallengeSession({
-                challengeId: oldChallengeId,
+                sessionId: oldChallengeId,
                 subplebbitPublicKey: "pk",
                 expiresAt: baseTimestamp + 3600
             });
 
             db.insertComment({
-                challengeId: oldChallengeId,
+                sessionId: oldChallengeId,
                 publication: {
                     author: {
                         address: author.address,
@@ -266,19 +266,19 @@ describe("calculateKarma", () => {
 
             // Set older receivedAt
             db.getDb()
-                .prepare("UPDATE comments SET receivedAt = ? WHERE challengeId = ?")
+                .prepare("UPDATE comments SET receivedAt = ? WHERE sessionId = ?")
                 .run(baseTimestamp - 1000, oldChallengeId);
 
             // Add newer comment with higher karma from same other-sub
             const newChallengeId = "new-comment";
             db.insertChallengeSession({
-                challengeId: newChallengeId,
+                sessionId: newChallengeId,
                 subplebbitPublicKey: "pk",
                 expiresAt: baseTimestamp + 3600
             });
 
             db.insertComment({
-                challengeId: newChallengeId,
+                sessionId: newChallengeId,
                 publication: {
                     author: {
                         address: author.address,
@@ -319,12 +319,12 @@ describe("calculateKarma", () => {
 
             // Add karma from sub-a
             db.insertChallengeSession({
-                challengeId: "sub-a-comment",
+                sessionId: "sub-a-comment",
                 subplebbitPublicKey: "pk",
                 expiresAt: baseTimestamp + 3600
             });
             db.insertComment({
-                challengeId: "sub-a-comment",
+                sessionId: "sub-a-comment",
                 publication: {
                     author: {
                         address: author.address,
@@ -340,12 +340,12 @@ describe("calculateKarma", () => {
 
             // Add karma from sub-b
             db.insertChallengeSession({
-                challengeId: "sub-b-comment",
+                sessionId: "sub-b-comment",
                 subplebbitPublicKey: "pk",
                 expiresAt: baseTimestamp + 3600
             });
             db.insertComment({
-                challengeId: "sub-b-comment",
+                sessionId: "sub-b-comment",
                 publication: {
                     author: {
                         address: author.address,
@@ -383,12 +383,12 @@ describe("calculateKarma", () => {
 
             // Add old record from the SAME current sub in DB (should be ignored)
             db.insertChallengeSession({
-                challengeId: "same-sub-old",
+                sessionId: "same-sub-old",
                 subplebbitPublicKey: "pk",
                 expiresAt: baseTimestamp + 3600
             });
             db.insertComment({
-                challengeId: "same-sub-old",
+                sessionId: "same-sub-old",
                 publication: {
                     author: {
                         address: author.address,
@@ -431,12 +431,12 @@ describe("calculateKarma", () => {
             const signature = { ...baseSignature, publicKey: authorPublicKey };
 
             db.insertChallengeSession({
-                challengeId: "vote-1",
+                sessionId: "vote-1",
                 subplebbitPublicKey: "pk",
                 expiresAt: baseTimestamp + 3600
             });
             db.insertVote({
-                challengeId: "vote-1",
+                sessionId: "vote-1",
                 publication: {
                     author: {
                         address: "test-author",
@@ -467,12 +467,12 @@ describe("calculateKarma", () => {
             const signature = { ...baseSignature, publicKey: authorPublicKey };
 
             db.insertChallengeSession({
-                challengeId: "edit-1",
+                sessionId: "edit-1",
                 subplebbitPublicKey: "pk",
                 expiresAt: baseTimestamp + 3600
             });
             db.insertCommentEdit({
-                challengeId: "edit-1",
+                sessionId: "edit-1",
                 publication: {
                     author: {
                         address: "test-author",
@@ -504,12 +504,12 @@ describe("calculateKarma", () => {
 
             // Old record
             db.insertChallengeSession({
-                challengeId: "old-record",
+                sessionId: "old-record",
                 subplebbitPublicKey: "pk",
                 expiresAt: baseTimestamp + 3600
             });
             db.insertComment({
-                challengeId: "old-record",
+                sessionId: "old-record",
                 publication: {
                     author: {
                         address: "test-author",
@@ -523,17 +523,17 @@ describe("calculateKarma", () => {
                 }
             });
             db.getDb()
-                .prepare("UPDATE comments SET receivedAt = ? WHERE challengeId = ?")
+                .prepare("UPDATE comments SET receivedAt = ? WHERE sessionId = ?")
                 .run(baseTimestamp - 1000, "old-record");
 
             // New record with different karma
             db.insertChallengeSession({
-                challengeId: "new-record",
+                sessionId: "new-record",
                 subplebbitPublicKey: "pk",
                 expiresAt: baseTimestamp + 3600
             });
             db.insertComment({
-                challengeId: "new-record",
+                sessionId: "new-record",
                 publication: {
                     author: {
                         address: "test-author",
@@ -576,12 +576,12 @@ describe("calculateKarma", () => {
 
             // Add karma from sub-a
             db.insertChallengeSession({
-                challengeId: "sub-a",
+                sessionId: "sub-a",
                 subplebbitPublicKey: "pk",
                 expiresAt: baseTimestamp + 3600
             });
             db.insertComment({
-                challengeId: "sub-a",
+                sessionId: "sub-a",
                 publication: {
                     author: {
                         address: "test-author",
@@ -597,12 +597,12 @@ describe("calculateKarma", () => {
 
             // Add karma from sub-b
             db.insertChallengeSession({
-                challengeId: "sub-b",
+                sessionId: "sub-b",
                 subplebbitPublicKey: "pk",
                 expiresAt: baseTimestamp + 3600
             });
             db.insertComment({
-                challengeId: "sub-b",
+                sessionId: "sub-b",
                 publication: {
                     author: {
                         address: "test-author",

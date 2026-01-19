@@ -71,11 +71,11 @@ export type EvaluateRequest = z.infer<typeof EvaluateRequestSchema>;
 
 /**
  * Schema for the verify request body.
+ * Note: token field removed - challenge completion is tracked server-side.
  */
 export const VerifyRequestSchema = z
     .object({
-        challengeId: z.string().min(1, "challengeId is required"),
-        token: z.string().min(1, "token is required"),
+        sessionId: z.string().min(1, "sessionId is required"),
         timestamp: PlebbitTimestampSchema,
         signature: CborSignatureSchema
     })
@@ -87,7 +87,7 @@ export type VerifyRequest = z.infer<typeof VerifyRequestSchema>;
  * Schema for the iframe route params.
  */
 export const IframeParamsSchema = z.object({
-    challengeId: z.string().min(1, "challengeId is required") // TODO figure out how it should look like
+    sessionId: z.string().min(1, "sessionId is required") // TODO figure out how it should look like
 });
 
 export type IframeParams = z.infer<typeof IframeParamsSchema>;
@@ -98,7 +98,7 @@ export type IframeParams = z.infer<typeof IframeParamsSchema>;
  */
 export const CompleteRequestSchema = z
     .object({
-        challengeId: z.string().min(1, "challengeId is required"),
+        sessionId: z.string().min(1, "sessionId is required"),
         /** The response token from the challenge provider (Turnstile, hCaptcha, OAuth code, etc.) */
         challengeResponse: z.string().min(1, "challengeResponse is required"),
         /** The type of challenge that was completed (e.g., "turnstile", "hcaptcha", "github") */

@@ -127,20 +127,20 @@ describe("calculateAccountAge", () => {
 
             // Insert a comment from this author 100 days ago in the DB
             const dbFirstSeen = baseTimestamp - 100 * SECONDS_PER_DAY;
-            const challengeId = "old-comment-challenge";
+            const sessionId = "old-comment-challenge";
             db.insertChallengeSession({
-                challengeId,
+                sessionId,
                 subplebbitPublicKey: "pk",
                 expiresAt: baseTimestamp + 3600
             });
 
             // Manually set receivedAt to simulate old record
             db.getDb()
-                .prepare("UPDATE challengeSessions SET receivedChallengeRequestAt = ? WHERE challengeId = ?")
-                .run(dbFirstSeen, challengeId);
+                .prepare("UPDATE challengeSessions SET receivedChallengeRequestAt = ? WHERE sessionId = ?")
+                .run(dbFirstSeen, sessionId);
 
             db.insertComment({
-                challengeId,
+                sessionId,
                 publication: {
                     author: { address: author.address },
                     subplebbitAddress: "test-sub.eth",
@@ -152,7 +152,7 @@ describe("calculateAccountAge", () => {
             });
 
             // Manually update receivedAt on the comment
-            db.getDb().prepare("UPDATE comments SET receivedAt = ? WHERE challengeId = ?").run(dbFirstSeen, challengeId);
+            db.getDb().prepare("UPDATE comments SET receivedAt = ? WHERE sessionId = ?").run(dbFirstSeen, sessionId);
 
             const ctx: RiskContext = {
                 challengeRequest,
@@ -180,15 +180,15 @@ describe("calculateAccountAge", () => {
 
             // But our DB shows we saw them 200 days ago
             const dbFirstSeen = baseTimestamp - 200 * SECONDS_PER_DAY;
-            const challengeId = "very-old-comment";
+            const sessionId = "very-old-comment";
             db.insertChallengeSession({
-                challengeId,
+                sessionId,
                 subplebbitPublicKey: "pk",
                 expiresAt: baseTimestamp + 3600
             });
 
             db.insertComment({
-                challengeId,
+                sessionId,
                 publication: {
                     author: { address: author.address },
                     subplebbitAddress: "test-sub.eth",
@@ -200,7 +200,7 @@ describe("calculateAccountAge", () => {
             });
 
             // Manually update receivedAt to the older timestamp
-            db.getDb().prepare("UPDATE comments SET receivedAt = ? WHERE challengeId = ?").run(dbFirstSeen, challengeId);
+            db.getDb().prepare("UPDATE comments SET receivedAt = ? WHERE sessionId = ?").run(dbFirstSeen, sessionId);
 
             const ctx: RiskContext = {
                 challengeRequest,
@@ -225,15 +225,15 @@ describe("calculateAccountAge", () => {
 
             // But our DB only shows them from 10 days ago
             const dbFirstSeen = baseTimestamp - 10 * SECONDS_PER_DAY;
-            const challengeId = "recent-in-db";
+            const sessionId = "recent-in-db";
             db.insertChallengeSession({
-                challengeId,
+                sessionId,
                 subplebbitPublicKey: "pk",
                 expiresAt: baseTimestamp + 3600
             });
 
             db.insertComment({
-                challengeId,
+                sessionId,
                 publication: {
                     author: { address: author.address },
                     subplebbitAddress: "test-sub.eth",
@@ -244,7 +244,7 @@ describe("calculateAccountAge", () => {
                 }
             });
 
-            db.getDb().prepare("UPDATE comments SET receivedAt = ? WHERE challengeId = ?").run(dbFirstSeen, challengeId);
+            db.getDb().prepare("UPDATE comments SET receivedAt = ? WHERE sessionId = ?").run(dbFirstSeen, sessionId);
 
             const ctx: RiskContext = {
                 challengeRequest,
@@ -270,15 +270,15 @@ describe("calculateAccountAge", () => {
 
             // Insert a vote from 150 days ago
             const voteTime = baseTimestamp - 150 * SECONDS_PER_DAY;
-            const challengeId = "old-vote";
+            const sessionId = "old-vote";
             db.insertChallengeSession({
-                challengeId,
+                sessionId,
                 subplebbitPublicKey: "pk",
                 expiresAt: baseTimestamp + 3600
             });
 
             db.insertVote({
-                challengeId,
+                sessionId,
                 publication: {
                     author: { address: author.address },
                     subplebbitAddress: "test-sub.eth",
@@ -290,7 +290,7 @@ describe("calculateAccountAge", () => {
                 }
             });
 
-            db.getDb().prepare("UPDATE votes SET receivedAt = ? WHERE challengeId = ?").run(voteTime, challengeId);
+            db.getDb().prepare("UPDATE votes SET receivedAt = ? WHERE sessionId = ?").run(voteTime, sessionId);
 
             const ctx: RiskContext = {
                 challengeRequest,
@@ -312,15 +312,15 @@ describe("calculateAccountAge", () => {
 
             // Insert a comment edit from 45 days ago
             const editTime = baseTimestamp - 45 * SECONDS_PER_DAY;
-            const challengeId = "old-edit";
+            const sessionId = "old-edit";
             db.insertChallengeSession({
-                challengeId,
+                sessionId,
                 subplebbitPublicKey: "pk",
                 expiresAt: baseTimestamp + 3600
             });
 
             db.insertCommentEdit({
-                challengeId,
+                sessionId,
                 publication: {
                     author: { address: author.address },
                     subplebbitAddress: "test-sub.eth",
@@ -332,7 +332,7 @@ describe("calculateAccountAge", () => {
                 }
             });
 
-            db.getDb().prepare("UPDATE commentEdits SET receivedAt = ? WHERE challengeId = ?").run(editTime, challengeId);
+            db.getDb().prepare("UPDATE commentEdits SET receivedAt = ? WHERE sessionId = ?").run(editTime, sessionId);
 
             const ctx: RiskContext = {
                 challengeRequest,
@@ -355,12 +355,12 @@ describe("calculateAccountAge", () => {
             // Insert a vote from 50 days ago
             const voteTime = baseTimestamp - 50 * SECONDS_PER_DAY;
             db.insertChallengeSession({
-                challengeId: "vote-challenge",
+                sessionId: "vote-challenge",
                 subplebbitPublicKey: "pk",
                 expiresAt: baseTimestamp + 3600
             });
             db.insertVote({
-                challengeId: "vote-challenge",
+                sessionId: "vote-challenge",
                 publication: {
                     author: { address: author.address },
                     subplebbitAddress: "test-sub.eth",
@@ -371,17 +371,17 @@ describe("calculateAccountAge", () => {
                     vote: 1
                 }
             });
-            db.getDb().prepare("UPDATE votes SET receivedAt = ? WHERE challengeId = ?").run(voteTime, "vote-challenge");
+            db.getDb().prepare("UPDATE votes SET receivedAt = ? WHERE sessionId = ?").run(voteTime, "vote-challenge");
 
             // Insert a comment from 400 days ago (oldest)
             const commentTime = baseTimestamp - 400 * SECONDS_PER_DAY;
             db.insertChallengeSession({
-                challengeId: "comment-challenge",
+                sessionId: "comment-challenge",
                 subplebbitPublicKey: "pk",
                 expiresAt: baseTimestamp + 3600
             });
             db.insertComment({
-                challengeId: "comment-challenge",
+                sessionId: "comment-challenge",
                 publication: {
                     author: { address: author.address },
                     subplebbitAddress: "test-sub.eth",
@@ -391,17 +391,17 @@ describe("calculateAccountAge", () => {
                     content: "Old comment"
                 }
             });
-            db.getDb().prepare("UPDATE comments SET receivedAt = ? WHERE challengeId = ?").run(commentTime, "comment-challenge");
+            db.getDb().prepare("UPDATE comments SET receivedAt = ? WHERE sessionId = ?").run(commentTime, "comment-challenge");
 
             // Insert an edit from 20 days ago
             const editTime = baseTimestamp - 20 * SECONDS_PER_DAY;
             db.insertChallengeSession({
-                challengeId: "edit-challenge",
+                sessionId: "edit-challenge",
                 subplebbitPublicKey: "pk",
                 expiresAt: baseTimestamp + 3600
             });
             db.insertCommentEdit({
-                challengeId: "edit-challenge",
+                sessionId: "edit-challenge",
                 publication: {
                     author: { address: author.address },
                     subplebbitAddress: "test-sub.eth",
@@ -412,7 +412,7 @@ describe("calculateAccountAge", () => {
                     content: "Edited"
                 }
             });
-            db.getDb().prepare("UPDATE commentEdits SET receivedAt = ? WHERE challengeId = ?").run(editTime, "edit-challenge");
+            db.getDb().prepare("UPDATE commentEdits SET receivedAt = ? WHERE sessionId = ?").run(editTime, "edit-challenge");
 
             const ctx: RiskContext = {
                 challengeRequest,

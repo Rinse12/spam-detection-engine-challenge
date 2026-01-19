@@ -29,7 +29,7 @@ export const IsoCountryCodeSchema = z
 export const EvaluateResponseSchema = z.object({
     riskScore: UnitIntervalSchema,
     explanation: z.string().optional(),
-    challengeId: z.string(),
+    sessionId: z.string(),
     challengeUrl: z.url().refine((value) => isHttpUrl(value), {
         message: "challengeUrl must be a valid HTTP/HTTPS URL"
     }),

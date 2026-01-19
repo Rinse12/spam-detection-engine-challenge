@@ -235,9 +235,9 @@ const getChallenge = async (args: GetChallengeArgs): Promise<ChallengeInput | Ch
     );
     const riskScore = evaluateResponse.riskScore;
     log(
-        "Evaluate response: riskScore=%s, challengeId=%s, explanation=%s",
+        "Evaluate response: riskScore=%s, sessionId=%s, explanation=%s",
         formatRiskScore(riskScore),
-        evaluateResponse.challengeId,
+        evaluateResponse.sessionId,
         evaluateResponse.explanation
     );
 
@@ -256,21 +256,16 @@ const getChallenge = async (args: GetChallengeArgs): Promise<ChallengeInput | Ch
         };
     }
 
-    const challengeId = evaluateResponse.challengeId;
+    const sessionId = evaluateResponse.sessionId;
     const challengeUrl = evaluateResponse.challengeUrl;
-    log("Returning challenge to user: challengeId=%s, challengeUrl=%s", challengeId, challengeUrl);
+    log("Returning challenge to user: sessionId=%s, challengeUrl=%s", sessionId, challengeUrl);
 
-    const verify = async (answer: string): Promise<ChallengeResultInput> => {
-        log("verify called for challengeId=%s", challengeId);
-        const token = typeof answer === "string" ? answer.trim() : "";
-        if (!token) {
-            log("verify failed: missing challenge token");
-            return { success: false, error: "Missing challenge token." };
-        }
-        log.trace("verify token (first 20 chars): %s...", token.substring(0, 20));
+    // Server tracks challenge completion state - no token needed from user
+    const verify = async (_answer: string): Promise<ChallengeResultInput> => {
+        log("verify called for sessionId=%s", sessionId);
 
         const verifyTimestamp = Math.floor(Date.now() / 1000);
-        const verifyPropsToSign = { challengeId, token, timestamp: verifyTimestamp };
+        const verifyPropsToSign = { sessionId, timestamp: verifyTimestamp };
         log("Calling /challenge/verify endpoint at %s", `${options.serverUrl}/challenge/verify`);
         const verifySignature = await createRequestSignature(verifyPropsToSign, signer);
 
@@ -306,7 +301,7 @@ const getChallenge = async (args: GetChallengeArgs): Promise<ChallengeInput | Ch
             return { success: false, error: postChallengeRejection };
         }
 
-        log("Challenge verification succeeded for challengeId=%s", challengeId);
+        log("Challenge verification succeeded for sessionId=%s", sessionId);
         return { success: true };
     };
 

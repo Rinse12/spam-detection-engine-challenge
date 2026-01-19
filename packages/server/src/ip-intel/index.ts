@@ -5,17 +5,17 @@ const DEFAULT_TIMEOUT_MS = 3000;
 
 export async function refreshIpIntelIfNeeded(params: {
     db: SpamDetectionDatabase;
-    challengeId: string;
+    sessionId: string;
     token?: string;
     timeoutMs?: number;
 }): Promise<IpInfoResult | null> {
-    const { db, challengeId, token, timeoutMs = DEFAULT_TIMEOUT_MS } = params;
+    const { db, sessionId, token, timeoutMs = DEFAULT_TIMEOUT_MS } = params;
 
     if (!token) {
         return null;
     }
 
-    const record = db.getIpRecordByChallengeId(challengeId);
+    const record = db.getIpRecordBySessionId(sessionId);
     if (!record) {
         return null;
     }
@@ -31,7 +31,7 @@ export async function refreshIpIntelIfNeeded(params: {
     }
 
     const now = Math.floor(Date.now() / 1000);
-    db.updateIpRecordIntelligence(challengeId, {
+    db.updateIpRecordIntelligence(sessionId, {
         isVpn: intel.isVpn,
         isProxy: intel.isProxy,
         isTor: intel.isTor,

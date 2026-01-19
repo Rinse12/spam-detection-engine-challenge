@@ -9,7 +9,7 @@ export type ChallengeType = "turnstile" | "github" | "google" | "facebook";
  */
 export interface IframeGeneratorOptions {
     /** Unique challenge session ID */
-    challengeId: string;
+    sessionId: string;
     /** Provider-specific options (e.g., siteKey for Turnstile) */
     [key: string]: unknown;
 }

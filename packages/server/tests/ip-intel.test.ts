@@ -21,7 +21,7 @@ describe("IP intelligence", () => {
     it("stores ipinfo results and updates timestamp", async () => {
         // First create a challenge session
         db.insertChallengeSession({
-            challengeId: "challenge",
+            sessionId: "challenge",
             subplebbitPublicKey,
             expiresAt: Math.floor(Date.now() / 1000) + 3600
         });
@@ -29,7 +29,7 @@ describe("IP intelligence", () => {
         // Then create an IP record
         const now = Math.floor(Date.now() / 1000);
         db.insertIpRecord({
-            challengeId: "challenge",
+            sessionId: "challenge",
             ipAddress: "1.1.1.1",
             timestamp: now
         });
@@ -47,11 +47,11 @@ describe("IP intelligence", () => {
 
         await refreshIpIntelIfNeeded({
             db,
-            challengeId: "challenge",
+            sessionId: "challenge",
             token: "test-token"
         });
 
-        const record = db.getIpRecordByChallengeId("challenge");
+        const record = db.getIpRecordBySessionId("challenge");
         expect(record?.countryCode).toBe("DE");
         expect(record?.isVpn).toBe(1);
         expect(record?.isProxy).toBe(0);
@@ -67,7 +67,7 @@ describe("IP intelligence", () => {
     it("skips lookup when intel data already exists", async () => {
         // First create a challenge session
         db.insertChallengeSession({
-            challengeId: "challenge2",
+            sessionId: "challenge2",
             subplebbitPublicKey,
             expiresAt: Math.floor(Date.now() / 1000) + 3600
         });
@@ -75,7 +75,7 @@ describe("IP intelligence", () => {
         // Create an IP record with intel data already populated
         const now = Math.floor(Date.now() / 1000);
         db.insertIpRecord({
-            challengeId: "challenge2",
+            sessionId: "challenge2",
             ipAddress: "2.2.2.2",
             isVpn: false,
             timestamp: now
@@ -86,7 +86,7 @@ describe("IP intelligence", () => {
 
         await refreshIpIntelIfNeeded({
             db,
-            challengeId: "challenge2",
+            sessionId: "challenge2",
             token: "test-token"
         });
 

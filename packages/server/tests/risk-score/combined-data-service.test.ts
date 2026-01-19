@@ -47,12 +47,12 @@ describe("CombinedDataService", () => {
         it("should return engine timestamp when only engine has data", () => {
             // Insert a comment into engine database
             db.insertChallengeSession({
-                challengeId: "challenge-1",
+                sessionId: "challenge-1",
                 subplebbitPublicKey: "subKey",
                 expiresAt: baseTimestamp + 3600
             });
             db.insertComment({
-                challengeId: "challenge-1",
+                sessionId: "challenge-1",
                 publication: {
                     author: { address: "author1" },
                     subplebbitAddress: "sub1.eth",
@@ -69,12 +69,12 @@ describe("CombinedDataService", () => {
         it("should return the older timestamp when both sources have data", () => {
             // Insert into engine - newer timestamp
             db.insertChallengeSession({
-                challengeId: "challenge-2",
+                sessionId: "challenge-2",
                 subplebbitPublicKey: "subKey",
                 expiresAt: baseTimestamp + 3600
             });
             db.insertComment({
-                challengeId: "challenge-2",
+                sessionId: "challenge-2",
                 publication: {
                     author: { address: "author1" },
                     subplebbitAddress: "sub1.eth",
@@ -114,12 +114,12 @@ describe("CombinedDataService", () => {
 
         it("should return karma from engine when only engine has data", () => {
             db.insertChallengeSession({
-                challengeId: "karma-1",
+                sessionId: "karma-1",
                 subplebbitPublicKey: "subKey",
                 expiresAt: baseTimestamp + 3600
             });
             db.insertComment({
-                challengeId: "karma-1",
+                sessionId: "karma-1",
                 publication: {
                     author: {
                         address: "author1",
@@ -140,12 +140,12 @@ describe("CombinedDataService", () => {
         it("should use more recent source when both have data for same subplebbit", () => {
             // Insert into engine with older timestamp
             db.insertChallengeSession({
-                challengeId: "karma-2",
+                sessionId: "karma-2",
                 subplebbitPublicKey: "subKey",
                 expiresAt: baseTimestamp + 3600
             });
             db.insertComment({
-                challengeId: "karma-2",
+                sessionId: "karma-2",
                 publication: {
                     author: {
                         address: "author1",
@@ -190,12 +190,12 @@ describe("CombinedDataService", () => {
         it("should merge karma from different subplebbits in both sources", () => {
             // Engine has data for sub1
             db.insertChallengeSession({
-                challengeId: "karma-3",
+                sessionId: "karma-3",
                 subplebbitPublicKey: "subKey",
                 expiresAt: baseTimestamp + 3600
             });
             db.insertComment({
-                challengeId: "karma-3",
+                sessionId: "karma-3",
                 publication: {
                     author: {
                         address: "author1",
@@ -247,14 +247,14 @@ describe("CombinedDataService", () => {
         it("should sum counts from both engine and indexer for posts", () => {
             // Add 2 posts to engine
             for (let i = 0; i < 2; i++) {
-                const challengeId = `vel-post-${i}`;
+                const sessionId = `vel-post-${i}`;
                 db.insertChallengeSession({
-                    challengeId,
+                    sessionId,
                     subplebbitPublicKey: "subKey",
                     expiresAt: baseTimestamp + 3600
                 });
                 db.insertComment({
-                    challengeId,
+                    sessionId,
                     publication: {
                         author: { address: "author1" },
                         subplebbitAddress: "sub1.eth",
@@ -294,14 +294,14 @@ describe("CombinedDataService", () => {
         it("should only count from engine for votes (indexer does not track votes)", () => {
             // Add votes to engine
             for (let i = 0; i < 5; i++) {
-                const challengeId = `vel-vote-${i}`;
+                const sessionId = `vel-vote-${i}`;
                 db.insertChallengeSession({
-                    challengeId,
+                    sessionId,
                     subplebbitPublicKey: "subKey",
                     expiresAt: baseTimestamp + 3600
                 });
                 db.insertVote({
-                    challengeId,
+                    sessionId,
                     publication: {
                         author: { address: "author1" },
                         subplebbitAddress: "sub1.eth",
@@ -334,14 +334,14 @@ describe("CombinedDataService", () => {
         it("should sum link counts from both engine and indexer", () => {
             // Add 2 links to engine
             for (let i = 0; i < 2; i++) {
-                const challengeId = `link-author-${i}`;
+                const sessionId = `link-author-${i}`;
                 db.insertChallengeSession({
-                    challengeId,
+                    sessionId,
                     subplebbitPublicKey: "subKey",
                     expiresAt: baseTimestamp + 3600
                 });
                 db.insertComment({
-                    challengeId,
+                    sessionId,
                     publication: {
                         author: { address: "author1" },
                         subplebbitAddress: "sub1.eth",
@@ -388,14 +388,14 @@ describe("CombinedDataService", () => {
 
             // Add links from other author to engine
             for (let i = 0; i < 2; i++) {
-                const challengeId = `link-other-${i}`;
+                const sessionId = `link-other-${i}`;
                 db.insertChallengeSession({
-                    challengeId,
+                    sessionId,
                     subplebbitPublicKey: "subKey",
                     expiresAt: baseTimestamp + 3600
                 });
                 db.insertComment({
-                    challengeId,
+                    sessionId,
                     publication: {
                         author: { address: "author2" },
                         subplebbitAddress: "sub1.eth",

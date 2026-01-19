@@ -98,14 +98,14 @@ export function registerEvaluateRoute(fastify: FastifyInstance, options: Evaluat
             }
 
             // Generate challenge ID
-            const challengeId = randomUUID();
+            const sessionId = randomUUID();
 
             // Calculate expiry time
             const expiresAt = now + CHALLENGE_EXPIRY_SECONDS;
 
             // Create challenge session in database
             db.insertChallengeSession({
-                challengeId,
+                sessionId,
                 subplebbitPublicKey,
                 expiresAt
             });
@@ -131,22 +131,22 @@ export function registerEvaluateRoute(fastify: FastifyInstance, options: Evaluat
             const typedChallengeRequest = challengeRequest as DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor;
             if (typedChallengeRequest.comment) {
                 db.insertComment({
-                    challengeId,
+                    sessionId,
                     publication: typedChallengeRequest.comment
                 });
             } else if (typedChallengeRequest.vote) {
                 db.insertVote({
-                    challengeId,
+                    sessionId,
                     publication: typedChallengeRequest.vote
                 });
             } else if (typedChallengeRequest.commentEdit) {
                 db.insertCommentEdit({
-                    challengeId,
+                    sessionId,
                     publication: typedChallengeRequest.commentEdit
                 });
             } else if (typedChallengeRequest.commentModeration) {
                 db.insertCommentModeration({
-                    challengeId,
+                    sessionId,
                     publication: typedChallengeRequest.commentModeration
                 });
             }
@@ -161,8 +161,8 @@ export function registerEvaluateRoute(fastify: FastifyInstance, options: Evaluat
             // Build response
             const response: EvaluateResponse = {
                 riskScore: riskScoreResult.score,
-                challengeId,
-                challengeUrl: `${baseUrl}/api/v1/iframe/${challengeId}`,
+                sessionId,
+                challengeUrl: `${baseUrl}/api/v1/iframe/${sessionId}`,
                 challengeExpiresAt: expiresAt,
                 explanation: riskScoreResult.explanation
             };

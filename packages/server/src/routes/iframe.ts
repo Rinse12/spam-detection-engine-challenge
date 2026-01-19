@@ -11,13 +11,13 @@ export interface IframeRouteOptions {
 }
 
 /**
- * Register the /api/v1/iframe/:challengeId route.
+ * Register the /api/v1/iframe/:sessionId route.
  */
 export function registerIframeRoute(fastify: FastifyInstance, options: IframeRouteOptions): void {
     const { db, turnstileSiteKey, ipInfoToken } = options;
 
     fastify.get(
-        "/api/v1/iframe/:challengeId",
+        "/api/v1/iframe/:sessionId",
         async (request: FastifyRequest<{ Params: IframeParams }>, reply: FastifyReply): Promise<void> => {
             // Validate params
             const parseResult = IframeParamsSchema.safeParse(request.params);
@@ -28,10 +28,10 @@ export function registerIframeRoute(fastify: FastifyInstance, options: IframeRou
                 return;
             }
 
-            const { challengeId } = parseResult.data;
+            const { sessionId } = parseResult.data;
 
             // Look up challenge session
-            const session = db.getChallengeSessionByChallengeId(challengeId);
+            const session = db.getChallengeSessionBySessionId(sessionId);
 
             if (!session) {
                 reply.status(404);
@@ -58,11 +58,11 @@ export function registerIframeRoute(fastify: FastifyInstance, options: IframeRou
             const clientIp = getClientIp(request); // TODO why string | undefined? Shouldn't it always be defined?
 
             // Store IP record and update iframe access time
-            db.updateChallengeSessionIframeAccess(challengeId, now);
+            db.updateChallengeSessionIframeAccess(sessionId, now);
 
             if (clientIp) {
                 db.insertIpRecord({
-                    challengeId,
+                    sessionId,
                     ipAddress: clientIp,
                     timestamp: now
                 });
@@ -70,7 +70,7 @@ export function registerIframeRoute(fastify: FastifyInstance, options: IframeRou
                 if (ipInfoToken) {
                     void refreshIpIntelIfNeeded({
                         db,
-                        challengeId,
+                        sessionId,
                         token: ipInfoToken
                     }).catch((error) => {
                         request.log.warn({ err: error }, "Failed to refresh IP intelligence");
@@ -81,7 +81,7 @@ export function registerIframeRoute(fastify: FastifyInstance, options: IframeRou
             // Serve the iframe HTML
             // TODO: In future, store challenge type in session and use it here
             const html = generateChallengeIframe("turnstile", {
-                challengeId,
+                sessionId,
                 siteKey: turnstileSiteKey
             });
 

@@ -135,14 +135,14 @@ describe("calculateVelocity", () => {
         it("should return high score for excessive posts", () => {
             // Insert 15 posts from this author (above BOT_LIKE threshold of 12)
             for (let i = 0; i < 15; i++) {
-                const challengeId = `challenge-${i}`;
+                const sessionId = `challenge-${i}`;
                 db.insertChallengeSession({
-                    challengeId,
+                    sessionId,
                     subplebbitPublicKey: "pk",
                     expiresAt: baseTimestamp + 3600
                 });
                 db.insertComment({
-                    challengeId,
+                    sessionId,
                     publication: {
                         author: createMockAuthor(),
                         subplebbitAddress: "test-sub.eth",
@@ -174,14 +174,14 @@ describe("calculateVelocity", () => {
         it("should have higher thresholds for votes", () => {
             // Insert 25 votes - above NORMAL (20) but below ELEVATED (40)
             for (let i = 0; i < 25; i++) {
-                const challengeId = `vote-challenge-${i}`;
+                const sessionId = `vote-challenge-${i}`;
                 db.insertChallengeSession({
-                    challengeId,
+                    sessionId,
                     subplebbitPublicKey: "pk",
                     expiresAt: baseTimestamp + 3600
                 });
                 db.insertVote({
-                    challengeId,
+                    sessionId,
                     publication: {
                         author: createMockAuthor(),
                         subplebbitAddress: "test-sub.eth",
@@ -226,10 +226,10 @@ describe("calculateVelocity", () => {
 
             // Posts
             for (let i = 0; i < 5; i++) {
-                const challengeId = `post-${i}`;
-                db.insertChallengeSession({ challengeId, subplebbitPublicKey: "pk", expiresAt: baseTimestamp + 3600 });
+                const sessionId = `post-${i}`;
+                db.insertChallengeSession({ sessionId, subplebbitPublicKey: "pk", expiresAt: baseTimestamp + 3600 });
                 db.insertComment({
-                    challengeId,
+                    sessionId,
                     publication: {
                         author: createMockAuthor(),
                         subplebbitAddress: "test-sub.eth",
@@ -242,10 +242,10 @@ describe("calculateVelocity", () => {
 
             // Replies
             for (let i = 0; i < 10; i++) {
-                const challengeId = `reply-${i}`;
-                db.insertChallengeSession({ challengeId, subplebbitPublicKey: "pk", expiresAt: baseTimestamp + 3600 });
+                const sessionId = `reply-${i}`;
+                db.insertChallengeSession({ sessionId, subplebbitPublicKey: "pk", expiresAt: baseTimestamp + 3600 });
                 db.insertComment({
-                    challengeId,
+                    sessionId,
                     publication: {
                         author: createMockAuthor(),
                         subplebbitAddress: "test-sub.eth",
@@ -259,10 +259,10 @@ describe("calculateVelocity", () => {
 
             // Votes
             for (let i = 0; i < 40; i++) {
-                const challengeId = `vote-${i}`;
-                db.insertChallengeSession({ challengeId, subplebbitPublicKey: "pk", expiresAt: baseTimestamp + 3600 });
+                const sessionId = `vote-${i}`;
+                db.insertChallengeSession({ sessionId, subplebbitPublicKey: "pk", expiresAt: baseTimestamp + 3600 });
                 db.insertVote({
-                    challengeId,
+                    sessionId,
                     publication: {
                         author: createMockAuthor(),
                         subplebbitAddress: "test-sub.eth",
@@ -277,10 +277,10 @@ describe("calculateVelocity", () => {
 
             // Comment edits
             for (let i = 0; i < 5; i++) {
-                const challengeId = `edit-${i}`;
-                db.insertChallengeSession({ challengeId, subplebbitPublicKey: "pk", expiresAt: baseTimestamp + 3600 });
+                const sessionId = `edit-${i}`;
+                db.insertChallengeSession({ sessionId, subplebbitPublicKey: "pk", expiresAt: baseTimestamp + 3600 });
                 db.insertCommentEdit({
-                    challengeId,
+                    sessionId,
                     publication: {
                         author: createMockAuthor(),
                         subplebbitAddress: "test-sub.eth",
@@ -295,10 +295,10 @@ describe("calculateVelocity", () => {
 
             // Comment moderations
             for (let i = 0; i < 5; i++) {
-                const challengeId = `mod-${i}`;
-                db.insertChallengeSession({ challengeId, subplebbitPublicKey: "pk", expiresAt: baseTimestamp + 3600 });
+                const sessionId = `mod-${i}`;
+                db.insertChallengeSession({ sessionId, subplebbitPublicKey: "pk", expiresAt: baseTimestamp + 3600 });
                 db.insertCommentModeration({
-                    challengeId,
+                    sessionId,
                     publication: {
                         author: createMockAuthor(),
                         subplebbitAddress: "test-sub.eth",
@@ -333,10 +333,10 @@ describe("calculateVelocity", () => {
         it("should flag BOT_LIKE when aggregate exceeds 150/hour", () => {
             // Insert 160 votes (each one normal for votes at 20/hr threshold but massive aggregate)
             for (let i = 0; i < 160; i++) {
-                const challengeId = `vote-${i}`;
-                db.insertChallengeSession({ challengeId, subplebbitPublicKey: "pk", expiresAt: baseTimestamp + 3600 });
+                const sessionId = `vote-${i}`;
+                db.insertChallengeSession({ sessionId, subplebbitPublicKey: "pk", expiresAt: baseTimestamp + 3600 });
                 db.insertVote({
-                    challengeId,
+                    sessionId,
                     publication: {
                         author: createMockAuthor(),
                         subplebbitAddress: "test-sub.eth",
@@ -373,10 +373,10 @@ describe("calculateVelocity", () => {
         it("should apply 50% penalty to posts when vote velocity is high", () => {
             // Insert 150 votes (BOT_LIKE for votes: > 100)
             for (let i = 0; i < 150; i++) {
-                const challengeId = `vote-${i}`;
-                db.insertChallengeSession({ challengeId, subplebbitPublicKey: "pk", expiresAt: baseTimestamp + 3600 });
+                const sessionId = `vote-${i}`;
+                db.insertChallengeSession({ sessionId, subplebbitPublicKey: "pk", expiresAt: baseTimestamp + 3600 });
                 db.insertVote({
-                    challengeId,
+                    sessionId,
                     publication: {
                         author: createMockAuthor(),
                         subplebbitAddress: "test-sub.eth",
@@ -390,9 +390,9 @@ describe("calculateVelocity", () => {
             }
 
             // Insert 1 post (NORMAL for posts)
-            db.insertChallengeSession({ challengeId: "post-1", subplebbitPublicKey: "pk", expiresAt: baseTimestamp + 3600 });
+            db.insertChallengeSession({ sessionId: "post-1", subplebbitPublicKey: "pk", expiresAt: baseTimestamp + 3600 });
             db.insertComment({
-                challengeId: "post-1",
+                sessionId: "post-1",
                 publication: {
                     author: createMockAuthor(),
                     subplebbitAddress: "test-sub.eth",
@@ -430,10 +430,10 @@ describe("calculateVelocity", () => {
         it("should apply cross-type penalty when evaluating votes with high reply velocity", () => {
             // Insert 30 replies (BOT_LIKE for replies: > 25)
             for (let i = 0; i < 30; i++) {
-                const challengeId = `reply-${i}`;
-                db.insertChallengeSession({ challengeId, subplebbitPublicKey: "pk", expiresAt: baseTimestamp + 3600 });
+                const sessionId = `reply-${i}`;
+                db.insertChallengeSession({ sessionId, subplebbitPublicKey: "pk", expiresAt: baseTimestamp + 3600 });
                 db.insertComment({
-                    challengeId,
+                    sessionId,
                     publication: {
                         author: createMockAuthor(),
                         subplebbitAddress: "test-sub.eth",
@@ -472,10 +472,10 @@ describe("calculateVelocity", () => {
         it("should not apply cross-type penalty when other types have lower velocity", () => {
             // Insert 15 posts (BOT_LIKE for posts: > 12)
             for (let i = 0; i < 15; i++) {
-                const challengeId = `post-${i}`;
-                db.insertChallengeSession({ challengeId, subplebbitPublicKey: "pk", expiresAt: baseTimestamp + 3600 });
+                const sessionId = `post-${i}`;
+                db.insertChallengeSession({ sessionId, subplebbitPublicKey: "pk", expiresAt: baseTimestamp + 3600 });
                 db.insertComment({
-                    challengeId,
+                    sessionId,
                     publication: {
                         author: createMockAuthor(),
                         subplebbitAddress: "test-sub.eth",
@@ -513,9 +513,9 @@ describe("calculateVelocity", () => {
             // This is the exact scenario from the user's question
 
             // Insert 1 comment
-            db.insertChallengeSession({ challengeId: "comment-1", subplebbitPublicKey: "pk", expiresAt: baseTimestamp + 3600 });
+            db.insertChallengeSession({ sessionId: "comment-1", subplebbitPublicKey: "pk", expiresAt: baseTimestamp + 3600 });
             db.insertComment({
-                challengeId: "comment-1",
+                sessionId: "comment-1",
                 publication: {
                     author: createMockAuthor(),
                     subplebbitAddress: "test-sub.eth",
@@ -527,10 +527,10 @@ describe("calculateVelocity", () => {
 
             // Insert 150 votes
             for (let i = 0; i < 150; i++) {
-                const challengeId = `vote-${i}`;
-                db.insertChallengeSession({ challengeId, subplebbitPublicKey: "pk", expiresAt: baseTimestamp + 3600 });
+                const sessionId = `vote-${i}`;
+                db.insertChallengeSession({ sessionId, subplebbitPublicKey: "pk", expiresAt: baseTimestamp + 3600 });
                 db.insertVote({
-                    challengeId,
+                    sessionId,
                     publication: {
                         author: createMockAuthor(),
                         subplebbitAddress: "test-sub.eth",
@@ -568,9 +568,9 @@ describe("calculateVelocity", () => {
         it("should also flag when evaluating a new vote with the same history", () => {
             // Same setup: 1 comment + 150 votes
 
-            db.insertChallengeSession({ challengeId: "comment-1", subplebbitPublicKey: "pk", expiresAt: baseTimestamp + 3600 });
+            db.insertChallengeSession({ sessionId: "comment-1", subplebbitPublicKey: "pk", expiresAt: baseTimestamp + 3600 });
             db.insertComment({
-                challengeId: "comment-1",
+                sessionId: "comment-1",
                 publication: {
                     author: createMockAuthor(),
                     subplebbitAddress: "test-sub.eth",
@@ -581,10 +581,10 @@ describe("calculateVelocity", () => {
             });
 
             for (let i = 0; i < 150; i++) {
-                const challengeId = `vote-${i}`;
-                db.insertChallengeSession({ challengeId, subplebbitPublicKey: "pk", expiresAt: baseTimestamp + 3600 });
+                const sessionId = `vote-${i}`;
+                db.insertChallengeSession({ sessionId, subplebbitPublicKey: "pk", expiresAt: baseTimestamp + 3600 });
                 db.insertVote({
-                    challengeId,
+                    sessionId,
                     publication: {
                         author: createMockAuthor(),
                         subplebbitAddress: "test-sub.eth",

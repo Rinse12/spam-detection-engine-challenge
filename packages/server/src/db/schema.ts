@@ -6,7 +6,7 @@
 export const SCHEMA_SQL = `
 -- Challenge sessions table (ephemeral) - stores pending challenges
 CREATE TABLE IF NOT EXISTS challengeSessions (
-  challengeId TEXT PRIMARY KEY,
+  sessionId TEXT PRIMARY KEY,
   subplebbitPublicKey TEXT,
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'completed', 'failed')),
   completedAt INTEGER,
@@ -19,7 +19,7 @@ CREATE INDEX IF NOT EXISTS idx_challengeSessions_expiresAt ON challengeSessions(
 
 -- Comments table - stores comment publications
 CREATE TABLE IF NOT EXISTS comments (
-  challengeId TEXT PRIMARY KEY,
+  sessionId TEXT PRIMARY KEY,
   author TEXT NOT NULL,
   subplebbitAddress TEXT NOT NULL,
   parentCid TEXT,
@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS comments (
   protocolVersion TEXT NOT NULL,
   nsfw INTEGER,
   receivedAt INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
-  FOREIGN KEY (challengeId) REFERENCES challengeSessions(challengeId)
+  FOREIGN KEY (sessionId) REFERENCES challengeSessions(sessionId)
 );
 
 CREATE INDEX IF NOT EXISTS idx_comments_author ON comments(author);
@@ -46,7 +46,7 @@ CREATE INDEX IF NOT EXISTS idx_comments_timestamp ON comments(timestamp);
 
 -- Votes table - stores vote publications
 CREATE TABLE IF NOT EXISTS votes (
-  challengeId TEXT PRIMARY KEY,
+  sessionId TEXT PRIMARY KEY,
   author TEXT NOT NULL,
   subplebbitAddress TEXT NOT NULL,
   commentCid TEXT NOT NULL,
@@ -55,7 +55,7 @@ CREATE TABLE IF NOT EXISTS votes (
   vote INTEGER NOT NULL,
   timestamp INTEGER NOT NULL,
   receivedAt INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
-  FOREIGN KEY (challengeId) REFERENCES challengeSessions(challengeId)
+  FOREIGN KEY (sessionId) REFERENCES challengeSessions(sessionId)
 );
 
 CREATE INDEX IF NOT EXISTS idx_votes_author ON votes(author);
@@ -63,7 +63,7 @@ CREATE INDEX IF NOT EXISTS idx_votes_commentCid ON votes(commentCid);
 
 -- Comment edits table - stores comment edit publications
 CREATE TABLE IF NOT EXISTS commentEdits (
-  challengeId TEXT PRIMARY KEY,
+  sessionId TEXT PRIMARY KEY,
   author TEXT NOT NULL,
   subplebbitAddress TEXT NOT NULL,
   commentCid TEXT NOT NULL,
@@ -77,7 +77,7 @@ CREATE TABLE IF NOT EXISTS commentEdits (
   nsfw INTEGER,
   timestamp INTEGER NOT NULL,
   receivedAt INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
-  FOREIGN KEY (challengeId) REFERENCES challengeSessions(challengeId)
+  FOREIGN KEY (sessionId) REFERENCES challengeSessions(sessionId)
 );
 
 CREATE INDEX IF NOT EXISTS idx_commentEdits_author ON commentEdits(author);
@@ -85,7 +85,7 @@ CREATE INDEX IF NOT EXISTS idx_commentEdits_commentCid ON commentEdits(commentCi
 
 -- Comment moderations table - stores comment moderation publications
 CREATE TABLE IF NOT EXISTS commentModerations (
-  challengeId TEXT PRIMARY KEY,
+  sessionId TEXT PRIMARY KEY,
   author TEXT NOT NULL,
   subplebbitAddress TEXT NOT NULL,
   commentCid TEXT NOT NULL,
@@ -94,7 +94,7 @@ CREATE TABLE IF NOT EXISTS commentModerations (
   protocolVersion TEXT,
   timestamp INTEGER NOT NULL,
   receivedAt INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
-  FOREIGN KEY (challengeId) REFERENCES challengeSessions(challengeId)
+  FOREIGN KEY (sessionId) REFERENCES challengeSessions(sessionId)
 );
 
 CREATE INDEX IF NOT EXISTS idx_commentModerations_author ON commentModerations(author);
@@ -102,7 +102,7 @@ CREATE INDEX IF NOT EXISTS idx_commentModerations_commentCid ON commentModeratio
 
 -- IP records table - stores IP addresses associated with challenges
 CREATE TABLE IF NOT EXISTS ipRecords (
-  challengeId TEXT PRIMARY KEY,
+  sessionId TEXT PRIMARY KEY,
   ipAddress TEXT NOT NULL,
   isVpn INTEGER,
   isProxy INTEGER,
@@ -110,7 +110,7 @@ CREATE TABLE IF NOT EXISTS ipRecords (
   isDatacenter INTEGER,
   countryCode TEXT,
   timestamp INTEGER NOT NULL,
-  FOREIGN KEY (challengeId) REFERENCES challengeSessions(challengeId)
+  FOREIGN KEY (sessionId) REFERENCES challengeSessions(sessionId)
 );
 
 CREATE INDEX IF NOT EXISTS idx_ipRecords_ipAddress ON ipRecords(ipAddress);

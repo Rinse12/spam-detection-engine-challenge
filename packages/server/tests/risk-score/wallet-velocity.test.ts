@@ -194,14 +194,14 @@ describe("calculateWalletVelocity", () => {
 
             // Insert 15 posts from this wallet (above BOT_LIKE threshold of 12)
             for (let i = 0; i < 15; i++) {
-                const challengeId = `challenge-${i}`;
+                const sessionId = `challenge-${i}`;
                 db.insertChallengeSession({
-                    challengeId,
+                    sessionId,
                     subplebbitPublicKey: "pk",
                     expiresAt: baseTimestamp + 3600
                 });
                 db.insertComment({
-                    challengeId,
+                    sessionId,
                     publication: {
                         author: {
                             address: `author-${i}`,
@@ -251,14 +251,14 @@ describe("calculateWalletVelocity", () => {
 
             // Insert 25 votes - above NORMAL (20) but below ELEVATED (40)
             for (let i = 0; i < 25; i++) {
-                const challengeId = `vote-challenge-${i}`;
+                const sessionId = `vote-challenge-${i}`;
                 db.insertChallengeSession({
-                    challengeId,
+                    sessionId,
                     subplebbitPublicKey: "pk",
                     expiresAt: baseTimestamp + 3600
                 });
                 db.insertVote({
-                    challengeId,
+                    sessionId,
                     publication: {
                         author: {
                             address: `author-${i}`,
@@ -304,14 +304,14 @@ describe("calculateWalletVelocity", () => {
 
             // Insert many posts from spammy wallet only
             for (let i = 0; i < 10; i++) {
-                const challengeId = `spam-challenge-${i}`;
+                const sessionId = `spam-challenge-${i}`;
                 db.insertChallengeSession({
-                    challengeId,
+                    sessionId,
                     subplebbitPublicKey: "pk",
                     expiresAt: baseTimestamp + 3600
                 });
                 db.insertComment({
-                    challengeId,
+                    sessionId,
                     publication: {
                         author: {
                             address: `spammer-${i}`,
@@ -376,14 +376,14 @@ describe("calculateWalletVelocity", () => {
 
             // Insert 20 replies from this wallet (above SUSPICIOUS threshold of 15 for replies)
             for (let i = 0; i < 20; i++) {
-                const challengeId = `reply-challenge-${i}`;
+                const sessionId = `reply-challenge-${i}`;
                 db.insertChallengeSession({
-                    challengeId,
+                    sessionId,
                     subplebbitPublicKey: "pk",
                     expiresAt: baseTimestamp + 3600
                 });
                 db.insertComment({
-                    challengeId,
+                    sessionId,
                     publication: {
                         author: {
                             address: `author-${i}`,

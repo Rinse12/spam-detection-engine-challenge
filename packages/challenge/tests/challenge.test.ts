@@ -34,7 +34,7 @@ const stubFetch = (...responses: Array<ReturnType<typeof createResponse>>) => {
 const createEvaluateResponse = (overrides: Partial<EvaluateResponse> = {}): EvaluateResponse => ({
     riskScore: 0.5,
     explanation: "OK",
-    challengeId: "challenge-123",
+    sessionId: "challenge-123",
     challengeUrl: "https://easycommunityspamblocker.com/api/v1/iframe/challenge-123",
     challengeExpiresAt: 1710000000,
     ...overrides
@@ -140,32 +140,9 @@ describe("EasyCommunitySpamBlocker challenge package", () => {
         });
     });
 
-    it("returns a challenge and rejects missing tokens", async () => {
-        const fetchMock = stubFetch(createResponse(createEvaluateResponse({ riskScore: 0.5 })));
-        const challengeFile = ChallengeFileFactory({} as SubplebbitChallengeSetting);
-
-        const result = await challengeFile.getChallenge({
-            challengeSettings: { options: {} } as SubplebbitChallengeSetting,
-            challengeRequestMessage: request,
-            challengeIndex: 0,
-            subplebbit
-        });
-
-        if (!("verify" in result)) {
-            throw new Error("Expected a challenge response");
-        }
-
-        const verifyResult = await result.verify("   ");
-        expect(verifyResult).toEqual({
-            success: false,
-            error: "Missing challenge token."
-        });
-        expect(fetchMock).toHaveBeenCalledTimes(1);
-    });
-
-    it("passes the trimmed token to the verify endpoint", async () => {
+    it("returns a challenge and calls verify endpoint with sessionId", async () => {
         const evaluateResponse = createEvaluateResponse({ riskScore: 0.5 });
-        const fetchMock = stubFetch(createResponse(evaluateResponse), createResponse(createVerifyResponse({ success: false })));
+        const fetchMock = stubFetch(createResponse(evaluateResponse), createResponse(createVerifyResponse()));
         const challengeFile = ChallengeFileFactory({} as SubplebbitChallengeSetting);
 
         const result = await challengeFile.getChallenge({
@@ -179,23 +156,28 @@ describe("EasyCommunitySpamBlocker challenge package", () => {
             throw new Error("Expected a challenge response");
         }
 
-        await result.verify("  token-value  ");
+        // Answer is ignored - server tracks completion state
+        const verifyResult = await result.verify("");
+        expect(verifyResult).toEqual({ success: true });
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+
         // Decode CBOR body from Buffer
         const bodyBuffer = fetchMock.mock.calls[1]?.[1]?.body as Buffer;
         const verifyBody = cborg.decode(bodyBuffer);
         expect(verifyBody).toEqual(
             expect.objectContaining({
-                challengeId: evaluateResponse.challengeId,
-                token: "token-value",
+                sessionId: evaluateResponse.sessionId,
                 timestamp: expect.any(Number),
                 signature: expect.objectContaining({
-                    publicKey: expect.any(Uint8Array), // Now a Uint8Array, not base64 string
+                    publicKey: expect.any(Uint8Array),
                     type: "ed25519",
-                    signedPropertyNames: ["challengeId", "token", "timestamp"],
-                    signature: expect.any(Uint8Array) // Now a Uint8Array, not base64 string
+                    signedPropertyNames: ["sessionId", "timestamp"],
+                    signature: expect.any(Uint8Array)
                 })
             })
         );
+        // No token in the request
+        expect(verifyBody.token).toBeUndefined();
     });
 
     it("surfaces verification failures from the server", async () => {
