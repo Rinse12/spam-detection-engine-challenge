@@ -42,6 +42,11 @@ export function registerEvaluateRoute(fastify: FastifyInstance, options: Evaluat
             const { challengeRequest } = parseResult.data as EvaluateRequest;
             const { signature, timestamp } = parseResult.data as EvaluateRequest;
 
+            // Use raw challengeRequest from request.body for signature verification
+            // Zod parsing strips unknown fields, but the signature was created over the original object
+            const rawBody = request.body as { challengeRequest: unknown; timestamp: number };
+            const rawChallengeRequest = rawBody.challengeRequest;
+
             const now = Math.floor(Date.now() / 1000);
             if (timestamp < now - MAX_REQUEST_SKEW_SECONDS || timestamp > now + MAX_REQUEST_SKEW_SECONDS) {
                 const error = new Error("Request timestamp is out of range");
@@ -49,7 +54,7 @@ export function registerEvaluateRoute(fastify: FastifyInstance, options: Evaluat
                 throw error;
             }
 
-            await verifySignedRequest({ challengeRequest, timestamp }, signature);
+            await verifySignedRequest({ challengeRequest: rawChallengeRequest, timestamp }, signature);
 
             // Extract publication to get subplebbitAddress for validation
             let publication;

@@ -323,6 +323,80 @@ describe("API Routes", () => {
 
             expect(response.statusCode).toBe(400);
         });
+
+        it("should verify signature correctly when challengeRequest has extra fields (like full ChallengeRequestMessage from plebbit-js)", async () => {
+            // This replicates the real structure sent by plebbit-js challenge package
+            // The challengeRequest includes extra fields like type, encrypted, challengeRequestId, etc.
+            // that are not part of DecryptedChallengeRequestSchema but ARE signed
+            const comment = {
+                title: "Test Post",
+                author: {
+                    address: "12D3KooWTestAddress",
+                    subplebbit: baseSubplebbitAuthor
+                },
+                content: "This is a test comment to see the challenge response.",
+                signature: {
+                    type: "ed25519",
+                    publicKey: "lc91opIDUjPDf2b2Rs9IYE+DL569Og98CHNkTH5Qnkg",
+                    signature: "EHZ/TySXr4GiuJMpHbIrA4qno8e0pIkcldKyQEob39Hr1zKaExm2hMbO7JRQGyljSUlvIELKdAK1f/aq0IhLDg",
+                    signedPropertyNames: ["content", "title", "author", "subplebbitAddress", "protocolVersion", "timestamp"]
+                },
+                timestamp: baseTimestamp,
+                protocolVersion: "1.0.0",
+                subplebbitAddress: "test-sub.eth"
+            };
+
+            // Full ChallengeRequestMessage structure (as sent by plebbit-js)
+            // This includes fields that are NOT in DecryptedChallengeRequestSchema
+            const challengeRequest = {
+                type: "CHALLENGEREQUEST",
+                comment,
+                encrypted: {
+                    iv: new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]),
+                    tag: new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]),
+                    type: "ed25519-aes-gcm",
+                    ciphertext: new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+                },
+                signature: {
+                    type: "ed25519",
+                    publicKey: new Uint8Array(32),
+                    signature: new Uint8Array(64),
+                    signedPropertyNames: [
+                        "challengeRequestId",
+                        "protocolVersion",
+                        "userAgent",
+                        "timestamp",
+                        "type",
+                        "encrypted",
+                        "acceptedChallengeTypes"
+                    ]
+                },
+                timestamp: baseTimestamp,
+                userAgent: "/plebbit-js:0.0.7/",
+                protocolVersion: "1.0.0",
+                challengeRequestId: new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]),
+                acceptedChallengeTypes: []
+            };
+
+            const timestamp = Math.floor(Date.now() / 1000);
+            const propsToSign = { challengeRequest, timestamp };
+            const signature = await createRequestSignature(propsToSign, testSigner);
+
+            const payload = {
+                ...propsToSign,
+                signature
+            };
+
+            const response = await injectCbor(server.fastify, "POST", "/api/v1/evaluate", payload);
+
+            // This should return 200, but currently returns 401 because Zod strips
+            // the extra fields (type, encrypted, signature, challengeRequestId, etc.)
+            // before signature verification
+            expect(response.statusCode).toBe(200);
+            const body = response.json();
+            expect(body.riskScore).toBeDefined();
+            expect(body.challengeId).toBeDefined();
+        });
     });
 
     describe("POST /api/v1/challenge/verify", () => {
