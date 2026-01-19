@@ -72,10 +72,9 @@ The request body is CBOR-encoded (not JSON). This preserves `Uint8Array` types d
   riskScore: number; // 0.0 to 1.0
   explanation?: string; // Human-readable reasoning for the score
 
-// TODO aren't we supposed to include JWT public key here?
   // Pre-generated challenge URL - sub can use this if it decides to challenge
-  challengeId: string;
-  challengeUrl: string; // Full URL: https://easycommunityspamblocker.com/api/v1/iframe/{challengeId}
+  sessionId: string;
+  challengeUrl: string; // Full URL: https://easycommunityspamblocker.com/api/v1/iframe/{sessionId}
   challengeExpiresAt?: number; // Unix timestamp, 1 hour from creation
 }
 ```
@@ -84,7 +83,7 @@ The response always includes a pre-generated `challengeUrl`. If the sub decides 
 
 ### POST /api/v1/challenge/verify
 
-Called by the subplebbit's challenge code to verify a token submitted by the author. The author receives a token after completing the iframe challenge and includes it in their `challengeAnswer` pubsub message.
+Called by the subplebbit's challenge code to verify that the user completed the iframe challenge. The server tracks challenge completion state internally - no token is passed from the user.
 
 **Request must be signed by the subplebbit** (same signing mechanism as /evaluate), using the same signing key that was used for the evaluate request.
 
@@ -94,14 +93,13 @@ Called by the subplebbit's challenge code to verify a token submitted by the aut
 
 ```typescript
 {
-    challengeId: string;
-    token: string; // Token from iframe, submitted by author in challengeAnswer
+    sessionId: string; // The sessionId from the /evaluate response
     timestamp: number; // Unix timestamp (seconds)
     signature: {
         signature: Uint8Array; // Ed25519 signature of CBOR-encoded signed properties
         publicKey: Uint8Array; // 32-byte Ed25519 public key
         type: "ed25519";
-        signedPropertyNames: ["challengeId", "token", "timestamp"];
+        signedPropertyNames: ["sessionId", "timestamp"];
     }
 }
 ```
@@ -122,7 +120,7 @@ Called by the subplebbit's challenge code to verify a token submitted by the aut
 }
 ```
 
-### GET /api/v1/iframe/:challengeId
+### GET /api/v1/iframe/:sessionId
 
 Serves the iframe challenge page. The server supports multiple challenge providers:
 
@@ -135,21 +133,21 @@ When the user completes the challenge:
 
 1. The iframe page receives success from the challenge provider
 2. The iframe calls `POST /api/v1/challenge/complete` with the provider's response token
-3. The server validates the response with the provider and returns a signed JWT
-4. The page calls `window.parent.postMessage({ type: 'challenge-complete', token: '...' }, '*')`
-5. The plebbit client receives this token
-6. The author includes this token in their `challengeAnswer` pubsub message
-7. The subplebbit's challenge code calls `/api/v1/challenge/verify` to validate the token
+3. The server validates the response with the provider and marks the session as `completed` in the database
+4. The iframe displays "Verification complete! You may close this window."
+5. The user clicks "done" in their plebbit client (the client provides this button outside the iframe)
+6. The client sends a `ChallengeAnswer` with an empty string to the subplebbit
+7. The subplebbit's challenge code calls `/api/v1/challenge/verify` to check if the session is completed
 
 ### POST /api/v1/challenge/complete
 
-Called by the iframe after the user completes a challenge. Validates the challenge response with the provider and returns a signed JWT.
+Called by the iframe after the user completes a challenge. Validates the challenge response with the provider and marks the session as completed.
 
 **Request:**
 
 ```typescript
 {
-  challengeId: string;
+  sessionId: string;
   challengeResponse: string; // Token from the challenge provider
   challengeType?: string;    // e.g., "turnstile", "hcaptcha", "github", etc.
 }
@@ -160,12 +158,13 @@ Called by the iframe after the user completes a challenge. Validates the challen
 ```typescript
 {
   success: boolean;
-  token?: string;  // JWT token on success
   error?: string;  // Error message on failure
 }
 ```
 
 ## Challenge Flow (Detailed)
+
+The challenge flow uses **server-side state tracking** - no tokens are passed from the iframe to the user's client. This matches the standard plebbit iframe challenge pattern (used by mintpass and others).
 
 ```
 ┌─────────────────┐       ┌──────────────────┐       ┌────────────────┐
@@ -180,8 +179,8 @@ Called by the iframe after the user completes a challenge. Validates the challen
          │  2. Sub calls /evaluate │                          │
          │                         │                          │
          │  3. riskScore +         │                          │
+         │     sessionId +         │                          │
          │     challengeUrl        │                          │
-         │     returned            │                          │
          │<─────────────────────────                          │
          │                         │                          │
          │  4. If challenge needed,│                          │
@@ -193,31 +192,51 @@ Called by the iframe after the user completes a challenge. Validates the challen
          │─────────────────────────────────────────────────────>
          │                         │                          │
          │  6. User solves CAPTCHA │                          │
-         │─────────────────────────────────────────────────────>
+         │                         │  (validates with         │
+         │                         │   Turnstile API)         │
          │                         │                          │
-         │  7. postMessage(token)  │                          │
-         │<─────────────────────────────────────────────────────
+         │  7. Iframe calls        │                          │
+         │     /complete           │                          │
+         │     ───────────────────>│                          │
          │                         │                          │
-         │  8. Author sends        │                          │
-         │     ChallengeAnswer     │                          │
-         │     with token          │                          │
+         │  8. Server marks        │                          │
+         │     session completed   │                          │
+         │                         │                          │
+         │  9. Iframe shows        │                          │
+         │     "click done"        │                          │
+         │<─────────────────────────                          │
+         │                         │                          │
+         │  10. User clicks "done" │                          │
+         │      button in client   │                          │
+         │      (outside iframe)   │                          │
+         │                         │                          │
+         │  11. Client sends       │                          │
+         │      ChallengeAnswer    │                          │
+         │      with empty string  │                          │
          │─────────────────────────>                          │
          │                         │                          │
-         │  9. Sub's verify()      │                          │
-         │     calls /verify       │                          │
+         │  12. Sub's verify("")   │                          │
+         │      calls /verify      │                          │
+         │      with sessionId     │                          │
          │                         │                          │
-         │  10. success: true +    │                          │
+         │  13. Server checks      │                          │
+         │      session.status     │                          │
+         │      === "completed"    │                          │
+         │                         │                          │
+         │  14. success: true +    │                          │
          │      IP intelligence    │                          │
          │<─────────────────────────                          │
          │                         │                          │
-         │  11. Sub applies        │                          │
+         │  15. Sub applies        │                          │
          │      post-challenge     │                          │
          │      filters            │                          │
          │                         │                          │
-         │  12. Publication        │                          │
+         │  16. Publication        │                          │
          │      accepted/rejected  │                          │
          └─────────────────────────┘                          │
 ```
+
+**Key design point:** Plebbit clients (seedit, 5chan, etc.) display a "done" button outside the iframe for all `url/iframe` type challenges. The iframe content has no control over when this button appears or is clicked. The user must manually click "done" after completing the challenge, which triggers the client to send a `ChallengeAnswer` with an empty string. The subplebbit's `verify()` function then checks the server-side session status.
 
 ## Risk Score
 
@@ -247,18 +266,21 @@ For detailed documentation on the indexer architecture and implementation, see:
 - `autoAcceptThreshold <= riskScore < autoRejectThreshold` → Challenge
 - `riskScore >= autoRejectThreshold` → Auto-reject
 
-## Token Verification
+## Challenge Verification
+
+Challenge completion is tracked **server-side** in the database - no tokens are passed to the user's client.
 
 When a user completes the iframe challenge:
 
-1. The iframe page (served by the EasyCommunitySpamBlocker server) generates a JWT
-2. The JWT is signed by the server's private key
-3. The JWT contains: `challengeId`, `authorAddress`, `completedAt`, `expiresAt`
-4. The sub's challenge code calls `/api/v1/challenge/verify` with the token
-5. The server verifies the signature matches its own domain/key and checks expiration
+1. The iframe calls `POST /api/v1/challenge/complete` with the CAPTCHA provider's response
+2. The server validates the response with the provider (e.g., Turnstile API)
+3. If valid, the server updates the session status to `completed` in the database
+4. The user clicks "done" in their plebbit client
+5. The client sends a `ChallengeAnswer` with an empty string to the subplebbit
+6. The sub's challenge code calls `/api/v1/challenge/verify` with the `sessionId`
+7. The server checks `session.status === "completed"` and returns success + IP intelligence
 
-**Format:** JWT with Ed25519 signatures
-**Expiry:** 1 hour from challenge creation
+**Session expiry:** 1 hour from creation
 
 ## Database Schema (SQLite + better-sqlite3)
 
@@ -270,7 +292,7 @@ Author columns store the full `author` object from each publication (for example
 
 Stores comment publications for analysis and rate limiting.
 
-- `challengeId` TEXT PRIMARY KEY (foreign key of challengeSessions)
+- `sessionId` TEXT PRIMARY KEY (foreign key of challengeSessions)
 - `author` TEXT NOT NULL -- is actually a JSON
 - `subplebbitAddress` TEXT NOT NULL
 - `parentCid` TEXT (null for posts, set for replies)
@@ -293,7 +315,7 @@ Stores comment publications for analysis and rate limiting.
 
 Stores vote publications.
 
-- `challengeId` TEXT PRIMARY KEY (foreign key of challengeSessions)
+- `sessionId` TEXT PRIMARY KEY (foreign key of challengeSessions)
 - `author` TEXT NOT NULL -- is actually a json
 - `subplebbitAddress` TEXT NOT NULL
 - `commentCid` TEXT NOT NULL
@@ -307,7 +329,7 @@ Stores vote publications.
 
 Stores comment edit publications.
 
-- `challengeId` TEXT PRIMARY KEY (foreign key of challengeSessions)
+- `sessionId` TEXT PRIMARY KEY (foreign key of challengeSessions)
 - `author` TEXT NOT NULL -- is actually a json
 - `subplebbitAddress` TEXT NOT NULL
 - `commentCid` TEXT NOT NULL
@@ -326,7 +348,7 @@ Stores comment edit publications.
 
 Stores comment moderation publications.
 
-- `challengeId` TEXT PRIMARY KEY (foreign key of challengeSessions)
+- `sessionId` TEXT PRIMARY KEY (foreign key of challengeSessions)
 - `author` TEXT NOT NULL -- is actually a json
 - `subplebbitAddress` TEXT NOT NULL
 - `commentCid` TEXT NOT NULL
@@ -340,7 +362,7 @@ Stores comment moderation publications.
 
 Tracks challenge sessions. Sessions are kept permanently for historical analysis.
 
-- `challengeId` TEXT PRIMARY KEY -- UUID v4
+- `sessionId` TEXT PRIMARY KEY -- UUID v4
 - `subplebbitPublicKey` TEXT
 - `status` TEXT DEFAULT 'pending' (pending, completed, failed)
 - `completedAt` INTEGER
@@ -352,7 +374,7 @@ Tracks challenge sessions. Sessions are kept permanently for historical analysis
 
 Stores raw IP addresses associated with authors (captured via iframe). One record per challenge.
 
-- `challengeId` TEXT NOT NULL (foreign key to challengeSessions.challengeId) PRIMARY KEY
+- `sessionId` TEXT NOT NULL (foreign key to challengeSessions.sessionId) PRIMARY KEY
 - `ipAddress` TEXT NOT NULL -- ip address string representation
 - `isVpn` INTEGER (BOOLEAN 0/1)
 - `isProxy` INTEGER (BOOLEAN 0/1)

@@ -113,36 +113,18 @@ export function generateTurnstileIframe(options: TurnstileIframeOptions): string
       .then(function(response) { return response.json(); })
       .then(function(data) {
         if (data.success) {
-          // Notify parent window (for clients that embed the iframe)
-          window.parent.postMessage({
-            type: 'challenge-complete'
-          }, '*');
-          showStatus('Verification complete! You may close this window.', 'success');
+          showStatus('Verification complete! Click the "done" button in your plebbit client to continue.', 'success');
         } else {
           showStatus('Verification failed: ' + (data.error || 'Unknown error'), 'error');
-          window.parent.postMessage({
-            type: 'challenge-error',
-            error: data.error || 'Verification failed'
-          }, '*');
         }
       })
       .catch(function(error) {
         showStatus('Verification failed: ' + error.message, 'error');
-        window.parent.postMessage({
-          type: 'challenge-error',
-          error: error.message
-        }, '*');
       });
     }
 
     function onTurnstileError(error) {
       showStatus('Verification failed. Please try again.', 'error');
-
-      // Notify parent window of failure
-      window.parent.postMessage({
-        type: 'challenge-error',
-        error: error || 'Unknown error'
-      }, '*');
     }
   </script>
 </body>
