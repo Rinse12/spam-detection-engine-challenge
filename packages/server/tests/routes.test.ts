@@ -134,13 +134,7 @@ const createEvaluatePayload = async ({
     };
 };
 
-const createVerifyPayload = async ({
-    sessionId,
-    signer = testSigner
-}: {
-    sessionId: string;
-    signer?: typeof testSigner;
-}) => {
+const createVerifyPayload = async ({ sessionId, signer = testSigner }: { sessionId: string; signer?: typeof testSigner }) => {
     const timestamp = Math.floor(Date.now() / 1000);
     const propsToSign = { sessionId, timestamp };
     const signature = await createRequestSignature(propsToSign, signer);
