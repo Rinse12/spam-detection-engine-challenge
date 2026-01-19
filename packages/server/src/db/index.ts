@@ -1,4 +1,6 @@
 import Database from "better-sqlite3";
+import fs from "fs";
+import path from "path";
 import { SCHEMA_SQL } from "./schema.js";
 
 export interface ChallengeSession {
@@ -1212,8 +1214,15 @@ export class SpamDetectionDatabase {
 /**
  * Create a database instance.
  */
-export function createDatabase(path: string): SpamDetectionDatabase {
-    return new SpamDetectionDatabase({ path });
+export function createDatabase(dbPath: string): SpamDetectionDatabase {
+    // Create the parent directory if it doesn't exist (unless it's an in-memory database)
+    if (dbPath !== ":memory:") {
+        const dir = path.dirname(dbPath);
+        if (dir && dir !== "." && !fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+        }
+    }
+    return new SpamDetectionDatabase({ path: dbPath });
 }
 
 export { SCHEMA_SQL } from "./schema.js";
