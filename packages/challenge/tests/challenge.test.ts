@@ -5,6 +5,7 @@ import { getPublicKeyFromPrivateKey } from "../src/plebbit-js-signer.js";
 import type { EvaluateResponse, VerifyResponse } from "@easy-community-spam-blocker/shared";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import ChallengeFileFactory from "../src/index.js";
+import * as cborg from "cborg";
 
 type MockResponseOptions = {
     ok?: boolean;
@@ -103,17 +104,19 @@ describe("EasyCommunitySpamBlocker challenge package", () => {
             subplebbit
         });
 
-        const payload = JSON.parse((fetchMock.mock.calls[0]?.[1]?.body ?? "{}") as string);
+        // Decode CBOR body from Buffer
+        const bodyBuffer = fetchMock.mock.calls[0]?.[1]?.body as Buffer;
+        const payload = cborg.decode(bodyBuffer);
 
         expect(payload).toEqual(
             expect.objectContaining({
                 challengeRequest: request,
                 timestamp: expect.any(Number),
                 signature: expect.objectContaining({
-                    publicKey: subplebbit.signer.publicKey,
+                    publicKey: expect.any(Uint8Array), // Now a Uint8Array, not base64 string
                     type: "ed25519",
                     signedPropertyNames: ["challengeRequest", "timestamp"],
-                    signature: expect.any(String)
+                    signature: expect.any(Uint8Array) // Now a Uint8Array, not base64 string
                 })
             })
         );
@@ -177,17 +180,19 @@ describe("EasyCommunitySpamBlocker challenge package", () => {
         }
 
         await result.verify("  token-value  ");
-        const verifyBody = JSON.parse((fetchMock.mock.calls[1]?.[1]?.body ?? "{}") as string);
+        // Decode CBOR body from Buffer
+        const bodyBuffer = fetchMock.mock.calls[1]?.[1]?.body as Buffer;
+        const verifyBody = cborg.decode(bodyBuffer);
         expect(verifyBody).toEqual(
             expect.objectContaining({
                 challengeId: evaluateResponse.challengeId,
                 token: "token-value",
                 timestamp: expect.any(Number),
                 signature: expect.objectContaining({
-                    publicKey: subplebbit.signer.publicKey,
+                    publicKey: expect.any(Uint8Array), // Now a Uint8Array, not base64 string
                     type: "ed25519",
                     signedPropertyNames: ["challengeId", "token", "timestamp"],
-                    signature: expect.any(String)
+                    signature: expect.any(Uint8Array) // Now a Uint8Array, not base64 string
                 })
             })
         );

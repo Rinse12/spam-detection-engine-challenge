@@ -1,4 +1,5 @@
-import Fastify, { type FastifyInstance, type FastifyError } from "fastify";
+import Fastify, { type FastifyInstance, type FastifyError, type FastifyRequest } from "fastify";
+import * as cborg from "cborg";
 import { SpamDetectionDatabase, createDatabase } from "./db/index.js";
 import { registerRoutes } from "./routes/index.js";
 import { destroyPlebbitInstance, getPlebbitInstance, initPlebbitInstance, setPlebbitOptions } from "./subplebbit-resolver.js";
@@ -88,6 +89,20 @@ export async function createServer(config: ServerConfig): Promise<SpamDetectionS
               }
             : false
     });
+
+    // Add CBOR content type parser
+    fastify.addContentTypeParser(
+        "application/cbor",
+        { parseAs: "buffer" },
+        (_request: FastifyRequest, payload: Buffer, done) => {
+            try {
+                const decoded = cborg.decode(payload);
+                done(null, decoded);
+            } catch (err) {
+                done(err as Error, undefined);
+            }
+        }
+    );
 
     fastify.decorate("getPlebbitInstance", getPlebbitInstance);
 

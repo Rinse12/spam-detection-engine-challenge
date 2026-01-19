@@ -3,26 +3,47 @@ import type { RefinementCtx } from "zod";
 import type { DecryptedChallengeRequest } from "@plebbit/plebbit-js/dist/node/pubsub-messages/types.js";
 import {
     DecryptedChallengeRequestSchema,
-    JsonSignatureSchema,
     PlebbitTimestampSchema,
     SubplebbitAuthorSchema,
     derivePublicationFromChallengeRequest
 } from "../plebbit-js-internals.js";
 
+/**
+ * Schema for CBOR request signatures.
+ * Unlike JSON signatures, these use Uint8Array for binary fields.
+ */
+export const CborSignatureSchema = z.object({
+    signature: z.instanceof(Uint8Array),
+    publicKey: z.instanceof(Uint8Array),
+    type: z.string(),
+    signedPropertyNames: z.array(z.string())
+});
+
 const ChallengeRequestWithSubplebbitAuthorSchema = DecryptedChallengeRequestSchema.superRefine(
     (value: DecryptedChallengeRequest, ctx: RefinementCtx) => {
+        let publication;
         try {
-            const publication = derivePublicationFromChallengeRequest(value);
-            const subplebbitAuthor = publication.author?.subplebbit;
+            publication = derivePublicationFromChallengeRequest(value);
+        } catch (error) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: "Invalid challenge request: missing publication"
+            });
+            return;
+        }
 
-            if (!subplebbitAuthor) {
-                ctx.addIssue({
-                    code: z.ZodIssueCode.custom,
-                    message: "Missing subplebbit author data"
-                });
-                return;
-            }
+        if (!publication) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: "Invalid challenge request: missing publication"
+            });
+            return;
+        }
 
+        // author.subplebbit is optional - it only exists for authors who have previously
+        // published in this subplebbit. New authors won't have this field.
+        const subplebbitAuthor = publication.author?.subplebbit;
+        if (subplebbitAuthor) {
             const subplebbitResult = SubplebbitAuthorSchema.safeParse(subplebbitAuthor);
             if (!subplebbitResult.success) {
                 ctx.addIssue({
@@ -30,11 +51,6 @@ const ChallengeRequestWithSubplebbitAuthorSchema = DecryptedChallengeRequestSche
                     message: "Invalid subplebbit author data"
                 });
             }
-        } catch (error) {
-            ctx.addIssue({
-                code: z.ZodIssueCode.custom,
-                message: "Invalid challenge request: missing publication"
-            });
         }
     }
 );
@@ -43,7 +59,7 @@ export const EvaluateRequestSchema = z
     .object({
         challengeRequest: ChallengeRequestWithSubplebbitAuthorSchema,
         timestamp: PlebbitTimestampSchema,
-        signature: JsonSignatureSchema
+        signature: CborSignatureSchema
     })
     .strict();
 
@@ -61,7 +77,7 @@ export const VerifyRequestSchema = z
         challengeId: z.string().min(1, "challengeId is required"),
         token: z.string().min(1, "token is required"),
         timestamp: PlebbitTimestampSchema,
-        signature: JsonSignatureSchema
+        signature: CborSignatureSchema
     })
     .strict();
 

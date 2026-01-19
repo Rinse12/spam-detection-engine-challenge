@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import type { DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor } from "@plebbit/plebbit-js/dist/node/pubsub-messages/types.js";
 import { getPlebbitAddressFromPublicKey } from "../plebbit-js-signer.js";
+import { toString as uint8ArrayToString } from "uint8arrays/to-string";
 import type { EvaluateResponse } from "@easy-community-spam-blocker/shared";
 import type { SpamDetectionDatabase } from "../db/index.js";
 import { EvaluateRequestSchema, type EvaluateRequest } from "./schemas.js";
@@ -63,7 +64,8 @@ export function registerEvaluateRoute(fastify: FastifyInstance, options: Evaluat
             }
 
             const subplebbitAddress = publication.subplebbitAddress;
-            const subplebbitPublicKey = signature.publicKey;
+            // Convert Uint8Array publicKey to base64 string for comparisons and storage
+            const subplebbitPublicKey = uint8ArrayToString(signature.publicKey, "base64");
 
             if (subplebbitAddress.includes(".")) {
                 // subplebbit address is a domain

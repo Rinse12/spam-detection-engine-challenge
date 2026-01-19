@@ -9,7 +9,10 @@ import type { EvaluateResponse, VerifyResponse } from "@easy-community-spam-bloc
 import { EvaluateResponseSchema, VerifyResponseSchema } from "@easy-community-spam-blocker/shared";
 import { createOptionsSchema, type ParsedOptions } from "./schema.js";
 import * as cborg from "cborg";
-import { toString as uint8ArrayToString } from "uint8arrays/to-string";
+import { fromString as uint8ArrayFromString } from "uint8arrays/from-string";
+import Logger from "@plebbit/plebbit-logger";
+
+const log = Logger("plebbit-js:subplebbit:challenge:easy-community-spam-blocker");
 
 const DEFAULT_SERVER_URL = "https://easycommunityspamblocker.com/api/v1";
 
@@ -94,49 +97,34 @@ const parseOptions = (settings: GetChallengeArgs["challengeSettings"]): ParsedOp
     return parsed.data;
 };
 
-const CBORG_ENCODE_OPTIONS = {
-    typeEncoders: {
-        undefined: () => {
-            throw new Error("Signed payload cannot include undefined values (cborg)");
-        }
-    }
-};
-
-const buildSignedPayload = (payload: Record<string, unknown>, signedPropertyNames: string[]) => {
-    const propsToSign: Record<string, unknown> = {};
-    for (const propertyName of signedPropertyNames) {
-        propsToSign[propertyName] = payload[propertyName];
-    }
-    return propsToSign;
-};
-
 const createRequestSignature = async (
-    payload: Record<string, unknown>,
-    signedPropertyNames: string[],
+    propsToSign: Record<string, unknown>,
     signer: { privateKey?: string; publicKey?: string; type?: string }
 ) => {
     if (!signer.privateKey || !signer.publicKey || !signer.type) {
         throw new Error("Subplebbit signer is missing required fields");
     }
-    const propsToSign = buildSignedPayload(payload, signedPropertyNames);
-    const encoded = cborg.encode(propsToSign, CBORG_ENCODE_OPTIONS);
+    // Sign the CBOR-encoded payload directly
+    const encoded = cborg.encode(propsToSign);
     const signatureBuffer = await signBufferEd25519(encoded, signer.privateKey);
     return {
-        signature: uint8ArrayToString(signatureBuffer, "base64"),
-        publicKey: signer.publicKey,
+        signature: signatureBuffer, // Uint8Array, not base64
+        publicKey: uint8ArrayFromString(signer.publicKey, "base64"), // Uint8Array
         type: signer.type,
-        signedPropertyNames
+        signedPropertyNames: Object.keys(propsToSign)
     };
 };
 
-const postJson = async (url: string, body: unknown): Promise<unknown> => {
+const postCbor = async (url: string, body: unknown): Promise<unknown> => {
+    const encoded = cborg.encode(body);
+    log.trace(`POST ${url} request body (CBOR, %d bytes)`, encoded.length);
     const response = await fetch(url, {
         method: "POST",
         headers: {
-            "content-type": "application/json",
+            "content-type": "application/cbor",
             accept: "application/json"
         },
-        body: JSON.stringify(body)
+        body: Buffer.from(encoded)
     });
 
     let responseBody: unknown;
@@ -146,12 +134,16 @@ const postJson = async (url: string, body: unknown): Promise<unknown> => {
         responseBody = undefined;
     }
 
+    log.trace(`POST ${url} response status: ${response.status}, body: %o`, responseBody);
+
     if (!response.ok) {
         const details = responseBody !== undefined ? `: ${JSON.stringify(responseBody)}` : "";
+        log.error(`POST ${url} failed with status ${response.status}${details}`);
         throw new Error(`EasyCommunitySpamBlocker server error (${response.status})${details}`);
     }
 
     if (responseBody === undefined) {
+        log.error(`POST ${url} returned invalid JSON`);
         throw new Error("Invalid JSON response from EasyCommunitySpamBlocker server");
     }
 
@@ -206,36 +198,47 @@ const getPostChallengeRejection = (verifyResponse: VerifyResponse, options: Pars
 
 const getChallenge = async (args: GetChallengeArgs): Promise<ChallengeInput | ChallengeResultInput> => {
     const { challengeSettings, challengeRequestMessage, subplebbit } = args;
+    log("getChallenge called for subplebbit %s", subplebbit?.address);
+    log.trace("getChallenge args: challengeSettings=%o, challengeRequestMessage=%o", challengeSettings, challengeRequestMessage);
+
     const options = parseOptions(challengeSettings);
+    log("Parsed options: serverUrl=%s, autoAcceptThreshold=%s, autoRejectThreshold=%s", options.serverUrl, options.autoAcceptThreshold, options.autoRejectThreshold);
+
     const signer = subplebbit?.signer;
 
     if (!signer) {
+        log.error("Subplebbit signer is missing");
         throw new Error("Subplebbit signer is required to call EasyCommunitySpamBlocker");
     }
+    log.trace("Signer publicKey: %s", signer.publicKey);
 
     const evaluateTimestamp = Math.floor(Date.now() / 1000);
-    const evaluatePayload = {
+    const evaluatePropsToSign = {
         challengeRequest: challengeRequestMessage,
         timestamp: evaluateTimestamp
     };
-    const evaluateSignature = await createRequestSignature(evaluatePayload, ["challengeRequest", "timestamp"], signer);
+    log("Calling /evaluate endpoint at %s", `${options.serverUrl}/evaluate`);
+    const evaluateSignature = await createRequestSignature(evaluatePropsToSign, signer);
 
     const evaluateResponse = parseWithSchema<EvaluateResponse>(
         EvaluateResponseSchema,
-        await postJson(`${options.serverUrl}/evaluate`, {
-            ...evaluatePayload,
+        await postCbor(`${options.serverUrl}/evaluate`, {
+            ...evaluatePropsToSign,
             signature: evaluateSignature
         }),
         "evaluate"
     );
     const riskScore = evaluateResponse.riskScore;
+    log("Evaluate response: riskScore=%s, challengeId=%s, explanation=%s", formatRiskScore(riskScore), evaluateResponse.challengeId, evaluateResponse.explanation);
 
     if (riskScore < options.autoAcceptThreshold) {
+        log("Auto-accepting publication (riskScore %s < autoAcceptThreshold %s)", formatRiskScore(riskScore), options.autoAcceptThreshold);
         return { success: true };
     }
 
     if (riskScore >= options.autoRejectThreshold) {
         const explanation = evaluateResponse.explanation ? ` ${evaluateResponse.explanation}` : "";
+        log("Auto-rejecting publication (riskScore %s >= autoRejectThreshold %s)", formatRiskScore(riskScore), options.autoRejectThreshold);
         return {
             success: false,
             // TODO find a better error message
@@ -245,27 +248,35 @@ const getChallenge = async (args: GetChallengeArgs): Promise<ChallengeInput | Ch
 
     const challengeId = evaluateResponse.challengeId;
     const challengeUrl = evaluateResponse.challengeUrl;
+    log("Returning challenge to user: challengeId=%s, challengeUrl=%s", challengeId, challengeUrl);
 
     const verify = async (answer: string): Promise<ChallengeResultInput> => {
+        log("verify called for challengeId=%s", challengeId);
         const token = typeof answer === "string" ? answer.trim() : "";
         if (!token) {
+            log("verify failed: missing challenge token");
             return { success: false, error: "Missing challenge token." };
         }
+        log.trace("verify token (first 20 chars): %s...", token.substring(0, 20));
 
         const verifyTimestamp = Math.floor(Date.now() / 1000);
-        const verifyPayload = { challengeId, token, timestamp: verifyTimestamp };
-        const verifySignature = await createRequestSignature(verifyPayload, ["challengeId", "token", "timestamp"], signer);
+        const verifyPropsToSign = { challengeId, token, timestamp: verifyTimestamp };
+        log("Calling /challenge/verify endpoint at %s", `${options.serverUrl}/challenge/verify`);
+        const verifySignature = await createRequestSignature(verifyPropsToSign, signer);
 
         const verifyResponse = parseWithSchema<VerifyResponse>(
             VerifyResponseSchema,
-            await postJson(`${options.serverUrl}/challenge/verify`, {
-                ...verifyPayload,
+            await postCbor(`${options.serverUrl}/challenge/verify`, {
+                ...verifyPropsToSign,
                 signature: verifySignature
             }),
             "verify"
         );
+        log("Verify response: success=%s, error=%s, ipRisk=%s, ipAddressCountry=%s, ipTypeEstimation=%s",
+            verifyResponse.success, verifyResponse.error, verifyResponse.ipRisk, verifyResponse.ipAddressCountry, verifyResponse.ipTypeEstimation);
 
         if (!verifyResponse.success) {
+            log("Challenge verification failed: %s", verifyResponse.error || "unknown error");
             return {
                 success: false,
                 // TODO find a better error message
@@ -275,9 +286,11 @@ const getChallenge = async (args: GetChallengeArgs): Promise<ChallengeInput | Ch
 
         const postChallengeRejection = getPostChallengeRejection(verifyResponse, options);
         if (postChallengeRejection) {
+            log("Post-challenge rejection: %s", postChallengeRejection);
             return { success: false, error: postChallengeRejection };
         }
 
+        log("Challenge verification succeeded for challengeId=%s", challengeId);
         return { success: true };
     };
 

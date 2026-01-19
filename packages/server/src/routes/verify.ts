@@ -5,6 +5,7 @@ import type { KeyManager } from "../crypto/keys.js";
 import { VerifyRequestSchema, type VerifyRequest } from "./schemas.js";
 import { verifySignedRequest } from "../security/request-signature.js";
 import { verifyChallengeToken, type ChallengeTokenPayload } from "../crypto/jwt.js";
+import { toString as uint8ArrayToString } from "uint8arrays/to-string";
 
 export interface VerifyRouteOptions {
     db: SpamDetectionDatabase;
@@ -90,7 +91,9 @@ export function registerVerifyRoute(fastify: FastifyInstance, options: VerifyRou
                 };
             }
 
-            if (session.subplebbitPublicKey !== signature.publicKey) {
+            // Convert Uint8Array publicKey to base64 string for comparison with session
+            const requestPublicKey = uint8ArrayToString(signature.publicKey, "base64");
+            if (session.subplebbitPublicKey !== requestPublicKey) {
                 reply.status(401);
                 return {
                     success: false,

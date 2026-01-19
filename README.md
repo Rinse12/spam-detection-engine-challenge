@@ -43,20 +43,24 @@ Evaluate publication risk. The server tracks author history internally, so no co
 
 Requests are signed by the subplebbit signer to prevent abuse (e.g., someone unrelated to the sub querying the engine to doxx users). The server validates the request signature and ensures the signer matches the subplebbit (for domain addresses, the server resolves the subplebbit via `plebbit.getSubplebbit` and compares `subplebbit.signature.publicKey`). Resolved subplebbit public keys are cached in-memory for 12 hours to reduce repeated lookups. The HTTP server initializes a single shared Plebbit instance and only destroys it when the server shuts down.
 
+**Request Format:** `Content-Type: application/cbor`
+
+The request body is CBOR-encoded (not JSON). This preserves `Uint8Array` types during transmission and ensures signature verification works correctly.
+
 **Request:**
 
 ```typescript
 // The request wraps the DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor from plebbit-js
-// subplebbitAddress and author.subplebbit are required on the publication
-// signature is a plebbit-js JsonSignature; signedPropertyNames must cover all fields except signature
+// subplebbitAddress is required; author.subplebbit is optional (undefined for first-time publishers)
+// The signature is created by CBOR-encoding the signed properties, then signing with Ed25519
 {
   challengeRequest: DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor;
   timestamp: number; // Unix timestamp (seconds)
   signature: {
-    signature: string; // base64
-    publicKey: string; // base64
-    type: string;
-    signedPropertyNames: string[];
+    signature: Uint8Array; // Ed25519 signature of CBOR-encoded signed properties
+    publicKey: Uint8Array; // 32-byte Ed25519 public key
+    type: "ed25519";
+    signedPropertyNames: ["challengeRequest", "timestamp"];
   };
 }
 ```
@@ -84,6 +88,8 @@ Called by the subplebbit's challenge code to verify a token submitted by the aut
 
 **Request must be signed by the subplebbit** (same signing mechanism as /evaluate), using the same signing key that was used for the evaluate request.
 
+**Request Format:** `Content-Type: application/cbor`
+
 **Request:**
 
 ```typescript
@@ -92,10 +98,10 @@ Called by the subplebbit's challenge code to verify a token submitted by the aut
   token: string; // Token from iframe, submitted by author in challengeAnswer
   timestamp: number; // Unix timestamp (seconds)
   signature: {
-    signature: string; // base64
-    publicKey: string; // base64
-    type: string;
-    signedPropertyNames: string[];
+    signature: Uint8Array; // Ed25519 signature of CBOR-encoded signed properties
+    publicKey: Uint8Array; // 32-byte Ed25519 public key
+    type: "ed25519";
+    signedPropertyNames: ["challengeId", "token", "timestamp"];
   };
 }
 ```
@@ -380,9 +386,10 @@ Implements plebbit-js `ChallengeFileFactory`:
 }
 ```
 
-When calling `/api/v1/evaluate`, the client must include `author.subplebbit`
-fields in the publication (for example, `challengeRequest.comment.author.subplebbit`).
-Requests without subplebbit author data are rejected.
+When calling `/api/v1/evaluate`, the `author.subplebbit` field in the publication
+(e.g., `challengeRequest.comment.author.subplebbit`) may be `undefined` for first-time
+publishers who have never posted in the subplebbit before. The subplebbit populates this
+field from its internal database of author history, so new authors won't have it set.
 
 ### Configuration Options (Challenge Package)
 

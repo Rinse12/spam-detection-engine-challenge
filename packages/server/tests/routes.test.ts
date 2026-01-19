@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from "vitest";
 import { createServer, type SpamDetectionServer } from "../src/index.js";
 import * as cborg from "cborg";
-import { toString as uint8ArrayToString } from "uint8arrays/to-string";
+import { fromString as uint8ArrayFromString } from "uint8arrays/from-string";
 import { signBufferEd25519, getPublicKeyFromPrivateKey } from "../src/plebbit-js-signer.js";
 import { resetPlebbitLoaderForTest, setPlebbitLoaderForTest } from "../src/subplebbit-resolver.js";
 import { signChallengeToken, createTokenPayload } from "../src/crypto/jwt.js";
@@ -18,13 +18,6 @@ const baseSubplebbitAuthor = {
     replyScore: 0,
     firstCommentTimestamp: baseTimestamp - 86400,
     lastCommentCid: "QmYwAPJzv5CZsnAzt8auVZRn9p6nxfZmZ75W6rS4ju4Khu"
-};
-const cborgEncodeOptions = {
-    typeEncoders: {
-        undefined: () => {
-            throw new Error("Signed payload cannot include undefined values (cborg)");
-        }
-    }
 };
 const testPrivateKey = Buffer.alloc(32, 7).toString("base64");
 const alternatePrivateKey = Buffer.alloc(32, 3).toString("base64");
@@ -56,24 +49,32 @@ beforeAll(async () => {
     };
 });
 
-const buildSignedPayload = (payload: Record<string, unknown>, signedPropertyNames: string[]) => {
-    const propsToSign: Record<string, unknown> = {};
-    for (const propertyName of signedPropertyNames) {
-        propsToSign[propertyName] = payload[propertyName];
-    }
-    return propsToSign;
-};
-
-const createRequestSignature = async (payload: Record<string, unknown>, signedPropertyNames: string[], signer = testSigner) => {
-    const propsToSign = buildSignedPayload(payload, signedPropertyNames);
-    const encoded = cborg.encode(propsToSign, cborgEncodeOptions);
+// Create CBOR request signature with Uint8Array values
+const createRequestSignature = async (propsToSign: Record<string, unknown>, signer = testSigner) => {
+    const encoded = cborg.encode(propsToSign);
     const signatureBuffer = await signBufferEd25519(encoded, signer.privateKey);
     return {
-        signature: uint8ArrayToString(signatureBuffer, "base64"),
-        publicKey: signer.publicKey,
+        signature: signatureBuffer, // Uint8Array, not base64
+        publicKey: uint8ArrayFromString(signer.publicKey, "base64"), // Uint8Array
         type: signer.type,
-        signedPropertyNames
+        signedPropertyNames: Object.keys(propsToSign)
     };
+};
+
+// Helper to send CBOR-encoded request
+const injectCbor = async (fastify: SpamDetectionServer["fastify"], method: "POST" | "GET", url: string, payload?: unknown) => {
+    const options: Parameters<typeof fastify.inject>[0] = {
+        method,
+        url,
+        headers: {
+            "content-type": "application/cbor",
+            accept: "application/json"
+        }
+    };
+    if (payload !== undefined) {
+        options.body = Buffer.from(cborg.encode(payload));
+    }
+    return fastify.inject(options);
 };
 
 const createEvaluatePayload = async ({
@@ -125,11 +126,11 @@ const createEvaluatePayload = async ({
 
     const challengeRequest = { comment };
     const timestamp = Math.floor(Date.now() / 1000);
-    const signature = await createRequestSignature({ challengeRequest, timestamp }, ["challengeRequest", "timestamp"], signer);
+    const propsToSign = { challengeRequest, timestamp };
+    const signature = await createRequestSignature(propsToSign, signer);
 
     return {
-        challengeRequest,
-        timestamp,
+        ...propsToSign,
         signature
     };
 };
@@ -144,9 +145,10 @@ const createVerifyPayload = async ({
     signer?: typeof testSigner;
 }) => {
     const timestamp = Math.floor(Date.now() / 1000);
-    const signature = await createRequestSignature({ challengeId, token, timestamp }, ["challengeId", "token", "timestamp"], signer);
+    const propsToSign = { challengeId, token, timestamp };
+    const signature = await createRequestSignature(propsToSign, signer);
 
-    return { challengeId, token, timestamp, signature };
+    return { ...propsToSign, signature };
 };
 
 describe("API Routes", () => {
@@ -189,11 +191,7 @@ describe("API Routes", () => {
     describe("POST /api/v1/evaluate", () => {
         it("should return evaluation response for valid request", async () => {
             const validRequest = await createEvaluatePayload();
-            const response = await server.fastify.inject({
-                method: "POST",
-                url: "/api/v1/evaluate",
-                payload: validRequest
-            });
+            const response = await injectCbor(server.fastify, "POST", "/api/v1/evaluate", validRequest);
 
             expect(response.statusCode).toBe(200);
             const body = response.json();
@@ -209,11 +207,7 @@ describe("API Routes", () => {
 
         it("should create challenge session in database", async () => {
             const validRequest = await createEvaluatePayload();
-            const response = await server.fastify.inject({
-                method: "POST",
-                url: "/api/v1/evaluate",
-                payload: validRequest
-            });
+            const response = await injectCbor(server.fastify, "POST", "/api/v1/evaluate", validRequest);
 
             const body = response.json();
             const session = server.db.getChallengeSessionByChallengeId(body.challengeId);
@@ -233,11 +227,7 @@ describe("API Routes", () => {
                 }
             });
 
-            const response = await server.fastify.inject({
-                method: "POST",
-                url: "/api/v1/evaluate",
-                payload: establishedAuthorRequest
-            });
+            const response = await injectCbor(server.fastify, "POST", "/api/v1/evaluate", establishedAuthorRequest);
 
             const body = response.json();
             expect(body.riskScore).toBeLessThan(0.5); // Should be below neutral
@@ -253,11 +243,7 @@ describe("API Routes", () => {
                     replyScore: 20
                 }
             });
-            const establishedResponse = await server.fastify.inject({
-                method: "POST",
-                url: "/api/v1/evaluate",
-                payload: establishedRequest
-            });
+            const establishedResponse = await injectCbor(server.fastify, "POST", "/api/v1/evaluate", establishedRequest);
             const establishedBody = establishedResponse.json();
 
             // Then get the new author's score (very new user with minimal history)
@@ -270,49 +256,41 @@ describe("API Routes", () => {
                 }
             });
 
-            const response = await server.fastify.inject({
-                method: "POST",
-                url: "/api/v1/evaluate",
-                payload: newAuthorRequest
-            });
+            const response = await injectCbor(server.fastify, "POST", "/api/v1/evaluate", newAuthorRequest);
 
             const body = response.json();
             // New author should have higher risk than established author
             expect(body.riskScore).toBeGreaterThan(establishedBody.riskScore);
         });
 
-        it("should return 400 for missing subplebbit author data", async () => {
+        it("should accept new author without subplebbit data", async () => {
+            // author.subplebbit is optional - new authors who haven't published
+            // in this subplebbit before won't have this field
             const payload = await createEvaluatePayload({
                 omitSubplebbitAuthor: true
             });
-            const response = await server.fastify.inject({
-                method: "POST",
-                url: "/api/v1/evaluate",
-                payload
-            });
+            const response = await injectCbor(server.fastify, "POST", "/api/v1/evaluate", payload);
 
-            expect(response.statusCode).toBe(400);
+            expect(response.statusCode).toBe(200);
+            const body = response.json();
+            expect(body.riskScore).toBeDefined();
+            expect(body.riskScore).toBeGreaterThanOrEqual(0);
+            expect(body.riskScore).toBeLessThanOrEqual(1);
+            expect(body.challengeId).toBeDefined();
         });
 
         it("should return 400 for invalid request body", async () => {
-            const response = await server.fastify.inject({
-                method: "POST",
-                url: "/api/v1/evaluate",
-                payload: { invalid: "data" }
-            });
+            const response = await injectCbor(server.fastify, "POST", "/api/v1/evaluate", { invalid: "data" });
 
             expect(response.statusCode).toBe(400);
         });
 
         it("should return 401 for invalid request signature", async () => {
             const payload = await createEvaluatePayload();
-            payload.signature.signature = "invalid-signature";
+            // Tamper with signature by creating a new invalid one
+            payload.signature.signature = new Uint8Array(64); // All zeros - invalid signature
 
-            const response = await server.fastify.inject({
-                method: "POST",
-                url: "/api/v1/evaluate",
-                payload
-            });
+            const response = await injectCbor(server.fastify, "POST", "/api/v1/evaluate", payload);
 
             expect(response.statusCode).toBe(401);
         });
@@ -321,11 +299,7 @@ describe("API Routes", () => {
             const payload = await createEvaluatePayload({
                 subplebbitOverrides: { lastCommentCid: "not-a-cid" }
             });
-            const response = await server.fastify.inject({
-                method: "POST",
-                url: "/api/v1/evaluate",
-                payload
-            });
+            const response = await injectCbor(server.fastify, "POST", "/api/v1/evaluate", payload);
 
             expect(response.statusCode).toBe(400);
         });
@@ -335,11 +309,7 @@ describe("API Routes", () => {
                 omitAuthorAddress: true
             });
 
-            const response = await server.fastify.inject({
-                method: "POST",
-                url: "/api/v1/evaluate",
-                payload
-            });
+            const response = await injectCbor(server.fastify, "POST", "/api/v1/evaluate", payload);
 
             expect(response.statusCode).toBe(400);
         });
@@ -349,11 +319,7 @@ describe("API Routes", () => {
                 omitSubplebbitAddress: true
             });
 
-            const response = await server.fastify.inject({
-                method: "POST",
-                url: "/api/v1/evaluate",
-                payload
-            });
+            const response = await injectCbor(server.fastify, "POST", "/api/v1/evaluate", payload);
 
             expect(response.statusCode).toBe(400);
         });
@@ -368,11 +334,7 @@ describe("API Routes", () => {
                 authorOverrides: { address: "12D3KooWVerifyTest" },
                 commentOverrides: { subplebbitAddress: "verify-sub.eth" }
             });
-            const evalResponse = await server.fastify.inject({
-                method: "POST",
-                url: "/api/v1/evaluate",
-                payload: evaluatePayload
-            });
+            const evalResponse = await injectCbor(server.fastify, "POST", "/api/v1/evaluate", evaluatePayload);
 
             const evalBody = evalResponse.json();
             challengeId = evalBody.challengeId;
@@ -388,11 +350,7 @@ describe("API Routes", () => {
                 challengeId,
                 token: validToken
             });
-            const response = await server.fastify.inject({
-                method: "POST",
-                url: "/api/v1/challenge/verify",
-                payload
-            });
+            const response = await injectCbor(server.fastify, "POST", "/api/v1/challenge/verify", payload);
 
             expect(response.statusCode).toBe(200);
             const body = response.json();
@@ -410,11 +368,7 @@ describe("API Routes", () => {
                 challengeId,
                 token: validToken
             });
-            await server.fastify.inject({
-                method: "POST",
-                url: "/api/v1/challenge/verify",
-                payload
-            });
+            await injectCbor(server.fastify, "POST", "/api/v1/challenge/verify", payload);
 
             const session = server.db.getChallengeSessionByChallengeId(challengeId);
             expect(session?.status).toBe("completed");
@@ -426,11 +380,7 @@ describe("API Routes", () => {
                 challengeId: "non-existent-challenge-id",
                 token: "some-token-12345"
             });
-            const response = await server.fastify.inject({
-                method: "POST",
-                url: "/api/v1/challenge/verify",
-                payload
-            });
+            const response = await injectCbor(server.fastify, "POST", "/api/v1/challenge/verify", payload);
 
             expect(response.statusCode).toBe(404);
             const body = response.json();
@@ -449,22 +399,14 @@ describe("API Routes", () => {
                 token: validToken
             });
             // Complete the challenge first
-            await server.fastify.inject({
-                method: "POST",
-                url: "/api/v1/challenge/verify",
-                payload: firstPayload
-            });
+            await injectCbor(server.fastify, "POST", "/api/v1/challenge/verify", firstPayload);
 
             // Try to verify again
             const secondPayload = await createVerifyPayload({
                 challengeId,
                 token: validToken
             });
-            const response = await server.fastify.inject({
-                method: "POST",
-                url: "/api/v1/challenge/verify",
-                payload: secondPayload
-            });
+            const response = await injectCbor(server.fastify, "POST", "/api/v1/challenge/verify", secondPayload);
 
             expect(response.statusCode).toBe(409);
             const body = response.json();
@@ -478,11 +420,7 @@ describe("API Routes", () => {
                 token: "valid-token-placeholder-12345",
                 signer: alternateSigner
             });
-            const response = await server.fastify.inject({
-                method: "POST",
-                url: "/api/v1/challenge/verify",
-                payload
-            });
+            const response = await injectCbor(server.fastify, "POST", "/api/v1/challenge/verify", payload);
 
             expect(response.statusCode).toBe(401);
             const body = response.json();
@@ -495,11 +433,7 @@ describe("API Routes", () => {
                 challengeId,
                 token: "not-a-valid-jwt-token" // Invalid JWT format
             });
-            const response = await server.fastify.inject({
-                method: "POST",
-                url: "/api/v1/challenge/verify",
-                payload
-            });
+            const response = await injectCbor(server.fastify, "POST", "/api/v1/challenge/verify", payload);
 
             expect(response.statusCode).toBe(401);
             const body = response.json();
@@ -509,13 +443,9 @@ describe("API Routes", () => {
         });
 
         it("should return 400 for missing fields", async () => {
-            const response = await server.fastify.inject({
-                method: "POST",
-                url: "/api/v1/challenge/verify",
-                payload: {
-                    challengeId
-                    // Missing token
-                }
+            const response = await injectCbor(server.fastify, "POST", "/api/v1/challenge/verify", {
+                challengeId
+                // Missing token
             });
 
             expect(response.statusCode).toBe(400);
@@ -531,11 +461,7 @@ describe("API Routes", () => {
                 authorOverrides: { address: "12D3KooWIframeTest" },
                 commentOverrides: { subplebbitAddress: "iframe-sub.eth" }
             });
-            const evalResponse = await server.fastify.inject({
-                method: "POST",
-                url: "/api/v1/evaluate",
-                payload: evaluatePayload
-            });
+            const evalResponse = await injectCbor(server.fastify, "POST", "/api/v1/evaluate", evaluatePayload);
 
             const evalBody = evalResponse.json();
             challengeId = evalBody.challengeId;
@@ -613,11 +539,7 @@ describe("Turnstile E2E Flow", () => {
         const evaluatePayload = await createEvaluatePayload({
             authorOverrides: { address: "12D3KooWTurnstileE2E" }
         });
-        const evalResponse = await server.fastify.inject({
-            method: "POST",
-            url: "/api/v1/evaluate",
-            payload: evaluatePayload
-        });
+        const evalResponse = await injectCbor(server.fastify, "POST", "/api/v1/evaluate", evaluatePayload);
 
         expect(evalResponse.statusCode).toBe(200);
         const evalBody = evalResponse.json();
@@ -656,11 +578,7 @@ describe("Turnstile E2E Flow", () => {
             challengeId,
             token: completeBody.token
         });
-        const verifyResponse = await server.fastify.inject({
-            method: "POST",
-            url: "/api/v1/challenge/verify",
-            payload: verifyPayload
-        });
+        const verifyResponse = await injectCbor(server.fastify, "POST", "/api/v1/challenge/verify", verifyPayload);
 
         expect(verifyResponse.statusCode).toBe(200);
         const verifyBody = verifyResponse.json();
@@ -676,11 +594,7 @@ describe("Turnstile E2E Flow", () => {
         const evaluatePayload = await createEvaluatePayload({
             authorOverrides: { address: "12D3KooWSiteKeyTest" }
         });
-        const evalResponse = await server.fastify.inject({
-            method: "POST",
-            url: "/api/v1/evaluate",
-            payload: evaluatePayload
-        });
+        const evalResponse = await injectCbor(server.fastify, "POST", "/api/v1/evaluate", evaluatePayload);
 
         const { challengeId } = evalResponse.json();
 
@@ -729,11 +643,7 @@ describe("Turnstile Failure Scenarios", () => {
         const evaluatePayload = await createEvaluatePayload({
             authorOverrides: { address: "12D3KooWFailTest" }
         });
-        const evalResponse = await server.fastify.inject({
-            method: "POST",
-            url: "/api/v1/evaluate",
-            payload: evaluatePayload
-        });
+        const evalResponse = await injectCbor(server.fastify, "POST", "/api/v1/evaluate", evaluatePayload);
 
         const { challengeId } = evalResponse.json();
 
