@@ -4,6 +4,7 @@ import { SpamDetectionDatabase, createDatabase } from "./db/index.js";
 import { registerRoutes } from "./routes/index.js";
 import { destroyPlebbitInstance, getPlebbitInstance, initPlebbitInstance, setPlebbitOptions } from "./subplebbit-resolver.js";
 import { Indexer, stopIndexer } from "./indexer/index.js";
+import { createOAuthProviders, type OAuthConfig } from "./oauth/providers.js";
 import type Plebbit from "@plebbit/plebbit-js";
 
 const DEFAULT_PLEBBIT_RPC_URL = "ws://localhost:9138/";
@@ -31,6 +32,8 @@ export interface ServerConfig {
     plebbitOptions?: Parameters<typeof Plebbit>[0];
     /** Plebbit RPC WebSocket URL. Default: "ws://localhost:9138/". Convenience option merged into plebbitOptions. */
     plebbitRpcUrl?: string;
+    /** OAuth provider configurations. Only configured providers will be available. */
+    oauth?: OAuthConfig;
 }
 
 export interface SpamDetectionServer {
@@ -56,7 +59,8 @@ export async function createServer(config: ServerConfig): Promise<SpamDetectionS
         logging = true,
         enableIndexer = true,
         plebbitOptions: userPlebbitOptions,
-        plebbitRpcUrl = DEFAULT_PLEBBIT_RPC_URL
+        plebbitRpcUrl = DEFAULT_PLEBBIT_RPC_URL,
+        oauth
     } = config;
 
     // Merge plebbitRpcUrl into plebbitOptions
@@ -112,6 +116,9 @@ export async function createServer(config: ServerConfig): Promise<SpamDetectionS
     // Set Plebbit options for the subplebbit resolver
     setPlebbitOptions(plebbitOptions);
 
+    // Initialize OAuth providers if configured
+    const oauthProviders = oauth ? createOAuthProviders(oauth, baseUrl) : {};
+
     // Initialize indexer if enabled (before routes so it can be passed to them)
     let indexer: Indexer | null = null;
     if (enableIndexer) {
@@ -125,7 +132,8 @@ export async function createServer(config: ServerConfig): Promise<SpamDetectionS
         turnstileSiteKey,
         turnstileSecretKey,
         ipInfoToken,
-        indexer
+        indexer,
+        oauthProviders
     });
 
     initPlebbitInstance();
@@ -175,12 +183,17 @@ export async function createServer(config: ServerConfig): Promise<SpamDetectionS
 
 // Export database utilities
 export { SpamDetectionDatabase, createDatabase } from "./db/index.js";
-export type { ChallengeSession, IpRecord, DatabaseConfig } from "./db/index.js";
+export type { ChallengeSession, IpRecord, DatabaseConfig, OAuthState, OAuthProviderName } from "./db/index.js";
 
 // Export route utilities
 export { registerRoutes } from "./routes/index.js";
 export type { RouteOptions } from "./routes/index.js";
 export * from "./routes/schemas.js";
+
+// Export OAuth utilities
+export { createOAuthProviders, getEnabledProviders } from "./oauth/providers.js";
+export type { OAuthConfig, OAuthProviders, OAuthUserIdentity } from "./oauth/providers.js";
+export type { OAuthProvider } from "./challenge-iframes/types.js";
 
 // Run server if executed directly
 const isMainModule =
@@ -192,6 +205,41 @@ if (isMainModule) {
     // Default to data directory in project root if DATABASE_PATH not provided
     const databasePath = process.env.DATABASE_PATH ?? new URL("../../../data/spam_detection.db", import.meta.url).pathname;
 
+    // Build OAuth config from environment variables
+    const oauth: OAuthConfig = {};
+    if (process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET) {
+        oauth.github = {
+            clientId: process.env.GITHUB_CLIENT_ID,
+            clientSecret: process.env.GITHUB_CLIENT_SECRET
+        };
+    }
+    if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+        oauth.google = {
+            clientId: process.env.GOOGLE_CLIENT_ID,
+            clientSecret: process.env.GOOGLE_CLIENT_SECRET
+        };
+    }
+    if (process.env.FACEBOOK_CLIENT_ID && process.env.FACEBOOK_CLIENT_SECRET) {
+        oauth.facebook = {
+            clientId: process.env.FACEBOOK_CLIENT_ID,
+            clientSecret: process.env.FACEBOOK_CLIENT_SECRET
+        };
+    }
+    if (process.env.APPLE_CLIENT_ID && process.env.APPLE_TEAM_ID && process.env.APPLE_KEY_ID && process.env.APPLE_PRIVATE_KEY) {
+        oauth.apple = {
+            clientId: process.env.APPLE_CLIENT_ID,
+            teamId: process.env.APPLE_TEAM_ID,
+            keyId: process.env.APPLE_KEY_ID,
+            privateKey: process.env.APPLE_PRIVATE_KEY
+        };
+    }
+    if (process.env.TWITTER_CLIENT_ID && process.env.TWITTER_CLIENT_SECRET) {
+        oauth.twitter = {
+            clientId: process.env.TWITTER_CLIENT_ID,
+            clientSecret: process.env.TWITTER_CLIENT_SECRET
+        };
+    }
+
     createServer({
         port: parseInt(process.env.PORT ?? "3000", 10),
         host: process.env.HOST ?? "0.0.0.0",
@@ -201,7 +249,8 @@ if (isMainModule) {
         turnstileSecretKey: process.env.TURNSTILE_SECRET_KEY,
         ipInfoToken: process.env.IPINFO_TOKEN,
         logging: process.env.LOG_LEVEL !== "silent",
-        plebbitRpcUrl: process.env.PLEBBIT_RPC_URL
+        plebbitRpcUrl: process.env.PLEBBIT_RPC_URL,
+        oauth: Object.keys(oauth).length > 0 ? oauth : undefined
     })
         .then((server) => {
             // Graceful shutdown

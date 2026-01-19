@@ -13,6 +13,8 @@ export interface ChallengeSession {
     receivedChallengeRequestAt: number;
     /** When the author accessed the iframe */
     authorAccessedIframeAt: number | null;
+    /** OAuth identity in format "provider:userId" (e.g., "github:12345678") */
+    oauthIdentity: string | null;
 }
 
 export interface IpRecord {
@@ -25,6 +27,18 @@ export interface IpRecord {
     countryCode: string | null;
     /** When we queried the IP provider */
     timestamp: number;
+}
+
+export type OAuthProviderName = "github" | "google" | "facebook" | "apple" | "twitter";
+
+export interface OAuthState {
+    state: string;
+    sessionId: string;
+    provider: OAuthProviderName;
+    /** PKCE code verifier (required for google, twitter) */
+    codeVerifier: string | null;
+    createdAt: number;
+    expiresAt: number;
 }
 
 export interface DatabaseConfig {
@@ -156,21 +170,53 @@ export class SpamDetectionDatabase {
 
     /**
      * Update the status of a challenge session.
+     * @param oauthIdentity - Optional OAuth identity in format "provider:userId" (e.g., "github:12345678")
      */
-    updateChallengeSessionStatus(sessionId: string, status: "pending" | "completed" | "failed", completedAt?: number): boolean {
+    updateChallengeSessionStatus(
+        sessionId: string,
+        status: "pending" | "completed" | "failed",
+        completedAt?: number,
+        oauthIdentity?: string
+    ): boolean {
         const stmt = this.db.prepare(`
       UPDATE challengeSessions
-      SET status = @status, completedAt = @completedAt
+      SET status = @status, completedAt = @completedAt, oauthIdentity = COALESCE(@oauthIdentity, oauthIdentity)
       WHERE sessionId = @sessionId
     `);
 
         const result = stmt.run({
             sessionId,
             status,
-            completedAt: completedAt ?? null
+            completedAt: completedAt ?? null,
+            oauthIdentity: oauthIdentity ?? null
         });
 
         return result.changes > 0;
+    }
+
+    /**
+     * Count how many times a specific OAuth identity has completed challenges.
+     * Useful for detecting accounts that verify multiple times.
+     *
+     * @param oauthIdentity - OAuth identity in format "provider:userId"
+     * @param sinceTimestamp - Only count completions after this timestamp (optional)
+     */
+    countOAuthIdentityCompletions(oauthIdentity: string, sinceTimestamp?: number): number {
+        if (sinceTimestamp !== undefined) {
+            const stmt = this.db.prepare(`
+                SELECT COUNT(*) as count FROM challengeSessions
+                WHERE oauthIdentity = ? AND status = 'completed' AND completedAt >= ?
+            `);
+            const result = stmt.get(oauthIdentity, sinceTimestamp) as { count: number };
+            return result.count;
+        } else {
+            const stmt = this.db.prepare(`
+                SELECT COUNT(*) as count FROM challengeSessions
+                WHERE oauthIdentity = ?
+            `);
+            const result = stmt.get(oauthIdentity) as { count: number };
+            return result.count;
+        }
     }
 
     /**
@@ -1172,6 +1218,71 @@ export class SpamDetectionDatabase {
 
         return result;
     }
+
+    // ============================================
+    // OAuth State Methods
+    // ============================================
+
+    /**
+     * Insert a new OAuth state for CSRF protection.
+     */
+    insertOAuthState(params: {
+        state: string;
+        sessionId: string;
+        provider: OAuthProviderName;
+        codeVerifier?: string;
+        createdAt: number;
+        expiresAt: number;
+    }): OAuthState {
+        const stmt = this.db.prepare(`
+            INSERT INTO oauthStates (state, sessionId, provider, codeVerifier, createdAt, expiresAt)
+            VALUES (@state, @sessionId, @provider, @codeVerifier, @createdAt, @expiresAt)
+        `);
+
+        stmt.run({
+            ...params,
+            codeVerifier: params.codeVerifier ?? null
+        });
+
+        return { ...params, codeVerifier: params.codeVerifier ?? null } as OAuthState;
+    }
+
+    /**
+     * Get an OAuth state by its state parameter.
+     */
+    getOAuthState(state: string): OAuthState | undefined {
+        const stmt = this.db.prepare(`
+            SELECT * FROM oauthStates WHERE state = ?
+        `);
+        return stmt.get(state) as OAuthState | undefined;
+    }
+
+    /**
+     * Delete an OAuth state (after successful use or expiry).
+     */
+    deleteOAuthState(state: string): boolean {
+        const stmt = this.db.prepare(`
+            DELETE FROM oauthStates WHERE state = ?
+        `);
+        const result = stmt.run(state);
+        return result.changes > 0;
+    }
+
+    /**
+     * Clean up expired OAuth states.
+     */
+    cleanupExpiredOAuthStates(): number {
+        const now = Math.floor(Date.now() / 1000);
+        const stmt = this.db.prepare(`
+            DELETE FROM oauthStates WHERE expiresAt < ?
+        `);
+        const result = stmt.run(now);
+        return result.changes;
+    }
+
+    // ============================================
+    // Link/URL Query Methods (by public key)
+    // ============================================
 
     /**
      * Count how many links to a specific domain have been posted by a given author.

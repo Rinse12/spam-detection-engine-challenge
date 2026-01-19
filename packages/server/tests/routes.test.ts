@@ -5,6 +5,9 @@ import { fromString as uint8ArrayFromString } from "uint8arrays/from-string";
 import { signBufferEd25519, getPublicKeyFromPrivateKey } from "../src/plebbit-js-signer.js";
 import { resetPlebbitLoaderForTest, setPlebbitLoaderForTest } from "../src/subplebbit-resolver.js";
 
+// Cloudflare Turnstile test keys - work on any domain including localhost
+const TURNSTILE_TEST_SITE_KEY = "1x00000000000000000000AA"; // Always passes
+
 const baseTimestamp = Math.floor(Date.now() / 1000);
 const baseSignature = {
     type: "ed25519",
@@ -155,7 +158,8 @@ describe("API Routes", () => {
             port: 0, // Random available port
             logging: false,
             databasePath: ":memory:",
-            baseUrl: "http://localhost:3000"
+            baseUrl: "http://localhost:3000",
+            turnstileSiteKey: TURNSTILE_TEST_SITE_KEY
         });
         await server.fastify.ready();
     });
@@ -523,8 +527,7 @@ describe("API Routes", () => {
     });
 });
 
-// Cloudflare Turnstile test keys - work on any domain including localhost
-const TURNSTILE_TEST_SITE_KEY = "1x00000000000000000000AA"; // Always passes
+// Cloudflare Turnstile additional test keys
 const TURNSTILE_TEST_SECRET_KEY = "1x0000000000000000000000000000000AA"; // Always passes validation
 const TURNSTILE_FAIL_SECRET_KEY = "2x0000000000000000000000000000000AA"; // Always fails validation
 

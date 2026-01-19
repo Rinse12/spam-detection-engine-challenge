@@ -1,20 +1,34 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import type { SpamDetectionDatabase } from "../db/index.js";
+import type { OAuthProviders } from "../oauth/providers.js";
+import { getEnabledProviders } from "../oauth/providers.js";
 import { IframeParamsSchema, type IframeParams } from "./schemas.js";
 import { refreshIpIntelIfNeeded } from "../ip-intel/index.js";
-import { generateChallengeIframe } from "../challenge-iframes/index.js";
+import { generateChallengeIframe, type ChallengeType } from "../challenge-iframes/index.js";
 
 export interface IframeRouteOptions {
     db: SpamDetectionDatabase;
     turnstileSiteKey?: string;
     ipInfoToken?: string;
+    /** OAuth providers (if configured) */
+    oauthProviders?: OAuthProviders;
+    /** Base URL for OAuth callbacks */
+    baseUrl?: string;
 }
 
 /**
  * Register the /api/v1/iframe/:sessionId route.
  */
 export function registerIframeRoute(fastify: FastifyInstance, options: IframeRouteOptions): void {
-    const { db, turnstileSiteKey, ipInfoToken } = options;
+    const { db, turnstileSiteKey, ipInfoToken, oauthProviders, baseUrl } = options;
+
+    // Determine which challenge type to use based on configuration
+    const enabledOAuthProviders = oauthProviders ? getEnabledProviders(oauthProviders) : [];
+    const hasOAuth = enabledOAuthProviders.length > 0;
+    const hasTurnstile = !!turnstileSiteKey;
+
+    // Determine default challenge type (prefer OAuth if configured, fallback to Turnstile)
+    const challengeType: ChallengeType = hasOAuth ? "oauth" : "turnstile";
 
     fastify.get(
         "/api/v1/iframe/:sessionId",
@@ -78,12 +92,25 @@ export function registerIframeRoute(fastify: FastifyInstance, options: IframeRou
                 }
             }
 
-            // Serve the iframe HTML
-            // TODO: In future, store challenge type in session and use it here
-            const html = generateChallengeIframe("turnstile", {
-                sessionId,
-                siteKey: turnstileSiteKey
-            });
+            // Serve the iframe HTML based on challenge type
+            let html: string;
+
+            if (challengeType === "oauth" && hasOAuth && baseUrl) {
+                html = generateChallengeIframe("oauth", {
+                    sessionId,
+                    enabledProviders: enabledOAuthProviders,
+                    baseUrl
+                });
+            } else if (hasTurnstile) {
+                html = generateChallengeIframe("turnstile", {
+                    sessionId,
+                    siteKey: turnstileSiteKey
+                });
+            } else {
+                reply.status(500);
+                reply.send("No challenge provider configured");
+                return;
+            }
 
             reply.type("text/html");
             reply.send(html);

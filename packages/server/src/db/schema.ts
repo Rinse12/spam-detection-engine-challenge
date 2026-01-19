@@ -12,7 +12,8 @@ CREATE TABLE IF NOT EXISTS challengeSessions (
   completedAt INTEGER,
   expiresAt INTEGER NOT NULL,
   receivedChallengeRequestAt INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
-  authorAccessedIframeAt INTEGER
+  authorAccessedIframeAt INTEGER,
+  oauthIdentity TEXT  -- format: "provider:userId" (e.g., "github:12345678")
 );
 
 CREATE INDEX IF NOT EXISTS idx_challengeSessions_expiresAt ON challengeSessions(expiresAt);
@@ -219,4 +220,22 @@ CREATE TABLE IF NOT EXISTS modqueue_comments_update (
 );
 
 CREATE INDEX IF NOT EXISTS idx_modqueue_update_pending ON modqueue_comments_update(resolved) WHERE resolved = 0;
+
+-- ============================================================================
+-- OAUTH TABLES
+-- ============================================================================
+
+-- OAuth state table (ephemeral, for CSRF protection during OAuth flow)
+CREATE TABLE IF NOT EXISTS oauthStates (
+  state TEXT PRIMARY KEY,
+  sessionId TEXT NOT NULL,
+  provider TEXT NOT NULL,  -- 'github', 'google', 'facebook', 'apple', 'twitter'
+  codeVerifier TEXT,       -- PKCE code verifier (required for google, twitter)
+  createdAt INTEGER NOT NULL,
+  expiresAt INTEGER NOT NULL,
+  FOREIGN KEY (sessionId) REFERENCES challengeSessions(sessionId)
+);
+
+CREATE INDEX IF NOT EXISTS idx_oauthStates_sessionId ON oauthStates(sessionId);
+CREATE INDEX IF NOT EXISTS idx_oauthStates_expiresAt ON oauthStates(expiresAt);
 `;
