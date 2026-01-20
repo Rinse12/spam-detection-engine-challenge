@@ -144,12 +144,7 @@ function generateErrorPage(error: string): string {
  * Escape HTML to prevent XSS.
  */
 function escapeHtml(text: string): string {
-    return text
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
+    return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 }
 
 /**
@@ -263,12 +258,7 @@ export function registerOAuthRoutes(fastify: FastifyInstance, options: OAuthRout
         const providerInstance = providers[provider]!;
         let userIdentity: { provider: string; userId: string };
         try {
-            userIdentity = await validateAuthorizationCode(
-                providerInstance,
-                provider,
-                code,
-                oauthState.codeVerifier ?? undefined
-            );
+            userIdentity = await validateAuthorizationCode(providerInstance, provider, code, oauthState.codeVerifier ?? undefined);
         } catch (e) {
             db.deleteOAuthState(state);
             const errorMessage = e instanceof Error ? e.message : "Authentication failed";

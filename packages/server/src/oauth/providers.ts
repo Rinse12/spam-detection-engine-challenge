@@ -57,19 +57,11 @@ export function createOAuthProviders(config: OAuthConfig, baseUrl: string): OAut
     const providers: OAuthProviders = {};
 
     if (config.github) {
-        providers.github = new arctic.GitHub(
-            config.github.clientId,
-            config.github.clientSecret,
-            `${baseUrl}/api/v1/oauth/github/callback`
-        );
+        providers.github = new arctic.GitHub(config.github.clientId, config.github.clientSecret, `${baseUrl}/api/v1/oauth/github/callback`);
     }
 
     if (config.google) {
-        providers.google = new arctic.Google(
-            config.google.clientId,
-            config.google.clientSecret,
-            `${baseUrl}/api/v1/oauth/google/callback`
-        );
+        providers.google = new arctic.Google(config.google.clientId, config.google.clientSecret, `${baseUrl}/api/v1/oauth/google/callback`);
     }
 
     if (config.facebook) {
@@ -133,12 +125,7 @@ export function providerUsesPkce(provider: OAuthProvider): boolean {
  * @param codeVerifier - Optional code verifier for PKCE providers
  * @returns Authorization URL
  */
-export function createAuthorizationUrl(
-    provider: ArcticProvider,
-    providerName: OAuthProvider,
-    state: string,
-    codeVerifier?: string
-): URL {
+export function createAuthorizationUrl(provider: ArcticProvider, providerName: OAuthProvider, state: string, codeVerifier?: string): URL {
     // No scopes needed - we only verify authentication, not access user data
     const scopes: string[] = [];
 
