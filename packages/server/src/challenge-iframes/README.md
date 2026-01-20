@@ -4,14 +4,17 @@ This document details the setup requirements for each OAuth provider supported b
 
 ## Provider Comparison
 
-| Provider      | Cost | Approval Time | Localhost          | HTTPS Required | Notes                                                             |
-| ------------- | ---- | ------------- | ------------------ | -------------- | ----------------------------------------------------------------- |
-| **GitHub**    | Free | Instant       | ✅ Works           | No             | Easiest to set up                                                 |
-| **Google**    | Free | Instant       | ✅ Works (warning) | No             | Shows "unverified app" warning; needs verification for 100+ users |
-| **Twitter/X** | Free | 24-48h        | ✅ After approval  | No             | Developer account approval required                               |
-| **Yandex**    | Free | Instant       | ✅ Works           | No             | Popular in Russia/CIS                                             |
-| **TikTok**    | Free | Days/weeks    | ⚠️ May need tunnel | Preferred      | Developer account approval can be slow                            |
-| **Discord**   | Free | Instant       | ✅ Works           | No             | Very popular among gaming communities                             |
+| Provider      | Cost   | Approval Time             | Localhost          | HTTPS Required | Notes                                                             |
+| ------------- | ------ | ------------------------- | ------------------ | -------------- | ----------------------------------------------------------------- |
+| **GitHub**    | Free   | Instant                   | ✅ Works           | No             | Easiest to set up                                                 |
+| **Google**    | Free   | Instant                   | ✅ Works (warning) | No             | Shows "unverified app" warning; needs verification for 100+ users |
+| **Twitter/X** | Free   | 24-48h                    | ✅ After approval  | No             | Developer account approval required                               |
+| **Yandex**    | Free   | Instant                   | ✅ Works           | No             | Popular in Russia/CIS                                             |
+| **TikTok**    | Free   | Days/weeks                | ⚠️ May need tunnel | Preferred      | Developer account approval can be slow                            |
+| **Discord**   | Free   | Instant                   | ✅ Works           | No             | Very popular among gaming communities                             |
+| **Apple**     | $99/yr | Instant (with enrollment) | ❌ Needs domain    | Yes            | Requires Apple Developer Program membership                       |
+| **Reddit**    | Free   | Instant                   | ✅ Works           | No             | Easy setup, popular platform                                      |
+| **Facebook**  | Free   | Instant                   | ✅ Works           | No             | May need app review for production                                |
 
 ## Provider Setup Instructions
 
@@ -201,6 +204,128 @@ DISCORD_CLIENT_SECRET=your_client_secret
 
 ---
 
+### Apple
+
+**Requirements:** Apple Developer Program membership ($99/year)
+
+**Setup:**
+
+1. Enroll in the Apple Developer Program at https://developer.apple.com/programs/
+2. Go to https://developer.apple.com/account/resources/identifiers/list/serviceId
+3. Click **"+"** to register a new Services ID
+4. Select **"Services IDs"** and continue
+5. Fill in:
+    - **Description:** Any name (e.g., "Spam Detection OAuth")
+    - **Identifier:** Reverse-domain format (e.g., "com.yoursite.spamdetection")
+6. Click **"Continue"** and then **"Register"**
+7. Click on the newly created Services ID
+8. Enable **"Sign In with Apple"** and click **"Configure"**
+9. Set:
+    - **Primary App ID:** Select your app or create one
+    - **Domains:** Your domain (e.g., `yourdomain.com`)
+    - **Return URLs:** `https://yourdomain.com/api/v1/oauth/apple/callback`
+10. Save and continue
+11. Create a private key:
+    - Go to https://developer.apple.com/account/resources/authkeys/list
+    - Click **"+"** to create a new key
+    - Enable **"Sign in with Apple"**
+    - Download the `.p8` key file (only downloadable once!)
+    - Note the **Key ID**
+12. Find your **Team ID** in the top-right of the developer portal or in Membership details
+
+**Environment Variables:**
+
+```env
+APPLE_CLIENT_ID=com.yoursite.spamdetection
+APPLE_TEAM_ID=XXXXXXXXXX
+APPLE_KEY_ID=XXXXXXXXXX
+APPLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nYOUR_KEY_CONTENT_HERE\n-----END PRIVATE KEY-----"
+```
+
+**Notes:**
+
+- **HTTPS is mandatory** - Apple does not allow HTTP callbacks, even for testing
+- Localhost does not work directly; you must use a real domain or a tunnel with a custom domain
+- The private key can be provided as a file path or as the key content directly
+- Uses PKCE and JWT for authentication
+- Apple may hide the user's email (users can choose to share a relay address)
+
+---
+
+### Reddit
+
+**Requirements:** Free, instant approval
+
+**Setup:**
+
+1. Go to https://www.reddit.com/prefs/apps
+2. Scroll down and click **"create another app..."** (or "are you a developer? create an app...")
+3. Fill in:
+    - **name:** Any name (e.g., "Spam Detection")
+    - **App type:** Select **"web app"**
+    - **description:** Optional
+    - **about url:** Optional
+    - **redirect uri:** `http://localhost:3000/api/v1/oauth/reddit/callback`
+4. Click **"create app"**
+5. Copy the **Client ID** (shown under the app name, a short string)
+6. Copy the **secret** (labeled "secret")
+
+**Environment Variables:**
+
+```env
+REDDIT_CLIENT_ID=your_client_id
+REDDIT_CLIENT_SECRET=your_client_secret
+```
+
+**Notes:**
+
+- Works on localhost without any special configuration
+- Rate limits apply; be mindful of API usage
+- Scopes needed: `identity` (for user ID)
+- Reddit requires a User-Agent header for API requests
+
+---
+
+### Facebook
+
+**Requirements:** Free, Meta developer account required
+
+**Setup:**
+
+1. Go to https://developers.facebook.com/ and log in with your Facebook account
+2. Click **"My Apps"** → **"Create App"**
+3. Select **"Consumer"** or **"None"** as the app type
+4. Fill in:
+    - **App name:** Any name (e.g., "Spam Detection")
+    - **App contact email:** Your email
+5. Click **"Create App"**
+6. In the app dashboard, find **"Facebook Login"** and click **"Set Up"**
+7. Select **"Web"** as the platform
+8. Enter your site URL (can be `http://localhost:3000` for testing)
+9. Go to **Facebook Login** → **Settings** in the sidebar
+10. Add to **Valid OAuth Redirect URIs:** `http://localhost:3000/api/v1/oauth/facebook/callback`
+11. Save changes
+12. Go to **Settings** → **Basic** to find:
+    - **App ID** (= Client ID)
+    - **App Secret** (click "Show" to reveal)
+
+**Environment Variables:**
+
+```env
+FACEBOOK_CLIENT_ID=your_app_id
+FACEBOOK_CLIENT_SECRET=your_app_secret
+```
+
+**Notes:**
+
+- Works on localhost for development
+- For production with more than ~200 users, you need to complete **App Review**
+- App Review requires a privacy policy URL and may take several days
+- Scopes needed: `public_profile` (provides user ID)
+- Facebook Login must be in "Live" mode for non-developers to use it
+
+---
+
 ## Testing on Localhost
 
 Most providers work on localhost (`http://localhost:3000`), but some have restrictions:
@@ -212,10 +337,13 @@ Most providers work on localhost (`http://localhost:3000`), but some have restri
 - Twitter ✅
 - Yandex ✅
 - Discord ✅
+- Reddit ✅
+- Facebook ✅
 
-### Providers that may require HTTPS:
+### Providers that require HTTPS or a domain:
 
 - **TikTok** - Prefers HTTPS
+- **Apple** - Requires HTTPS and a real domain (localhost not supported)
 
 ### Using ngrok for HTTPS testing:
 
