@@ -16,8 +16,8 @@ export interface OAuthRouteOptions {
     providers: OAuthProviders;
 }
 
-// OAuth state expires after 10 minutes
-const OAUTH_STATE_TTL_SECONDS = 600;
+// OAuth state expires after 10 minutes (in milliseconds for internal storage)
+const OAUTH_STATE_TTL_MS = 600 * 1000;
 
 /**
  * Generate success page HTML shown after OAuth callback.
@@ -174,7 +174,7 @@ export function registerOAuthRoutes(fastify: FastifyInstance, options: OAuthRout
         if (session.status !== "pending") {
             return reply.status(400).send({ error: "Session already completed or failed" });
         }
-        if (session.expiresAt < Math.floor(Date.now() / 1000)) {
+        if (session.expiresAt < Date.now()) {
             return reply.status(410).send({ error: "Session expired" });
         }
 
@@ -182,15 +182,15 @@ export function registerOAuthRoutes(fastify: FastifyInstance, options: OAuthRout
         const state = arctic.generateState();
         const codeVerifier = providerUsesPkce(provider) ? arctic.generateCodeVerifier() : undefined;
 
-        // Store state in database
-        const now = Math.floor(Date.now() / 1000);
+        // Store state in database (internal timestamps are in milliseconds)
+        const nowMs = Date.now();
         db.insertOAuthState({
             state,
             sessionId,
             provider,
             codeVerifier,
-            createdAt: now,
-            expiresAt: now + OAUTH_STATE_TTL_SECONDS
+            createdAt: nowMs,
+            expiresAt: nowMs + OAUTH_STATE_TTL_MS
         });
 
         // Create authorization URL
@@ -237,8 +237,8 @@ export function registerOAuthRoutes(fastify: FastifyInstance, options: OAuthRout
             return reply.type("text/html").send(generateErrorPage("Provider mismatch"));
         }
 
-        // Check expiry
-        if (oauthState.expiresAt < Math.floor(Date.now() / 1000)) {
+        // Check expiry (internal timestamps are in milliseconds)
+        if (oauthState.expiresAt < Date.now()) {
             db.deleteOAuthState(state);
             return reply.type("text/html").send(generateErrorPage("State expired"));
         }
@@ -267,7 +267,7 @@ export function registerOAuthRoutes(fastify: FastifyInstance, options: OAuthRout
 
         // Mark session as completed with OAuth identity (format: "provider:userId")
         const oauthIdentity = `${userIdentity.provider}:${userIdentity.userId}`;
-        db.updateChallengeSessionStatus(oauthState.sessionId, "completed", Math.floor(Date.now() / 1000), oauthIdentity);
+        db.updateChallengeSessionStatus(oauthState.sessionId, "completed", Date.now(), oauthIdentity);
 
         // Clean up state
         db.deleteOAuthState(state);
@@ -298,5 +298,5 @@ export function registerOAuthRoutes(fastify: FastifyInstance, options: OAuthRout
  * Type guard for valid OAuth providers.
  */
 function isValidProvider(provider: string): provider is OAuthProvider {
-    return ["github", "google", "facebook", "apple", "twitter"].includes(provider);
+    return ["github", "google", "facebook", "apple", "twitter", "yandex", "tiktok"].includes(provider);
 }

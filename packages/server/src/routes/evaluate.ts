@@ -14,7 +14,7 @@ import { getAuthorFromChallengeRequest } from "../risk-score/utils.js";
 import { IndexerQueries } from "../indexer/db/queries.js";
 import type { Indexer } from "../indexer/index.js";
 
-const CHALLENGE_EXPIRY_SECONDS = 3600; // 1 hour
+const CHALLENGE_EXPIRY_MS = 3600 * 1000; // 1 hour in milliseconds
 const MAX_REQUEST_SKEW_SECONDS = 5 * 60;
 
 export interface EvaluateRouteOptions {
@@ -47,8 +47,9 @@ export function registerEvaluateRoute(fastify: FastifyInstance, options: Evaluat
             const rawBody = request.body as { challengeRequest: unknown; timestamp: number };
             const rawChallengeRequest = rawBody.challengeRequest;
 
-            const now = Math.floor(Date.now() / 1000);
-            if (timestamp < now - MAX_REQUEST_SKEW_SECONDS || timestamp > now + MAX_REQUEST_SKEW_SECONDS) {
+            // Validate request timestamp (protocol uses seconds)
+            const nowSeconds = Math.floor(Date.now() / 1000);
+            if (timestamp < nowSeconds - MAX_REQUEST_SKEW_SECONDS || timestamp > nowSeconds + MAX_REQUEST_SKEW_SECONDS) {
                 const error = new Error("Request timestamp is out of range");
                 (error as { statusCode?: number }).statusCode = 401;
                 throw error;
@@ -100,8 +101,9 @@ export function registerEvaluateRoute(fastify: FastifyInstance, options: Evaluat
             // Generate challenge ID
             const sessionId = randomUUID();
 
-            // Calculate expiry time
-            const expiresAt = now + CHALLENGE_EXPIRY_SECONDS;
+            // Calculate expiry time (internal timestamps use milliseconds)
+            const nowMs = Date.now();
+            const expiresAt = nowMs + CHALLENGE_EXPIRY_MS;
 
             // Create challenge session in database
             db.insertChallengeSession({
@@ -158,12 +160,12 @@ export function registerEvaluateRoute(fastify: FastifyInstance, options: Evaluat
                 indexer.queuePreviousCidCrawl(author.previousCommentCid);
             }
 
-            // Build response
+            // Build response (convert internal milliseconds to seconds for API)
             const response: EvaluateResponse = {
                 riskScore: riskScoreResult.score,
                 sessionId,
                 challengeUrl: `${baseUrl}/api/v1/iframe/${sessionId}`,
-                challengeExpiresAt: expiresAt,
+                challengeExpiresAt: Math.floor(expiresAt / 1000),
                 explanation: riskScoreResult.explanation
             };
 

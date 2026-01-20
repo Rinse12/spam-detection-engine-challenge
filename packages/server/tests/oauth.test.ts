@@ -33,12 +33,12 @@ describe("OAuth Challenge Flow", () => {
         });
         await server.fastify.ready();
 
-        // Create a test challenge session
+        // Create a test challenge session (internal timestamps are in milliseconds)
         sessionId = "test-oauth-session-" + Date.now();
         server.db.insertChallengeSession({
             sessionId,
             subplebbitPublicKey: "test-pk",
-            expiresAt: Math.floor(Date.now() / 1000) + 3600
+            expiresAt: Date.now() + 3600 * 1000
         });
     });
 
@@ -141,7 +141,7 @@ describe("OAuth Challenge Flow", () => {
             server.db.insertChallengeSession({
                 sessionId: expiredSessionId,
                 subplebbitPublicKey: "test-pk",
-                expiresAt: Math.floor(Date.now() / 1000) - 100 // Already expired
+                expiresAt: Date.now() - 100 * 1000 // Already expired (milliseconds)
             });
 
             const response = await server.fastify.inject({
@@ -168,7 +168,7 @@ describe("OAuth Challenge Flow", () => {
 
         it("should return completed: true after session is completed", async () => {
             // Mark session as completed
-            server.db.updateChallengeSessionStatus(sessionId, "completed", Math.floor(Date.now() / 1000));
+            server.db.updateChallengeSessionStatus(sessionId, "completed", Date.now());
 
             const response = await server.fastify.inject({
                 method: "GET",
@@ -254,21 +254,21 @@ describe("OAuth Database Methods", () => {
     });
 
     it("should insert and retrieve OAuth state", () => {
-        const now = Math.floor(Date.now() / 1000);
+        const nowMs = Date.now();
 
-        // Create challenge session first (required by foreign key)
+        // Create challenge session first (required by foreign key, timestamps in ms)
         server.db.insertChallengeSession({
             sessionId: "test-session",
             subplebbitPublicKey: "test-pk",
-            expiresAt: now + 3600
+            expiresAt: nowMs + 3600 * 1000
         });
 
         const state = server.db.insertOAuthState({
             state: "test-state-123",
             sessionId: "test-session",
             provider: "github",
-            createdAt: now,
-            expiresAt: now + 600
+            createdAt: nowMs,
+            expiresAt: nowMs + 600 * 1000
         });
 
         expect(state.state).toBe("test-state-123");
@@ -281,21 +281,21 @@ describe("OAuth Database Methods", () => {
     });
 
     it("should delete OAuth state", () => {
-        const now = Math.floor(Date.now() / 1000);
+        const nowMs = Date.now();
 
-        // Create challenge session first
+        // Create challenge session first (timestamps in ms)
         server.db.insertChallengeSession({
             sessionId: "test-session",
             subplebbitPublicKey: "test-pk",
-            expiresAt: now + 3600
+            expiresAt: nowMs + 3600 * 1000
         });
 
         server.db.insertOAuthState({
             state: "state-to-delete",
             sessionId: "test-session",
             provider: "google",
-            createdAt: now,
-            expiresAt: now + 600
+            createdAt: nowMs,
+            expiresAt: nowMs + 600 * 1000
         });
 
         const deleted = server.db.deleteOAuthState("state-to-delete");
@@ -306,13 +306,13 @@ describe("OAuth Database Methods", () => {
     });
 
     it("should store code verifier for PKCE providers", () => {
-        const now = Math.floor(Date.now() / 1000);
+        const nowMs = Date.now();
 
-        // Create challenge session first
+        // Create challenge session first (timestamps in ms)
         server.db.insertChallengeSession({
             sessionId: "test-session",
             subplebbitPublicKey: "test-pk",
-            expiresAt: now + 3600
+            expiresAt: nowMs + 3600 * 1000
         });
 
         server.db.insertOAuthState({
@@ -320,8 +320,8 @@ describe("OAuth Database Methods", () => {
             sessionId: "test-session",
             provider: "google",
             codeVerifier: "test-code-verifier-abc123",
-            createdAt: now,
-            expiresAt: now + 600
+            createdAt: nowMs,
+            expiresAt: nowMs + 600 * 1000
         });
 
         const retrieved = server.db.getOAuthState("pkce-state");
@@ -330,18 +330,18 @@ describe("OAuth Database Methods", () => {
     });
 
     it("should cleanup expired OAuth states", () => {
-        const now = Math.floor(Date.now() / 1000);
+        const nowMs = Date.now();
 
-        // Create challenge sessions first
+        // Create challenge sessions first (timestamps in ms)
         server.db.insertChallengeSession({
             sessionId: "test-session",
             subplebbitPublicKey: "test-pk",
-            expiresAt: now + 3600
+            expiresAt: nowMs + 3600 * 1000
         });
         server.db.insertChallengeSession({
             sessionId: "test-session-2",
             subplebbitPublicKey: "test-pk",
-            expiresAt: now + 3600
+            expiresAt: nowMs + 3600 * 1000
         });
 
         // Insert expired state
@@ -349,8 +349,8 @@ describe("OAuth Database Methods", () => {
             state: "expired-state",
             sessionId: "test-session",
             provider: "github",
-            createdAt: now - 1200,
-            expiresAt: now - 600 // Already expired
+            createdAt: nowMs - 1200 * 1000,
+            expiresAt: nowMs - 600 * 1000 // Already expired
         });
 
         // Insert valid state
@@ -358,8 +358,8 @@ describe("OAuth Database Methods", () => {
             state: "valid-state",
             sessionId: "test-session-2",
             provider: "github",
-            createdAt: now,
-            expiresAt: now + 600 // Not expired
+            createdAt: nowMs,
+            expiresAt: nowMs + 600 * 1000 // Not expired
         });
 
         const cleaned = server.db.cleanupExpiredOAuthStates();
@@ -394,17 +394,17 @@ describe("OAuth Identity Storage", () => {
     });
 
     it("should store OAuth identity when completing session", () => {
-        const now = Math.floor(Date.now() / 1000);
+        const nowMs = Date.now();
         const sessionId = "oauth-identity-test-" + Date.now();
 
         server.db.insertChallengeSession({
             sessionId,
             subplebbitPublicKey: "test-pk",
-            expiresAt: now + 3600
+            expiresAt: nowMs + 3600 * 1000
         });
 
-        // Complete session with OAuth identity
-        server.db.updateChallengeSessionStatus(sessionId, "completed", now, "github:12345678");
+        // Complete session with OAuth identity (timestamps in ms)
+        server.db.updateChallengeSessionStatus(sessionId, "completed", nowMs, "github:12345678");
 
         const session = server.db.getChallengeSessionBySessionId(sessionId);
         expect(session).toBeDefined();
@@ -413,17 +413,17 @@ describe("OAuth Identity Storage", () => {
     });
 
     it("should count OAuth identity completions", () => {
-        const now = Math.floor(Date.now() / 1000);
+        const nowMs = Date.now();
 
-        // Create multiple sessions with same OAuth identity
+        // Create multiple sessions with same OAuth identity (timestamps in ms)
         for (let i = 0; i < 3; i++) {
             const sessionId = `count-test-${i}-${Date.now()}`;
             server.db.insertChallengeSession({
                 sessionId,
                 subplebbitPublicKey: "test-pk",
-                expiresAt: now + 3600
+                expiresAt: nowMs + 3600 * 1000
             });
-            server.db.updateChallengeSessionStatus(sessionId, "completed", now, "google:987654321");
+            server.db.updateChallengeSessionStatus(sessionId, "completed", nowMs, "google:987654321");
         }
 
         // Create one session with different identity
@@ -431,9 +431,9 @@ describe("OAuth Identity Storage", () => {
         server.db.insertChallengeSession({
             sessionId: differentSessionId,
             subplebbitPublicKey: "test-pk",
-            expiresAt: now + 3600
+            expiresAt: nowMs + 3600 * 1000
         });
-        server.db.updateChallengeSessionStatus(differentSessionId, "completed", now, "github:111111");
+        server.db.updateChallengeSessionStatus(differentSessionId, "completed", nowMs, "github:111111");
 
         const count = server.db.countOAuthIdentityCompletions("google:987654321");
         expect(count).toBe(3);
@@ -446,52 +446,52 @@ describe("OAuth Identity Storage", () => {
     });
 
     it("should count OAuth identity completions with time filter", () => {
-        const now = Math.floor(Date.now() / 1000);
-        const oneHourAgo = now - 3600;
-        const twoHoursAgo = now - 7200;
+        const nowMs = Date.now();
+        const oneHourAgoMs = nowMs - 3600 * 1000;
+        const twoHoursAgoMs = nowMs - 7200 * 1000;
 
-        // Create old session
+        // Create old session (timestamps in ms)
         const oldSessionId = `old-${Date.now()}`;
         server.db.insertChallengeSession({
             sessionId: oldSessionId,
             subplebbitPublicKey: "test-pk",
-            expiresAt: now + 3600
+            expiresAt: nowMs + 3600 * 1000
         });
-        server.db.updateChallengeSessionStatus(oldSessionId, "completed", twoHoursAgo, "facebook:555");
+        server.db.updateChallengeSessionStatus(oldSessionId, "completed", twoHoursAgoMs, "facebook:555");
 
         // Create recent session
         const recentSessionId = `recent-${Date.now()}`;
         server.db.insertChallengeSession({
             sessionId: recentSessionId,
             subplebbitPublicKey: "test-pk",
-            expiresAt: now + 3600
+            expiresAt: nowMs + 3600 * 1000
         });
-        server.db.updateChallengeSessionStatus(recentSessionId, "completed", now, "facebook:555");
+        server.db.updateChallengeSessionStatus(recentSessionId, "completed", nowMs, "facebook:555");
 
         // Without time filter - should get both
         const allCount = server.db.countOAuthIdentityCompletions("facebook:555");
         expect(allCount).toBe(2);
 
-        // With time filter - should only get recent
-        const recentCount = server.db.countOAuthIdentityCompletions("facebook:555", oneHourAgo);
+        // With time filter - should only get recent (timestamp in ms)
+        const recentCount = server.db.countOAuthIdentityCompletions("facebook:555", oneHourAgoMs);
         expect(recentCount).toBe(1);
     });
 
     it("should preserve existing oauthIdentity when not provided", () => {
-        const now = Math.floor(Date.now() / 1000);
+        const nowMs = Date.now();
         const sessionId = "preserve-identity-" + Date.now();
 
         server.db.insertChallengeSession({
             sessionId,
             subplebbitPublicKey: "test-pk",
-            expiresAt: now + 3600
+            expiresAt: nowMs + 3600 * 1000
         });
 
-        // First update with identity
-        server.db.updateChallengeSessionStatus(sessionId, "completed", now, "apple:abc123");
+        // First update with identity (timestamps in ms)
+        server.db.updateChallengeSessionStatus(sessionId, "completed", nowMs, "apple:abc123");
 
         // Second update without identity (should preserve)
-        server.db.updateChallengeSessionStatus(sessionId, "completed", now + 10);
+        server.db.updateChallengeSessionStatus(sessionId, "completed", nowMs + 10000);
 
         const session = server.db.getChallengeSessionBySessionId(sessionId);
         expect(session!.oauthIdentity).toBe("apple:abc123");

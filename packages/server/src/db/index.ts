@@ -29,7 +29,7 @@ export interface IpRecord {
     timestamp: number;
 }
 
-export type OAuthProviderName = "github" | "google" | "facebook" | "apple" | "twitter";
+export type OAuthProviderName = "github" | "google" | "facebook" | "apple" | "twitter" | "yandex" | "tiktok";
 
 export interface OAuthState {
     state: string;
@@ -402,9 +402,9 @@ export class SpamDetectionDatabase {
         authorPublicKey: string,
         publicationType: "post" | "reply" | "vote" | "commentEdit" | "commentModeration"
     ): { lastHour: number; last24Hours: number } {
-        const now = Math.floor(Date.now() / 1000);
-        const oneHourAgo = now - 3600;
-        const oneDayAgo = now - 86400;
+        const now = Date.now();
+        const oneHourAgo = now - 3600 * 1000;
+        const oneDayAgo = now - 86400 * 1000;
 
         return {
             lastHour: this.countPublicationsByAuthorPublicKey(authorPublicKey, publicationType, oneHourAgo),
@@ -707,9 +707,9 @@ export class SpamDetectionDatabase {
         walletAddress: string,
         publicationType: "post" | "reply" | "vote" | "commentEdit" | "commentModeration"
     ): { lastHour: number; last24Hours: number } {
-        const now = Math.floor(Date.now() / 1000);
-        const oneHourAgo = now - 3600;
-        const oneDayAgo = now - 86400;
+        const now = Date.now();
+        const oneHourAgo = now - 3600 * 1000;
+        const oneDayAgo = now - 86400 * 1000;
 
         return {
             lastHour: this.countPublicationsByWallet(walletAddress, publicationType, oneHourAgo),
@@ -1272,7 +1272,7 @@ export class SpamDetectionDatabase {
      * Clean up expired OAuth states.
      */
     cleanupExpiredOAuthStates(): number {
-        const now = Math.floor(Date.now() / 1000);
+        const now = Date.now();
         const stmt = this.db.prepare(`
             DELETE FROM oauthStates WHERE expiresAt < ?
         `);

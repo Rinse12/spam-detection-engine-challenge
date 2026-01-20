@@ -54,13 +54,17 @@ export class CombinedDataService {
     /**
      * Get the earliest timestamp for an author from either source.
      * Uses the oldest timestamp to determine true account age.
+     * Returns the timestamp in **seconds** for compatibility with protocol timestamps.
      *
-     * - Engine: Uses receivedAt (when we first saw the author)
-     * - Indexer: Uses publication timestamp (actual post time)
+     * - Engine: Uses receivedAt (when we first saw the author) - stored in milliseconds, converted to seconds
+     * - Indexer: Uses publication timestamp (actual post time) - in seconds (from protocol)
      */
     getAuthorEarliestTimestamp(authorPublicKey: string): number | undefined {
-        const engineFirstSeen = this.db.getAuthorFirstSeenTimestamp(authorPublicKey);
+        const engineFirstSeenMs = this.db.getAuthorFirstSeenTimestamp(authorPublicKey);
         const indexerFirstSeen = this.indexerQueries.getAuthorFirstIndexedTimestamp(authorPublicKey);
+
+        // Convert engine timestamp from milliseconds to seconds for comparison
+        const engineFirstSeen = engineFirstSeenMs !== undefined ? Math.floor(engineFirstSeenMs / 1000) : undefined;
 
         if (engineFirstSeen !== undefined && indexerFirstSeen !== undefined) {
             return Math.min(engineFirstSeen, indexerFirstSeen);
@@ -91,9 +95,10 @@ export class CombinedDataService {
 
             if (engine && indexer) {
                 // Both sources have data - use the one with higher updatedAt
-                // Engine uses receivedAt (when we received the publication)
-                // Indexer uses updatedAt (when subplebbit updated the comment metadata)
-                if (engine.receivedAt >= indexer.updatedAt) {
+                // Engine uses receivedAt (milliseconds), indexer uses updatedAt (seconds)
+                // Convert engine receivedAt from milliseconds to seconds for comparison
+                const engineReceivedAtSec = Math.floor(engine.receivedAt / 1000);
+                if (engineReceivedAtSec >= indexer.updatedAt) {
                     result.set(sub, { postScore: engine.postScore, replyScore: engine.replyScore });
                 } else {
                     result.set(sub, { postScore: indexer.postScore, replyScore: indexer.replyScore });
@@ -169,6 +174,8 @@ export class CombinedDataService {
     /**
      * Find exact matching content from both sources.
      * Used for detecting duplicate spam.
+     *
+     * @param params.sinceTimestamp - Time window in seconds (for protocol compatibility)
      */
     findExactContent(params: {
         content?: string;
@@ -182,13 +189,16 @@ export class CombinedDataService {
 
         const results: SimilarContentMatch[] = [];
 
+        // Convert sinceTimestamp from seconds to milliseconds for engine queries
+        const sinceTimestampMs = sinceTimestamp * 1000;
+
         // Query engine (uses sessionId as identifier)
         if (authorPublicKey) {
             // Same author - exact matches
             const engineMatches = this.db.findSimilarComments({
                 content,
                 title,
-                sinceTimestamp,
+                sinceTimestamp: sinceTimestampMs,
                 limit
             });
             // Filter to same author
@@ -201,7 +211,7 @@ export class CombinedDataService {
                         content: match.content,
                         title: match.title,
                         subplebbitAddress: match.subplebbitAddress,
-                        timestamp: match.receivedAt,
+                        timestamp: Math.floor(match.receivedAt / 1000), // Convert to seconds for consistency
                         contentSimilarity: 1.0,
                         titleSimilarity: 1.0
                     });
@@ -212,7 +222,7 @@ export class CombinedDataService {
             const engineMatches = this.db.findSimilarComments({
                 content,
                 title,
-                sinceTimestamp,
+                sinceTimestamp: sinceTimestampMs,
                 limit
             });
             // Filter to other authors
@@ -225,7 +235,7 @@ export class CombinedDataService {
                         content: match.content,
                         title: match.title,
                         subplebbitAddress: match.subplebbitAddress,
-                        timestamp: match.receivedAt,
+                        timestamp: Math.floor(match.receivedAt / 1000), // Convert to seconds for consistency
                         contentSimilarity: 1.0,
                         titleSimilarity: 1.0
                     });
@@ -233,7 +243,7 @@ export class CombinedDataService {
             }
         }
 
-        // Query indexer (uses cid as identifier)
+        // Query indexer (uses cid as identifier) - sinceTimestamp is in seconds (protocol)
         const indexerMatches = this.indexerQueries.findExactContentFromIndexer({
             content,
             title,
@@ -265,6 +275,8 @@ export class CombinedDataService {
     /**
      * Find similar content by the same author from both sources.
      * Used for detecting self-spamming with variations.
+     *
+     * @param params.sinceTimestamp - Time window in seconds (for protocol compatibility)
      */
     findSimilarContentByAuthor(params: {
         authorPublicKey: string;
@@ -278,12 +290,15 @@ export class CombinedDataService {
 
         const results: SimilarContentMatch[] = [];
 
+        // Convert sinceTimestamp from seconds to milliseconds for engine queries
+        const sinceTimestampMs = sinceTimestamp * 1000;
+
         // Query engine
         const engineMatches = this.db.findSimilarContentByAuthor({
             authorPublicKey,
             content,
             title,
-            sinceTimestamp,
+            sinceTimestamp: sinceTimestampMs,
             similarityThreshold,
             limit
         });
@@ -296,13 +311,13 @@ export class CombinedDataService {
                 content: match.content,
                 title: match.title,
                 subplebbitAddress: match.subplebbitAddress,
-                timestamp: match.receivedAt,
+                timestamp: Math.floor(match.receivedAt / 1000), // Convert to seconds for consistency
                 contentSimilarity: match.contentSimilarity,
                 titleSimilarity: match.titleSimilarity
             });
         }
 
-        // Query indexer
+        // Query indexer - sinceTimestamp is in seconds (protocol)
         const indexerMatches = this.indexerQueries.findSimilarContentFromIndexer({
             authorPublicKey,
             content,
@@ -334,6 +349,8 @@ export class CombinedDataService {
     /**
      * Find similar content by other authors from both sources.
      * Used for detecting coordinated spam campaigns.
+     *
+     * @param params.sinceTimestamp - Time window in seconds (for protocol compatibility)
      */
     findSimilarContentByOthers(params: {
         excludeAuthorPublicKey: string;
@@ -347,12 +364,15 @@ export class CombinedDataService {
 
         const results: SimilarContentMatch[] = [];
 
+        // Convert sinceTimestamp from seconds to milliseconds for engine queries
+        const sinceTimestampMs = sinceTimestamp * 1000;
+
         // Query engine
         const engineMatches = this.db.findSimilarContentByOthers({
             authorPublicKey: excludeAuthorPublicKey,
             content,
             title,
-            sinceTimestamp,
+            sinceTimestamp: sinceTimestampMs,
             similarityThreshold,
             limit
         });
@@ -365,13 +385,13 @@ export class CombinedDataService {
                 content: match.content,
                 title: match.title,
                 subplebbitAddress: match.subplebbitAddress,
-                timestamp: match.receivedAt,
+                timestamp: Math.floor(match.receivedAt / 1000), // Convert to seconds for consistency
                 contentSimilarity: match.contentSimilarity,
                 titleSimilarity: match.titleSimilarity
             });
         }
 
-        // Query indexer
+        // Query indexer - sinceTimestamp is in seconds (protocol)
         const indexerMatches = this.indexerQueries.findSimilarContentFromIndexer({
             excludeAuthorPublicKey,
             content,
@@ -406,9 +426,16 @@ export class CombinedDataService {
 
     /**
      * Find links posted by a specific author from both sources.
+     *
+     * @param params.sinceTimestamp - Time window in seconds (for protocol compatibility)
      */
     findLinksByAuthor(params: { authorPublicKey: string; link: string; sinceTimestamp: number }): number {
-        const engineCount = this.db.findLinksByAuthor(params);
+        // Convert sinceTimestamp from seconds to milliseconds for engine queries
+        const engineCount = this.db.findLinksByAuthor({
+            ...params,
+            sinceTimestamp: params.sinceTimestamp * 1000
+        });
+        // Indexer uses seconds (protocol timestamp)
         const indexerResult = this.indexerQueries.findLinksFromIndexer({
             link: params.link,
             sinceTimestamp: params.sinceTimestamp,
@@ -421,16 +448,20 @@ export class CombinedDataService {
     /**
      * Find links posted by other authors from both sources.
      * Returns total count and unique authors across both sources.
+     *
+     * @param params.sinceTimestamp - Time window in seconds (for protocol compatibility)
      */
     findLinksByOthers(params: { excludeAuthorPublicKey: string; link: string; sinceTimestamp: number }): {
         count: number;
         uniqueAuthors: number;
     } {
+        // Convert sinceTimestamp from seconds to milliseconds for engine queries
         const engineResult = this.db.findLinksByOthers({
             authorPublicKey: params.excludeAuthorPublicKey,
             link: params.link,
-            sinceTimestamp: params.sinceTimestamp
+            sinceTimestamp: params.sinceTimestamp * 1000
         });
+        // Indexer uses seconds (protocol timestamp)
         const indexerResult = this.indexerQueries.findLinksFromIndexer({
             link: params.link,
             sinceTimestamp: params.sinceTimestamp,
@@ -448,9 +479,16 @@ export class CombinedDataService {
 
     /**
      * Count links to a specific domain by an author from both sources.
+     *
+     * @param params.sinceTimestamp - Time window in seconds (for protocol compatibility)
      */
     countLinkDomainByAuthor(params: { authorPublicKey: string; domain: string; sinceTimestamp: number }): number {
-        const engineCount = this.db.countLinkDomainByAuthor(params);
+        // Convert sinceTimestamp from seconds to milliseconds for engine queries
+        const engineCount = this.db.countLinkDomainByAuthor({
+            ...params,
+            sinceTimestamp: params.sinceTimestamp * 1000
+        });
+        // Indexer uses seconds (protocol timestamp)
         const indexerCount = this.indexerQueries.countLinkDomainFromIndexer({
             domain: params.domain,
             sinceTimestamp: params.sinceTimestamp,

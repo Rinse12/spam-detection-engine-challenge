@@ -424,8 +424,8 @@ describe("calculateCommentContentTitleRisk", () => {
                     content
                 }
             });
-            // Set receivedAt to 2 days ago
-            db.getDb().prepare("UPDATE comments SET receivedAt = ? WHERE sessionId = ?").run(twoDaysAgo, "old-comment");
+            // Set receivedAt to 2 days ago (DB stores milliseconds)
+            db.getDb().prepare("UPDATE comments SET receivedAt = ? WHERE sessionId = ?").run(twoDaysAgo * 1000, "old-comment");
 
             const challengeRequest = createMockChallengeRequest(authorAddress, content);
 

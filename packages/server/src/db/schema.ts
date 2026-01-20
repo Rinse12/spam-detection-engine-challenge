@@ -5,13 +5,14 @@
 
 export const SCHEMA_SQL = `
 -- Challenge sessions table (ephemeral) - stores pending challenges
+-- Internal timestamps (completedAt, expiresAt, receivedChallengeRequestAt, authorAccessedIframeAt) are in milliseconds
 CREATE TABLE IF NOT EXISTS challengeSessions (
   sessionId TEXT PRIMARY KEY,
   subplebbitPublicKey TEXT,
   status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'completed', 'failed')),
   completedAt INTEGER,
   expiresAt INTEGER NOT NULL,
-  receivedChallengeRequestAt INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+  receivedChallengeRequestAt INTEGER NOT NULL DEFAULT (CAST(strftime('%s', 'now') AS INTEGER) * 1000),
   authorAccessedIframeAt INTEGER,
   oauthIdentity TEXT  -- format: "provider:userId" (e.g., "github:12345678")
 );
@@ -19,6 +20,7 @@ CREATE TABLE IF NOT EXISTS challengeSessions (
 CREATE INDEX IF NOT EXISTS idx_challengeSessions_expiresAt ON challengeSessions(expiresAt);
 
 -- Comments table - stores comment publications
+-- Note: timestamp is from publication (seconds), receivedAt is internal (milliseconds)
 CREATE TABLE IF NOT EXISTS comments (
   sessionId TEXT PRIMARY KEY,
   author TEXT NOT NULL,
@@ -37,7 +39,7 @@ CREATE TABLE IF NOT EXISTS comments (
   spoiler INTEGER,
   protocolVersion TEXT NOT NULL,
   nsfw INTEGER,
-  receivedAt INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+  receivedAt INTEGER NOT NULL DEFAULT (CAST(strftime('%s', 'now') AS INTEGER) * 1000),
   FOREIGN KEY (sessionId) REFERENCES challengeSessions(sessionId)
 );
 
@@ -46,6 +48,7 @@ CREATE INDEX IF NOT EXISTS idx_comments_subplebbitAddress ON comments(subplebbit
 CREATE INDEX IF NOT EXISTS idx_comments_timestamp ON comments(timestamp);
 
 -- Votes table - stores vote publications
+-- Note: timestamp is from publication (seconds), receivedAt is internal (milliseconds)
 CREATE TABLE IF NOT EXISTS votes (
   sessionId TEXT PRIMARY KEY,
   author TEXT NOT NULL,
@@ -55,7 +58,7 @@ CREATE TABLE IF NOT EXISTS votes (
   protocolVersion TEXT NOT NULL,
   vote INTEGER NOT NULL,
   timestamp INTEGER NOT NULL,
-  receivedAt INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+  receivedAt INTEGER NOT NULL DEFAULT (CAST(strftime('%s', 'now') AS INTEGER) * 1000),
   FOREIGN KEY (sessionId) REFERENCES challengeSessions(sessionId)
 );
 
@@ -63,6 +66,7 @@ CREATE INDEX IF NOT EXISTS idx_votes_author ON votes(author);
 CREATE INDEX IF NOT EXISTS idx_votes_commentCid ON votes(commentCid);
 
 -- Comment edits table - stores comment edit publications
+-- Note: timestamp is from publication (seconds), receivedAt is internal (milliseconds)
 CREATE TABLE IF NOT EXISTS commentEdits (
   sessionId TEXT PRIMARY KEY,
   author TEXT NOT NULL,
@@ -77,7 +81,7 @@ CREATE TABLE IF NOT EXISTS commentEdits (
   spoiler INTEGER,
   nsfw INTEGER,
   timestamp INTEGER NOT NULL,
-  receivedAt INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+  receivedAt INTEGER NOT NULL DEFAULT (CAST(strftime('%s', 'now') AS INTEGER) * 1000),
   FOREIGN KEY (sessionId) REFERENCES challengeSessions(sessionId)
 );
 
@@ -85,6 +89,7 @@ CREATE INDEX IF NOT EXISTS idx_commentEdits_author ON commentEdits(author);
 CREATE INDEX IF NOT EXISTS idx_commentEdits_commentCid ON commentEdits(commentCid);
 
 -- Comment moderations table - stores comment moderation publications
+-- Note: timestamp is from publication (seconds), receivedAt is internal (milliseconds)
 CREATE TABLE IF NOT EXISTS commentModerations (
   sessionId TEXT PRIMARY KEY,
   author TEXT NOT NULL,
@@ -94,7 +99,7 @@ CREATE TABLE IF NOT EXISTS commentModerations (
   signature TEXT NOT NULL,
   protocolVersion TEXT,
   timestamp INTEGER NOT NULL,
-  receivedAt INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+  receivedAt INTEGER NOT NULL DEFAULT (CAST(strftime('%s', 'now') AS INTEGER) * 1000),
   FOREIGN KEY (sessionId) REFERENCES challengeSessions(sessionId)
 );
 
@@ -121,6 +126,7 @@ CREATE INDEX IF NOT EXISTS idx_ipRecords_ipAddress ON ipRecords(ipAddress);
 -- ============================================================================
 
 -- Tracked subplebbits
+-- Note: discoveredAt is internal (milliseconds), lastSubplebbitUpdatedAt is from subplebbit (seconds)
 CREATE TABLE IF NOT EXISTS indexed_subplebbits (
     address TEXT PRIMARY KEY,
     publicKey TEXT,
@@ -128,7 +134,7 @@ CREATE TABLE IF NOT EXISTS indexed_subplebbits (
     discoveredAt INTEGER NOT NULL,
     indexingEnabled INTEGER DEFAULT 1,
     lastPostsPageCidNew TEXT,        -- To detect changes (pageCids.new)
-    lastSubplebbitUpdatedAt INTEGER, -- subplebbit.updatedAt - skip if unchanged
+    lastSubplebbitUpdatedAt INTEGER, -- subplebbit.updatedAt - skip if unchanged (seconds from protocol)
     consecutiveErrors INTEGER DEFAULT 0,
     lastError TEXT
 );
@@ -136,6 +142,7 @@ CREATE TABLE IF NOT EXISTS indexed_subplebbits (
 CREATE INDEX IF NOT EXISTS idx_indexed_subplebbits_enabled ON indexed_subplebbits(indexingEnabled);
 
 -- CommentIpfs data (immutable, from comment.raw.comment)
+-- Note: timestamp is from publication (seconds), fetchedAt is internal (milliseconds)
 CREATE TABLE IF NOT EXISTS indexed_comments_ipfs (
     cid TEXT PRIMARY KEY,
     subplebbitAddress TEXT NOT NULL,
@@ -160,6 +167,7 @@ CREATE INDEX IF NOT EXISTS idx_comments_ipfs_sub ON indexed_comments_ipfs(subple
 -- CommentUpdate data (mutable, from comment.raw.commentUpdate)
 -- Note: author only has subplebbit data, NOT author.address
 -- Note: signature is from sub, not needed
+-- Note: updatedAt is from protocol (seconds), fetchedAt/lastFetchFailedAt are internal (milliseconds)
 CREATE TABLE IF NOT EXISTS indexed_comments_update (
     cid TEXT PRIMARY KEY,
     author TEXT,                           -- JSON: author.subplebbit data only
@@ -171,9 +179,9 @@ CREATE TABLE IF NOT EXISTS indexed_comments_update (
     locked INTEGER,
     pinned INTEGER,
     approved INTEGER,                      -- true = approved, false = disapproved
-    updatedAt INTEGER,                     -- for change detection (NULL if never fetched)
+    updatedAt INTEGER,                     -- for change detection from protocol (seconds, NULL if never fetched)
     lastRepliesPageCid TEXT,               -- replies.pageCids.new (or first) - skip re-fetching if unchanged
-    fetchedAt INTEGER,                     -- last successful fetch (NULL if never succeeded)
+    fetchedAt INTEGER,                     -- last successful fetch (milliseconds, NULL if never succeeded)
     lastFetchFailedAt INTEGER,
     fetchFailureCount INTEGER DEFAULT 0,   -- reset to 0 on success
     FOREIGN KEY (cid) REFERENCES indexed_comments_ipfs(cid)
@@ -183,6 +191,7 @@ CREATE INDEX IF NOT EXISTS idx_comments_update_removed ON indexed_comments_updat
 CREATE INDEX IF NOT EXISTS idx_comments_update_approved ON indexed_comments_update(approved) WHERE approved IS NOT NULL;
 
 -- ModQueue CommentIpfs (from modQueue page comment.comment)
+-- Note: timestamp is from publication (seconds), firstSeenAt is internal (milliseconds)
 CREATE TABLE IF NOT EXISTS modqueue_comments_ipfs (
     cid TEXT PRIMARY KEY,
     subplebbitAddress TEXT NOT NULL,
@@ -205,6 +214,7 @@ CREATE INDEX IF NOT EXISTS idx_modqueue_ipfs_author ON modqueue_comments_ipfs(
 
 -- ModQueue CommentUpdate (CommentUpdateForChallengeVerification)
 -- Note: signature is from sub, not needed. author only has subplebbit data.
+-- Note: lastSeenAt and resolvedAt are internal (milliseconds)
 CREATE TABLE IF NOT EXISTS modqueue_comments_update (
     cid TEXT PRIMARY KEY,
     author TEXT,                           -- JSON: author.subplebbit data only
@@ -226,6 +236,7 @@ CREATE INDEX IF NOT EXISTS idx_modqueue_update_pending ON modqueue_comments_upda
 -- ============================================================================
 
 -- OAuth state table (ephemeral, for CSRF protection during OAuth flow)
+-- Note: createdAt and expiresAt are internal (milliseconds)
 CREATE TABLE IF NOT EXISTS oauthStates (
   state TEXT PRIMARY KEY,
   sessionId TEXT NOT NULL,

@@ -30,7 +30,7 @@ export class IndexerQueries {
      * Insert or update an indexed subplebbit.
      */
     upsertIndexedSubplebbit(params: { address: string; publicKey?: string; discoveredVia: DiscoverySource }): void {
-        const now = Math.floor(Date.now() / 1000);
+        const now = Date.now();
         this.db
             .prepare(
                 `INSERT INTO indexed_subplebbits (address, publicKey, discoveredVia, discoveredAt)
@@ -110,7 +110,7 @@ export class IndexerQueries {
      * CommentIpfs is immutable, so we only insert once and never update.
      */
     insertIndexedCommentIpfsIfNotExists(params: CommentIpfsInsertParams): void {
-        const now = Math.floor(Date.now() / 1000);
+        const now = Date.now();
         this.db
             .prepare(
                 `INSERT INTO indexed_comments_ipfs (
@@ -170,7 +170,7 @@ export class IndexerQueries {
      * Insert or update an indexed comment update record.
      */
     upsertIndexedCommentUpdate(params: CommentUpdateInsertParams): void {
-        const now = Math.floor(Date.now() / 1000);
+        const now = Date.now();
         this.db
             .prepare(
                 `INSERT INTO indexed_comments_update (
@@ -236,7 +236,7 @@ export class IndexerQueries {
      * Record a failed CommentUpdate fetch.
      */
     recordCommentUpdateFetchFailure(cid: string): void {
-        const now = Math.floor(Date.now() / 1000);
+        const now = Date.now();
         // First ensure there's a row to update
         this.db
             .prepare(
@@ -264,7 +264,7 @@ export class IndexerQueries {
      * Insert or update a modqueue comment IPFS record.
      */
     upsertModQueueCommentIpfs(params: CommentIpfsInsertParams): void {
-        const now = Math.floor(Date.now() / 1000);
+        const now = Date.now();
         this.db
             .prepare(
                 `INSERT INTO modqueue_comments_ipfs (
@@ -299,7 +299,7 @@ export class IndexerQueries {
      * Insert or update a modqueue comment update record.
      */
     upsertModQueueCommentUpdate(params: ModQueueCommentUpdateInsertParams): void {
-        const now = Math.floor(Date.now() / 1000);
+        const now = Date.now();
         this.db
             .prepare(
                 `INSERT INTO modqueue_comments_update (
@@ -336,7 +336,7 @@ export class IndexerQueries {
      * Mark a modqueue item as resolved.
      */
     resolveModQueueItem(cid: string, accepted: boolean): void {
-        const now = Math.floor(Date.now() / 1000);
+        const now = Date.now();
         this.db
             .prepare(
                 `UPDATE modqueue_comments_update

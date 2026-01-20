@@ -388,8 +388,8 @@ describe("calculateCommentUrlRisk", () => {
                     link
                 }
             });
-            // Set receivedAt to 2 days ago
-            db.getDb().prepare("UPDATE comments SET receivedAt = ? WHERE sessionId = ?").run(twoDaysAgo, "old-link");
+            // Set receivedAt to 2 days ago (DB stores milliseconds)
+            db.getDb().prepare("UPDATE comments SET receivedAt = ? WHERE sessionId = ?").run(twoDaysAgo * 1000, "old-link");
 
             const challengeRequest = createMockChallengeRequest(authorAddress, link);
 

@@ -47,9 +47,9 @@ export function registerCompleteRoute(fastify: FastifyInstance, options: Complet
                 };
             }
 
-            // Check if challenge has expired
-            const now = Math.floor(Date.now() / 1000);
-            if (session.expiresAt < now) {
+            // Check if challenge has expired (internal timestamps are in milliseconds)
+            const nowMs = Date.now();
+            if (session.expiresAt < nowMs) {
                 reply.status(410);
                 return {
                     success: false,
@@ -100,7 +100,7 @@ export function registerCompleteRoute(fastify: FastifyInstance, options: Complet
             }
 
             // Mark challenge as completed in database
-            db.updateChallengeSessionStatus(sessionId, "completed", now);
+            db.updateChallengeSessionStatus(sessionId, "completed", nowMs);
 
             return {
                 success: true

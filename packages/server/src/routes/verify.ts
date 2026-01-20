@@ -31,9 +31,10 @@ export function registerVerifyRoute(fastify: FastifyInstance, options: VerifyRou
 
             const { sessionId, signature, timestamp } = parseResult.data;
 
-            const now = Math.floor(Date.now() / 1000);
+            // Validate request timestamp (protocol uses seconds)
+            const nowSeconds = Math.floor(Date.now() / 1000);
             const maxSkewSeconds = 5 * 60;
-            if (timestamp < now - maxSkewSeconds || timestamp > now + maxSkewSeconds) {
+            if (timestamp < nowSeconds - maxSkewSeconds || timestamp > nowSeconds + maxSkewSeconds) {
                 reply.status(401);
                 return {
                     success: false,
@@ -62,8 +63,8 @@ export function registerVerifyRoute(fastify: FastifyInstance, options: VerifyRou
                 };
             }
 
-            // Check if challenge has expired
-            if (session.expiresAt < now) {
+            // Check if challenge has expired (internal timestamps are in milliseconds)
+            if (session.expiresAt < Date.now()) {
                 reply.status(410);
                 return {
                     success: false,

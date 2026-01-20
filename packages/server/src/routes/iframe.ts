@@ -53,9 +53,9 @@ export function registerIframeRoute(fastify: FastifyInstance, options: IframeRou
                 return;
             }
 
-            // Check if challenge has expired
-            const now = Math.floor(Date.now() / 1000);
-            if (session.expiresAt < now) {
+            // Check if challenge has expired (internal timestamps are in milliseconds)
+            const nowMs = Date.now();
+            if (session.expiresAt < nowMs) {
                 reply.status(410);
                 reply.send("Challenge has expired");
                 return;
@@ -72,13 +72,13 @@ export function registerIframeRoute(fastify: FastifyInstance, options: IframeRou
             const clientIp = getClientIp(request); // TODO why string | undefined? Shouldn't it always be defined?
 
             // Store IP record and update iframe access time
-            db.updateChallengeSessionIframeAccess(sessionId, now);
+            db.updateChallengeSessionIframeAccess(sessionId, nowMs);
 
             if (clientIp) {
                 db.insertIpRecord({
                     sessionId,
                     ipAddress: clientIp,
-                    timestamp: now
+                    timestamp: nowMs
                 });
 
                 if (ipInfoToken) {
