@@ -118,8 +118,18 @@ export function providerUsesPkce(provider: OAuthProvider): boolean {
  * @returns Authorization URL
  */
 export function createAuthorizationUrl(provider: ArcticProvider, providerName: OAuthProvider, state: string, codeVerifier?: string): URL {
-    // Scopes - most providers need "identify" scope or equivalent for user ID
-    const scopes: string[] = providerName === "discord" ? ["identify"] : [];
+    // Scopes - providers need specific scopes for user ID access
+    let scopes: string[];
+    switch (providerName) {
+        case "discord":
+            scopes = ["identify"];
+            break;
+        case "google":
+            scopes = ["openid"]; // Required for Google OAuth
+            break;
+        default:
+            scopes = [];
+    }
 
     switch (providerName) {
         case "github":
