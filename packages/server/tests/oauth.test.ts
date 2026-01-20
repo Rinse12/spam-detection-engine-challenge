@@ -132,7 +132,7 @@ describe("OAuth Challenge Flow", () => {
             });
 
             expect(response.statusCode).toBe(400);
-            expect(response.body).toContain("unconfigured provider");
+            expect(response.body).toContain("Provider not configured");
         });
 
         it("should return 410 for expired session", async () => {

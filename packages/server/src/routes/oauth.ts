@@ -3,16 +3,15 @@
  * Handles OAuth flow start, callback, and status polling.
  */
 
-import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
+import type { FastifyInstance } from "fastify";
 import * as arctic from "arctic";
-import type { SpamDetectionDatabase, OAuthProviderName } from "../db/index.js";
+import type { SpamDetectionDatabase } from "../db/index.js";
 import type { OAuthProviders } from "../oauth/providers.js";
 import { providerUsesPkce, createAuthorizationUrl, validateAuthorizationCode } from "../oauth/providers.js";
 import type { OAuthProvider } from "../challenge-iframes/types.js";
 
 export interface OAuthRouteOptions {
     db: SpamDetectionDatabase;
-    baseUrl: string;
     providers: OAuthProviders;
 }
 
@@ -162,8 +161,13 @@ export function registerOAuthRoutes(fastify: FastifyInstance, options: OAuthRout
         const { sessionId } = request.query;
 
         // Validate provider
-        if (!isValidProvider(provider) || !providers[provider]) {
-            return reply.status(400).send({ error: `Invalid or unconfigured provider: ${provider}` });
+        if (!isValidProvider(provider)) {
+            return reply.status(400).send({ error: `Invalid provider: ${provider}` });
+        }
+
+        // Check if provider is configured
+        if (!providers[provider]) {
+            return reply.status(400).send({ error: `Provider not configured: ${provider}` });
         }
 
         // Validate session exists and is pending

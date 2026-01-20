@@ -1,7 +1,8 @@
 import type { FastifyInstance } from "fastify";
 import type { SpamDetectionDatabase } from "../db/index.js";
 import type { Indexer } from "../indexer/index.js";
-import type { OAuthProviders } from "../oauth/providers.js";
+import type { OAuthProvidersResult } from "../oauth/providers.js";
+import { getEnabledProviders } from "../oauth/providers.js";
 import { registerEvaluateRoute } from "./evaluate.js";
 import { registerVerifyRoute } from "./verify.js";
 import { registerIframeRoute } from "./iframe.js";
@@ -15,15 +16,15 @@ export interface RouteOptions {
     turnstileSecretKey?: string;
     ipInfoToken?: string;
     indexer?: Indexer | null;
-    /** OAuth providers (if configured) */
-    oauthProviders?: OAuthProviders;
+    /** OAuth providers result (if configured) */
+    oauthProvidersResult?: OAuthProvidersResult;
 }
 
 /**
  * Register all API routes on the Fastify instance.
  */
 export function registerRoutes(fastify: FastifyInstance, options: RouteOptions): void {
-    const { db, baseUrl, turnstileSiteKey, turnstileSecretKey, ipInfoToken, indexer, oauthProviders } = options;
+    const { db, baseUrl, turnstileSiteKey, turnstileSecretKey, ipInfoToken, indexer, oauthProvidersResult } = options;
 
     // Register individual routes
     registerEvaluateRoute(fastify, {
@@ -32,12 +33,16 @@ export function registerRoutes(fastify: FastifyInstance, options: RouteOptions):
         indexer
     });
     registerVerifyRoute(fastify, { db });
-    registerIframeRoute(fastify, { db, turnstileSiteKey, ipInfoToken, oauthProviders, baseUrl });
+    registerIframeRoute(fastify, { db, turnstileSiteKey, ipInfoToken, oauthProvidersResult, baseUrl });
     registerCompleteRoute(fastify, { db, turnstileSecretKey });
 
     // Register OAuth routes if any providers are configured
-    if (oauthProviders && Object.keys(oauthProviders).length > 0) {
-        registerOAuthRoutes(fastify, { db, baseUrl, providers: oauthProviders });
+    const hasOAuthProviders = oauthProvidersResult && getEnabledProviders(oauthProvidersResult).length > 0;
+    if (hasOAuthProviders) {
+        registerOAuthRoutes(fastify, {
+            db,
+            providers: oauthProvidersResult.providers
+        });
     }
 
     // Health check endpoint

@@ -238,6 +238,20 @@ Remember to also set `BASE_URL` environment variable to match:
 BASE_URL=https://abc123.ngrok.io
 ```
 
+## Unsupported Providers
+
+### Telegram
+
+Telegram was evaluated but not implemented due to poor user experience. Unlike other OAuth providers where users simply click to authorize, Telegram's Login Widget requires users to:
+
+1. Enter their phone number
+2. Receive a confirmation request in the Telegram app
+3. Approve in the app
+
+This multi-step phone verification flow was considered too friction-heavy for a spam challenge, so Telegram support was intentionally excluded.
+
+---
+
 ## Security Considerations
 
 1. **Never commit credentials** - Use environment variables or `.env` files (which should be in `.gitignore`)

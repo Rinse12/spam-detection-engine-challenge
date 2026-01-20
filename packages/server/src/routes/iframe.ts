@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import type { SpamDetectionDatabase } from "../db/index.js";
-import type { OAuthProviders } from "../oauth/providers.js";
+import type { OAuthProvidersResult } from "../oauth/providers.js";
 import { getEnabledProviders } from "../oauth/providers.js";
 import { IframeParamsSchema, type IframeParams } from "./schemas.js";
 import { refreshIpIntelIfNeeded } from "../ip-intel/index.js";
@@ -10,8 +10,8 @@ export interface IframeRouteOptions {
     db: SpamDetectionDatabase;
     turnstileSiteKey?: string;
     ipInfoToken?: string;
-    /** OAuth providers (if configured) */
-    oauthProviders?: OAuthProviders;
+    /** OAuth providers result (if configured) */
+    oauthProvidersResult?: OAuthProvidersResult;
     /** Base URL for OAuth callbacks */
     baseUrl?: string;
 }
@@ -20,10 +20,10 @@ export interface IframeRouteOptions {
  * Register the /api/v1/iframe/:sessionId route.
  */
 export function registerIframeRoute(fastify: FastifyInstance, options: IframeRouteOptions): void {
-    const { db, turnstileSiteKey, ipInfoToken, oauthProviders, baseUrl } = options;
+    const { db, turnstileSiteKey, ipInfoToken, oauthProvidersResult, baseUrl } = options;
 
     // Determine which challenge type to use based on configuration
-    const enabledOAuthProviders = oauthProviders ? getEnabledProviders(oauthProviders) : [];
+    const enabledOAuthProviders = oauthProvidersResult ? getEnabledProviders(oauthProvidersResult) : [];
     const hasOAuth = enabledOAuthProviders.length > 0;
     const hasTurnstile = !!turnstileSiteKey;
 

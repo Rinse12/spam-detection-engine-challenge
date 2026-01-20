@@ -48,14 +48,22 @@ export type ArcticProvider = arctic.GitHub | arctic.Google | arctic.Twitter | ar
 export type OAuthProviders = Partial<Record<OAuthProvider, ArcticProvider>>;
 
 /**
+ * Result of creating OAuth providers.
+ */
+export interface OAuthProvidersResult {
+    /** OAuth providers */
+    providers: OAuthProviders;
+}
+
+/**
  * Create OAuth provider instances from configuration.
  * Only providers with valid configuration will be initialized.
  *
  * @param config - OAuth provider configurations
  * @param baseUrl - Base URL of the server (for redirect URIs)
- * @returns Map of initialized providers
+ * @returns Map of initialized providers and Telegram config
  */
-export function createOAuthProviders(config: OAuthConfig, baseUrl: string): OAuthProviders {
+export function createOAuthProviders(config: OAuthConfig, baseUrl: string): OAuthProvidersResult {
     const providers: OAuthProviders = {};
 
     if (config.github) {
@@ -90,14 +98,14 @@ export function createOAuthProviders(config: OAuthConfig, baseUrl: string): OAut
         );
     }
 
-    return providers;
+    return { providers };
 }
 
 /**
  * Get list of enabled OAuth providers.
  */
-export function getEnabledProviders(providers: OAuthProviders): OAuthProvider[] {
-    return Object.keys(providers) as OAuthProvider[];
+export function getEnabledProviders(result: OAuthProvidersResult): OAuthProvider[] {
+    return Object.keys(result.providers) as OAuthProvider[];
 }
 
 /**
@@ -111,7 +119,7 @@ export function providerUsesPkce(provider: OAuthProvider): boolean {
 /**
  * Create authorization URL for a provider.
  *
- * @param provider - The OAuth provider instance
+ * @param provider - The Arctic OAuth provider instance
  * @param providerName - The provider name
  * @param state - CSRF state parameter
  * @param codeVerifier - Optional code verifier for PKCE providers
@@ -166,7 +174,7 @@ export interface OAuthUserIdentity {
 /**
  * Validate authorization code, exchange for tokens, and fetch user identity.
  *
- * @param provider - The OAuth provider instance
+ * @param provider - The Arctic OAuth provider instance
  * @param providerName - The provider name
  * @param code - Authorization code from callback
  * @param codeVerifier - Optional code verifier for PKCE providers

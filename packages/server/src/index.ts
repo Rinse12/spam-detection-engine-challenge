@@ -117,7 +117,7 @@ export async function createServer(config: ServerConfig): Promise<SpamDetectionS
     setPlebbitOptions(plebbitOptions);
 
     // Initialize OAuth providers if configured
-    const oauthProviders = oauth ? createOAuthProviders(oauth, baseUrl) : {};
+    const oauthProvidersResult = oauth ? createOAuthProviders(oauth, baseUrl) : undefined;
 
     // Initialize indexer if enabled (before routes so it can be passed to them)
     let indexer: Indexer | null = null;
@@ -133,7 +133,7 @@ export async function createServer(config: ServerConfig): Promise<SpamDetectionS
         turnstileSecretKey,
         ipInfoToken,
         indexer,
-        oauthProviders
+        oauthProvidersResult
     });
 
     initPlebbitInstance();
