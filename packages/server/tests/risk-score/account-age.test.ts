@@ -152,7 +152,9 @@ describe("calculateAccountAge", () => {
             });
 
             // Manually update receivedAt on the comment
-            db.getDb().prepare("UPDATE comments SET receivedAt = ? WHERE sessionId = ?").run(dbFirstSeen * 1000, sessionId);
+            db.getDb()
+                .prepare("UPDATE comments SET receivedAt = ? WHERE sessionId = ?")
+                .run(dbFirstSeen * 1000, sessionId);
 
             const ctx: RiskContext = {
                 challengeRequest,
@@ -200,7 +202,9 @@ describe("calculateAccountAge", () => {
             });
 
             // Manually update receivedAt to the older timestamp (DB stores milliseconds)
-            db.getDb().prepare("UPDATE comments SET receivedAt = ? WHERE sessionId = ?").run(dbFirstSeen * 1000, sessionId);
+            db.getDb()
+                .prepare("UPDATE comments SET receivedAt = ? WHERE sessionId = ?")
+                .run(dbFirstSeen * 1000, sessionId);
 
             const ctx: RiskContext = {
                 challengeRequest,
@@ -244,7 +248,9 @@ describe("calculateAccountAge", () => {
                 }
             });
 
-            db.getDb().prepare("UPDATE comments SET receivedAt = ? WHERE sessionId = ?").run(dbFirstSeen * 1000, sessionId);
+            db.getDb()
+                .prepare("UPDATE comments SET receivedAt = ? WHERE sessionId = ?")
+                .run(dbFirstSeen * 1000, sessionId);
 
             const ctx: RiskContext = {
                 challengeRequest,
@@ -290,7 +296,9 @@ describe("calculateAccountAge", () => {
                 }
             });
 
-            db.getDb().prepare("UPDATE votes SET receivedAt = ? WHERE sessionId = ?").run(voteTime * 1000, sessionId);
+            db.getDb()
+                .prepare("UPDATE votes SET receivedAt = ? WHERE sessionId = ?")
+                .run(voteTime * 1000, sessionId);
 
             const ctx: RiskContext = {
                 challengeRequest,
@@ -332,7 +340,9 @@ describe("calculateAccountAge", () => {
                 }
             });
 
-            db.getDb().prepare("UPDATE commentEdits SET receivedAt = ? WHERE sessionId = ?").run(editTime * 1000, sessionId);
+            db.getDb()
+                .prepare("UPDATE commentEdits SET receivedAt = ? WHERE sessionId = ?")
+                .run(editTime * 1000, sessionId);
 
             const ctx: RiskContext = {
                 challengeRequest,
@@ -371,7 +381,9 @@ describe("calculateAccountAge", () => {
                     vote: 1
                 }
             });
-            db.getDb().prepare("UPDATE votes SET receivedAt = ? WHERE sessionId = ?").run(voteTime * 1000, "vote-challenge");
+            db.getDb()
+                .prepare("UPDATE votes SET receivedAt = ? WHERE sessionId = ?")
+                .run(voteTime * 1000, "vote-challenge");
 
             // Insert a comment from 400 days ago (oldest)
             const commentTime = baseTimestamp - 400 * SECONDS_PER_DAY;
@@ -391,7 +403,9 @@ describe("calculateAccountAge", () => {
                     content: "Old comment"
                 }
             });
-            db.getDb().prepare("UPDATE comments SET receivedAt = ? WHERE sessionId = ?").run(commentTime * 1000, "comment-challenge");
+            db.getDb()
+                .prepare("UPDATE comments SET receivedAt = ? WHERE sessionId = ?")
+                .run(commentTime * 1000, "comment-challenge");
 
             // Insert an edit from 20 days ago
             const editTime = baseTimestamp - 20 * SECONDS_PER_DAY;
@@ -412,7 +426,9 @@ describe("calculateAccountAge", () => {
                     content: "Edited"
                 }
             });
-            db.getDb().prepare("UPDATE commentEdits SET receivedAt = ? WHERE sessionId = ?").run(editTime * 1000, "edit-challenge");
+            db.getDb()
+                .prepare("UPDATE commentEdits SET receivedAt = ? WHERE sessionId = ?")
+                .run(editTime * 1000, "edit-challenge");
 
             const ctx: RiskContext = {
                 challengeRequest,

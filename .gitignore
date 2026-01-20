@@ -1,2 +1,10 @@
 packages/server/.plebbit/storage.db
 data/
+
+# Environment files (contain secrets)
+.env
+.env.local
+.env.*.local
+
+# Apple private keys
+*.p8

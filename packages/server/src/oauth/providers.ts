@@ -1,6 +1,6 @@
 /**
  * OAuth provider initialization using Arctic library.
- * Supports GitHub, Google, Facebook, Apple, and Twitter.
+ * Supports GitHub, Google, Twitter, Yandex, TikTok, and Discord.
  */
 
 import * as arctic from "arctic";
@@ -19,17 +19,19 @@ export interface OAuthConfig {
         clientId: string;
         clientSecret: string;
     };
-    facebook?: {
+    twitter?: {
         clientId: string;
         clientSecret: string;
     };
-    apple?: {
+    yandex?: {
         clientId: string;
-        teamId: string;
-        keyId: string;
-        privateKey: string; // PEM-encoded PKCS#8 private key
+        clientSecret: string;
     };
-    twitter?: {
+    tiktok?: {
+        clientId: string;
+        clientSecret: string;
+    };
+    discord?: {
         clientId: string;
         clientSecret: string;
     };
@@ -38,7 +40,7 @@ export interface OAuthConfig {
 /**
  * Union type of all possible Arctic provider instances.
  */
-export type ArcticProvider = arctic.GitHub | arctic.Google | arctic.Facebook | arctic.Apple | arctic.Twitter;
+export type ArcticProvider = arctic.GitHub | arctic.Google | arctic.Twitter | arctic.Yandex | arctic.TikTok | arctic.Discord;
 
 /**
  * Map of initialized OAuth providers.
@@ -64,38 +66,24 @@ export function createOAuthProviders(config: OAuthConfig, baseUrl: string): OAut
         providers.google = new arctic.Google(config.google.clientId, config.google.clientSecret, `${baseUrl}/api/v1/oauth/google/callback`);
     }
 
-    if (config.facebook) {
-        providers.facebook = new arctic.Facebook(
-            config.facebook.clientId,
-            config.facebook.clientSecret,
-            `${baseUrl}/api/v1/oauth/facebook/callback`
-        );
-    }
-
-    if (config.apple) {
-        // Apple requires the private key as Uint8Array
-        // Parse PEM format to extract the base64 content
-        const pemContent = config.apple.privateKey
-            .replace(/-----BEGIN PRIVATE KEY-----/, "")
-            .replace(/-----END PRIVATE KEY-----/, "")
-            .replace(/\s/g, "");
-        const privateKeyBytes = Uint8Array.from(atob(pemContent), (c) => c.charCodeAt(0));
-
-        providers.apple = new arctic.Apple(
-            config.apple.clientId,
-            config.apple.teamId,
-            config.apple.keyId,
-            privateKeyBytes,
-            `${baseUrl}/api/v1/oauth/apple/callback`
-        );
-    }
-
     if (config.twitter) {
         providers.twitter = new arctic.Twitter(
             config.twitter.clientId,
             config.twitter.clientSecret,
             `${baseUrl}/api/v1/oauth/twitter/callback`
         );
+    }
+
+    if (config.yandex) {
+        providers.yandex = new arctic.Yandex(config.yandex.clientId, config.yandex.clientSecret, `${baseUrl}/api/v1/oauth/yandex/callback`);
+    }
+
+    if (config.tiktok) {
+        providers.tiktok = new arctic.TikTok(config.tiktok.clientId, config.tiktok.clientSecret, `${baseUrl}/api/v1/oauth/tiktok/callback`);
+    }
+
+    if (config.discord) {
+        providers.discord = new arctic.Discord(config.discord.clientId, config.discord.clientSecret, `${baseUrl}/api/v1/oauth/discord/callback`);
     }
 
     return providers;
@@ -110,10 +98,10 @@ export function getEnabledProviders(providers: OAuthProviders): OAuthProvider[] 
 
 /**
  * Check if a provider uses PKCE (requires code verifier).
- * Google and Twitter use PKCE, others don't.
+ * Google, Twitter, TikTok, and Discord use PKCE, others don't.
  */
 export function providerUsesPkce(provider: OAuthProvider): boolean {
-    return provider === "google" || provider === "twitter";
+    return provider === "google" || provider === "twitter" || provider === "tiktok" || provider === "discord";
 }
 
 /**
@@ -126,8 +114,8 @@ export function providerUsesPkce(provider: OAuthProvider): boolean {
  * @returns Authorization URL
  */
 export function createAuthorizationUrl(provider: ArcticProvider, providerName: OAuthProvider, state: string, codeVerifier?: string): URL {
-    // No scopes needed - we only verify authentication, not access user data
-    const scopes: string[] = [];
+    // Scopes - most providers need "identify" scope or equivalent for user ID
+    const scopes: string[] = providerName === "discord" ? ["identify"] : [];
 
     switch (providerName) {
         case "github":
@@ -135,13 +123,17 @@ export function createAuthorizationUrl(provider: ArcticProvider, providerName: O
         case "google":
             if (!codeVerifier) throw new Error("Google requires code verifier");
             return (provider as arctic.Google).createAuthorizationURL(state, codeVerifier, scopes);
-        case "facebook":
-            return (provider as arctic.Facebook).createAuthorizationURL(state, scopes);
-        case "apple":
-            return (provider as arctic.Apple).createAuthorizationURL(state, scopes);
         case "twitter":
             if (!codeVerifier) throw new Error("Twitter requires code verifier");
             return (provider as arctic.Twitter).createAuthorizationURL(state, codeVerifier, scopes);
+        case "yandex":
+            return (provider as arctic.Yandex).createAuthorizationURL(state, scopes);
+        case "tiktok":
+            if (!codeVerifier) throw new Error("TikTok requires code verifier");
+            return (provider as arctic.TikTok).createAuthorizationURL(state, codeVerifier, scopes);
+        case "discord":
+            if (!codeVerifier) throw new Error("Discord requires code verifier");
+            return (provider as arctic.Discord).createAuthorizationURL(state, codeVerifier, scopes);
         default:
             throw new Error(`Unknown provider: ${providerName}`);
     }
@@ -186,21 +178,27 @@ export async function validateAuthorizationCode(
             accessToken = tokens.accessToken();
             break;
         }
-        case "facebook": {
-            const tokens = await (provider as arctic.Facebook).validateAuthorizationCode(code);
-            accessToken = tokens.accessToken();
-            break;
-        }
-        case "apple": {
-            const tokens = await (provider as arctic.Apple).validateAuthorizationCode(code);
-            // Apple returns user ID in the ID token, not via API
-            const idToken = tokens.idToken();
-            const userId = decodeAppleIdToken(idToken);
-            return { provider: providerName, userId };
-        }
         case "twitter": {
             if (!codeVerifier) throw new Error("Twitter requires code verifier");
             const tokens = await (provider as arctic.Twitter).validateAuthorizationCode(code, codeVerifier);
+            accessToken = tokens.accessToken();
+            break;
+        }
+        case "yandex": {
+            const tokens = await (provider as arctic.Yandex).validateAuthorizationCode(code);
+            accessToken = tokens.accessToken();
+            break;
+        }
+        case "tiktok": {
+            if (!codeVerifier) throw new Error("TikTok requires code verifier");
+            const tokens = await (provider as arctic.TikTok).validateAuthorizationCode(code, codeVerifier);
+            // TikTok returns open_id in token response, not via separate API call
+            const openId = (tokens as unknown as { openId: () => string }).openId();
+            return { provider: providerName, userId: openId };
+        }
+        case "discord": {
+            if (!codeVerifier) throw new Error("Discord requires code verifier");
+            const tokens = await (provider as arctic.Discord).validateAuthorizationCode(code, codeVerifier);
             accessToken = tokens.accessToken();
             break;
         }
@@ -240,12 +238,6 @@ async function fetchUserId(provider: OAuthProvider, accessToken: string): Promis
             const data = (await response.json()) as { sub: string };
             return data.sub;
         }
-        case "facebook": {
-            const response = await fetch(`https://graph.facebook.com/me?fields=id&access_token=${accessToken}`);
-            if (!response.ok) throw new Error(`Facebook API error: ${response.status}`);
-            const data = (await response.json()) as { id: string };
-            return data.id;
-        }
         case "twitter": {
             const response = await fetch("https://api.twitter.com/2/users/me", {
                 headers: {
@@ -256,23 +248,28 @@ async function fetchUserId(provider: OAuthProvider, accessToken: string): Promis
             const data = (await response.json()) as { data: { id: string } };
             return data.data.id;
         }
+        case "yandex": {
+            const response = await fetch("https://login.yandex.ru/info?format=json", {
+                headers: {
+                    Authorization: `OAuth ${accessToken}`
+                }
+            });
+            if (!response.ok) throw new Error(`Yandex API error: ${response.status}`);
+            const data = (await response.json()) as { id: string };
+            return data.id;
+        }
+        case "discord": {
+            const response = await fetch("https://discord.com/api/v10/users/@me", {
+                headers: {
+                    Authorization: `Bearer ${accessToken}`
+                }
+            });
+            if (!response.ok) throw new Error(`Discord API error: ${response.status}`);
+            const data = (await response.json()) as { id: string };
+            return data.id;
+        }
+        // TikTok returns openId directly in token response, handled in validateAuthorizationCode
         default:
             throw new Error(`Cannot fetch user ID for provider: ${provider}`);
     }
-}
-
-/**
- * Decode Apple ID token to extract user ID (sub claim).
- * Apple ID tokens are JWTs - we only need to decode the payload, not verify (already validated by Arctic).
- */
-function decodeAppleIdToken(idToken: string): string {
-    const parts = idToken.split(".");
-    if (parts.length !== 3) throw new Error("Invalid Apple ID token format");
-
-    // Decode base64url payload
-    const payload = parts[1].replace(/-/g, "+").replace(/_/g, "/");
-    const decoded = JSON.parse(Buffer.from(payload, "base64").toString("utf-8")) as { sub: string };
-
-    if (!decoded.sub) throw new Error("Apple ID token missing sub claim");
-    return decoded.sub;
 }

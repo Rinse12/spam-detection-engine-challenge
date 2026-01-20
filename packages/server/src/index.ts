@@ -219,24 +219,28 @@ if (isMainModule) {
             clientSecret: process.env.GOOGLE_CLIENT_SECRET
         };
     }
-    if (process.env.FACEBOOK_CLIENT_ID && process.env.FACEBOOK_CLIENT_SECRET) {
-        oauth.facebook = {
-            clientId: process.env.FACEBOOK_CLIENT_ID,
-            clientSecret: process.env.FACEBOOK_CLIENT_SECRET
-        };
-    }
-    if (process.env.APPLE_CLIENT_ID && process.env.APPLE_TEAM_ID && process.env.APPLE_KEY_ID && process.env.APPLE_PRIVATE_KEY) {
-        oauth.apple = {
-            clientId: process.env.APPLE_CLIENT_ID,
-            teamId: process.env.APPLE_TEAM_ID,
-            keyId: process.env.APPLE_KEY_ID,
-            privateKey: process.env.APPLE_PRIVATE_KEY
-        };
-    }
     if (process.env.TWITTER_CLIENT_ID && process.env.TWITTER_CLIENT_SECRET) {
         oauth.twitter = {
             clientId: process.env.TWITTER_CLIENT_ID,
             clientSecret: process.env.TWITTER_CLIENT_SECRET
+        };
+    }
+    if (process.env.YANDEX_CLIENT_ID && process.env.YANDEX_CLIENT_SECRET) {
+        oauth.yandex = {
+            clientId: process.env.YANDEX_CLIENT_ID,
+            clientSecret: process.env.YANDEX_CLIENT_SECRET
+        };
+    }
+    if (process.env.TIKTOK_CLIENT_ID && process.env.TIKTOK_CLIENT_SECRET) {
+        oauth.tiktok = {
+            clientId: process.env.TIKTOK_CLIENT_ID,
+            clientSecret: process.env.TIKTOK_CLIENT_SECRET
+        };
+    }
+    if (process.env.DISCORD_CLIENT_ID && process.env.DISCORD_CLIENT_SECRET) {
+        oauth.discord = {
+            clientId: process.env.DISCORD_CLIENT_ID,
+            clientSecret: process.env.DISCORD_CLIENT_SECRET
         };
     }
 

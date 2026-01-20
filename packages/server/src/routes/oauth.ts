@@ -298,5 +298,5 @@ export function registerOAuthRoutes(fastify: FastifyInstance, options: OAuthRout
  * Type guard for valid OAuth providers.
  */
 function isValidProvider(provider: string): provider is OAuthProvider {
-    return ["github", "google", "facebook", "apple", "twitter", "yandex", "tiktok"].includes(provider);
+    return ["github", "google", "twitter", "yandex", "tiktok", "discord"].includes(provider);
 }
