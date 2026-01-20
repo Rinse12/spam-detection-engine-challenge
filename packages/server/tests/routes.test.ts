@@ -524,6 +524,23 @@ describe("API Routes", () => {
 
             expect(response.statusCode).toBe(409);
         });
+
+        it("should return 409 on second iframe access", async () => {
+            // First access should succeed
+            const firstResponse = await server.fastify.inject({
+                method: "GET",
+                url: `/api/v1/iframe/${sessionId}`
+            });
+            expect(firstResponse.statusCode).toBe(200);
+
+            // Second access should return 409
+            const secondResponse = await server.fastify.inject({
+                method: "GET",
+                url: `/api/v1/iframe/${sessionId}`
+            });
+            expect(secondResponse.statusCode).toBe(409);
+            expect(secondResponse.body).toContain("Challenge already accessed and pending completion");
+        });
     });
 });
 

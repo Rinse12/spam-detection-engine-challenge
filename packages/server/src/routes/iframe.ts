@@ -68,6 +68,13 @@ export function registerIframeRoute(fastify: FastifyInstance, options: IframeRou
                 return;
             }
 
+            // Check if iframe was already accessed (challenge is pending)
+            if (session.authorAccessedIframeAt) {
+                reply.status(409);
+                reply.send("Challenge already accessed and pending completion");
+                return;
+            }
+
             // Get client IP for IP record
             const clientIp = getClientIp(request); // TODO why string | undefined? Shouldn't it always be defined?
 
