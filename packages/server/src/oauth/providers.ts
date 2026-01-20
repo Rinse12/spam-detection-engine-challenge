@@ -83,7 +83,11 @@ export function createOAuthProviders(config: OAuthConfig, baseUrl: string): OAut
     }
 
     if (config.discord) {
-        providers.discord = new arctic.Discord(config.discord.clientId, config.discord.clientSecret, `${baseUrl}/api/v1/oauth/discord/callback`);
+        providers.discord = new arctic.Discord(
+            config.discord.clientId,
+            config.discord.clientSecret,
+            `${baseUrl}/api/v1/oauth/discord/callback`
+        );
     }
 
     return providers;
