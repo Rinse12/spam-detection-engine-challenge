@@ -91,35 +91,51 @@ This multi-source approach ensures we capture the earliest known activity across
 
 ### 2. Karma Score (Weight: 10% without IP, 6% with IP)
 
-Evaluates the author's accumulated karma (`postScore + replyScore`) using a weighted combination of:
+Evaluates the author's reputation using a **count-based approach** that is resistant to collusion attacks.
 
-1. **Current subplebbit karma** (70% weight): From `author.subplebbit` (TRUSTED)
-2. **Other subplebbits karma** (30% weight): Aggregated from combined engine + indexer data
+Instead of using raw karma values (which can be manipulated by colluding subplebbits), we count how many subplebbits the author has positive vs negative karma in. Each subplebbit gets exactly **1 vote** regardless of karma magnitude.
 
-This dual-source approach gives priority to the author's reputation in the current subplebbit while still considering their cross-community reputation. A user who is problematic in one subplebbit won't automatically get a pass just because they have good karma elsewhere.
+**Why count-based?**
 
-**Karma aggregation from combined data sources:**
+- **Collusion resistance**: A few hostile subs giving massive negative karma can't tank an author's score if they have good standing elsewhere
+- **Sybil resistance**: Inflated positive karma from friendly subs matters less when you're just counting "how many subs trust this author"
+- **Democratic**: Each sub gets equal weight in the reputation signal
 
-- Queries both engine tables and indexer tables
-- For each subplebbit, uses the **latest** entry based on timestamp (receivedAt for engine, fetchedAt for indexer)
-- Indexer data comes from `indexed_comments_update.author.subplebbit` which is TRUSTED (from CommentUpdate)
-- The current subplebbit's karma from the challenge request is always used (most recent and direct from subplebbit)
+**Data sources:**
 
-**Weighted calculation:**
+- **Current subplebbit**: From `author.subplebbit` (TRUSTED) in the challenge request
+- **Other subplebbits**: Aggregated from combined engine + indexer data, using the **latest** entry per subplebbit
 
-- If no other subs in DB: `totalKarma = currentSubKarma`
-- If other subs exist: `totalKarma = (currentSubKarma × 0.7) + (otherSubsKarma × 0.3)`
+**Counting logic:**
 
-| Total Karma | Risk Score | Description                       |
-| ----------- | ---------- | --------------------------------- |
-| >= 100      | 0.10       | Highly trusted contributor        |
-| >= 50       | 0.20       | Established contributor           |
-| >= 10       | 0.35       | Positive contributor              |
-| >= 0        | 0.50       | Neutral                           |
-| >= -10      | 0.70       | Negative karma                    |
-| < -10       | 0.90       | Very negative karma (problematic) |
+- Positive sub: `postScore + replyScore > 0` → +1 positive vote
+- Negative sub: `postScore + replyScore < 0` → +1 negative vote
+- Zero karma: Doesn't count either way
+- Net count = (positive subs) - (negative subs)
 
-**Rationale**: Karma reflects community trust. High karma indicates valued contributions; negative karma indicates problematic behavior. Weighting current sub karma higher ensures that an author's local reputation takes precedence over their global reputation.
+| Net Sub Count | Risk Score | Description                        |
+| ------------- | ---------- | ---------------------------------- |
+| >= +5         | 0.10       | Widely trusted across network      |
+| +3 to +4      | 0.20       | Trusted in multiple communities    |
+| +1 to +2      | 0.35       | Generally positive standing        |
+| 0             | 0.50       | Mixed/balanced reputation          |
+| -1 to -2      | 0.65       | Some concerns                      |
+| -3 to -4      | 0.80       | Multiple communities flag issues   |
+| <= -5         | 0.90       | Widely mistrusted                  |
+| No data       | 0.50       | Neutral (no karma data available)  |
+
+**Example - Collusion resistance:**
+
+An author has:
+- +10 karma in sub-a.eth (1 positive vote)
+- +20 karma in sub-b.eth (1 positive vote)
+- -1000 karma in hostile-sub.eth (1 negative vote)
+
+Net = 2 - 1 = +1 → Risk score 0.35 (generally positive)
+
+The hostile sub's massive negative karma only counts as 1 negative vote, not enough to override the author's good standing in other communities.
+
+**Rationale**: This approach asks "How many independent communities vouch for this author?" which is a more robust signal than raw karma sums that can be gamed by a single bad actor.
 
 ### 3. Author Reputation (Weight: 18% without IP, 14% with IP)
 

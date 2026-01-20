@@ -44,7 +44,36 @@ function createMockChallengeRequest(
     } as DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor;
 }
 
-describe("calculateKarma", () => {
+function addKarmaFromSub(
+    db: SpamDetectionDatabase,
+    subplebbitAddress: string,
+    postScore: number,
+    replyScore: number,
+    authorAddress = "12D3KooWTestAddress"
+) {
+    const sessionId = `session-${subplebbitAddress}-${Date.now()}-${Math.random()}`;
+    db.insertChallengeSession({
+        sessionId,
+        subplebbitPublicKey: "pk",
+        expiresAt: baseTimestamp + 3600
+    });
+    db.insertComment({
+        sessionId,
+        publication: {
+            author: {
+                address: authorAddress,
+                subplebbit: { postScore, replyScore }
+            },
+            subplebbitAddress,
+            timestamp: baseTimestamp,
+            protocolVersion: "1",
+            signature: baseSignature,
+            content: "Comment"
+        }
+    });
+}
+
+describe("calculateKarma (count-based)", () => {
     let db: SpamDetectionDatabase;
     let combinedData: CombinedDataService;
 
@@ -57,9 +86,9 @@ describe("calculateKarma", () => {
         db.close();
     });
 
-    describe("with only current sub karma (no DB history)", () => {
-        it("should return VERY_HIGH score for karma >= 100", () => {
-            const author = createMockAuthor(80, 30); // total = 110
+    describe("no karma data", () => {
+        it("should return NEUTRAL (0.5) when no karma data exists", () => {
+            const author = createMockAuthor(0, 0); // Zero karma in current sub
             const challengeRequest = createMockChallengeRequest(author);
 
             const ctx: RiskContext = {
@@ -70,53 +99,16 @@ describe("calculateKarma", () => {
                 combinedData
             };
 
-            const result = calculateKarma(ctx, 0.13);
-
-            expect(result.score).toBe(0.1);
-            expect(result.weight).toBe(0.13);
-            expect(result.explanation).toContain("110");
-            expect(result.explanation).toContain("very high");
-        });
-
-        it("should return HIGH score for karma >= 50", () => {
-            const author = createMockAuthor(30, 25); // total = 55
-            const challengeRequest = createMockChallengeRequest(author);
-
-            const ctx: RiskContext = {
-                challengeRequest,
-                now: baseTimestamp,
-                hasIpInfo: false,
-                db,
-                combinedData
-            };
-
-            const result = calculateKarma(ctx, 0.13);
-
-            expect(result.score).toBe(0.2);
-            expect(result.explanation).toContain("55");
-            expect(result.explanation).toContain("high");
-        });
-
-        it("should return NEUTRAL score for karma = 0", () => {
-            const author = createMockAuthor(0, 0);
-            const challengeRequest = createMockChallengeRequest(author);
-
-            const ctx: RiskContext = {
-                challengeRequest,
-                now: baseTimestamp,
-                hasIpInfo: false,
-                db,
-                combinedData
-            };
-
-            const result = calculateKarma(ctx, 0.13);
+            const result = calculateKarma(ctx, 0.1);
 
             expect(result.score).toBe(0.5);
-            expect(result.explanation).toContain("neutral");
+            expect(result.explanation).toContain("no karma data");
         });
+    });
 
-        it("should return VERY_NEGATIVE score for karma < -10", () => {
-            const author = createMockAuthor(-15, -5); // total = -20
+    describe("single sub with karma", () => {
+        it("should return SLIGHTLY_POSITIVE (0.35) for 1 sub with positive karma", () => {
+            const author = createMockAuthor(10, 5); // Positive karma in current sub
             const challengeRequest = createMockChallengeRequest(author);
 
             const ctx: RiskContext = {
@@ -127,45 +119,148 @@ describe("calculateKarma", () => {
                 combinedData
             };
 
-            const result = calculateKarma(ctx, 0.13);
+            const result = calculateKarma(ctx, 0.1);
+
+            expect(result.score).toBe(0.35);
+            expect(result.explanation).toContain("1 sub positive");
+            expect(result.explanation).toContain("0 subs negative");
+            expect(result.explanation).toContain("net +1");
+            expect(result.explanation).toContain("generally positive");
+        });
+
+        it("should return SLIGHTLY_NEGATIVE (0.65) for 1 sub with negative karma", () => {
+            const author = createMockAuthor(-10, -5); // Negative karma in current sub
+            const challengeRequest = createMockChallengeRequest(author);
+
+            const ctx: RiskContext = {
+                challengeRequest,
+                now: baseTimestamp,
+                hasIpInfo: false,
+                db,
+                combinedData
+            };
+
+            const result = calculateKarma(ctx, 0.1);
+
+            expect(result.score).toBe(0.65);
+            expect(result.explanation).toContain("0 subs positive");
+            expect(result.explanation).toContain("1 sub negative");
+            expect(result.explanation).toContain("net -1");
+            expect(result.explanation).toContain("some concerns");
+        });
+    });
+
+    describe("multiple subs with positive karma", () => {
+        it("should return POSITIVE (0.2) for 3 subs with positive karma", () => {
+            const author = createMockAuthor(10, 5); // Current sub positive
+            const challengeRequest = createMockChallengeRequest(author, "current-sub.eth");
+
+            // Add 2 more positive subs from DB
+            addKarmaFromSub(db, "sub-a.eth", 20, 10);
+            addKarmaFromSub(db, "sub-b.eth", 15, 5);
+
+            const ctx: RiskContext = {
+                challengeRequest,
+                now: baseTimestamp,
+                hasIpInfo: false,
+                db,
+                combinedData
+            };
+
+            const result = calculateKarma(ctx, 0.1);
+
+            expect(result.score).toBe(0.2);
+            expect(result.explanation).toContain("3 subs positive");
+            expect(result.explanation).toContain("net +3");
+            expect(result.explanation).toContain("trusted in multiple communities");
+        });
+
+        it("should return VERY_POSITIVE (0.1) for 5+ subs with positive karma", () => {
+            const author = createMockAuthor(10, 5); // Current sub positive
+            const challengeRequest = createMockChallengeRequest(author, "current-sub.eth");
+
+            // Add 4 more positive subs from DB
+            addKarmaFromSub(db, "sub-a.eth", 20, 10);
+            addKarmaFromSub(db, "sub-b.eth", 15, 5);
+            addKarmaFromSub(db, "sub-c.eth", 30, 10);
+            addKarmaFromSub(db, "sub-d.eth", 25, 15);
+
+            const ctx: RiskContext = {
+                challengeRequest,
+                now: baseTimestamp,
+                hasIpInfo: false,
+                db,
+                combinedData
+            };
+
+            const result = calculateKarma(ctx, 0.1);
+
+            expect(result.score).toBe(0.1);
+            expect(result.explanation).toContain("5 subs positive");
+            expect(result.explanation).toContain("net +5");
+            expect(result.explanation).toContain("widely trusted");
+        });
+    });
+
+    describe("multiple subs with negative karma", () => {
+        it("should return NEGATIVE (0.8) for 3 subs with negative karma", () => {
+            const author = createMockAuthor(-10, -5); // Current sub negative
+            const challengeRequest = createMockChallengeRequest(author, "current-sub.eth");
+
+            // Add 2 more negative subs from DB
+            addKarmaFromSub(db, "sub-a.eth", -20, -10);
+            addKarmaFromSub(db, "sub-b.eth", -15, -5);
+
+            const ctx: RiskContext = {
+                challengeRequest,
+                now: baseTimestamp,
+                hasIpInfo: false,
+                db,
+                combinedData
+            };
+
+            const result = calculateKarma(ctx, 0.1);
+
+            expect(result.score).toBe(0.8);
+            expect(result.explanation).toContain("3 subs negative");
+            expect(result.explanation).toContain("net -3");
+            expect(result.explanation).toContain("multiple communities flag issues");
+        });
+
+        it("should return VERY_NEGATIVE (0.9) for 5+ subs with negative karma", () => {
+            const author = createMockAuthor(-10, -5); // Current sub negative
+            const challengeRequest = createMockChallengeRequest(author, "current-sub.eth");
+
+            // Add 4 more negative subs from DB
+            addKarmaFromSub(db, "sub-a.eth", -20, -10);
+            addKarmaFromSub(db, "sub-b.eth", -15, -5);
+            addKarmaFromSub(db, "sub-c.eth", -30, -10);
+            addKarmaFromSub(db, "sub-d.eth", -25, -15);
+
+            const ctx: RiskContext = {
+                challengeRequest,
+                now: baseTimestamp,
+                hasIpInfo: false,
+                db,
+                combinedData
+            };
+
+            const result = calculateKarma(ctx, 0.1);
 
             expect(result.score).toBe(0.9);
-            expect(result.explanation).toContain("-20");
-            expect(result.explanation).toContain("very negative");
+            expect(result.explanation).toContain("5 subs negative");
+            expect(result.explanation).toContain("net -5");
+            expect(result.explanation).toContain("widely mistrusted");
         });
     });
 
-    describe("with karma from other subs in DB", () => {
-        it("should aggregate karma from other subs with weighted average (current sub 70%, others 30%)", () => {
-            // Current sub has low karma
-            const author = createMockAuthor(5, 5); // current sub karma = 10
+    describe("mixed karma (positive and negative subs)", () => {
+        it("should return NEUTRAL (0.5) for balanced karma (1 positive, 1 negative)", () => {
+            const author = createMockAuthor(10, 5); // Current sub positive
             const challengeRequest = createMockChallengeRequest(author, "current-sub.eth");
 
-            // Add high karma from another sub in DB
-            const sessionId = "other-sub-comment";
-            db.insertChallengeSession({
-                sessionId,
-                subplebbitPublicKey: "pk",
-                expiresAt: baseTimestamp + 3600
-            });
-
-            db.insertComment({
-                sessionId,
-                publication: {
-                    author: {
-                        address: author.address,
-                        subplebbit: {
-                            postScore: 100,
-                            replyScore: 50
-                        }
-                    },
-                    subplebbitAddress: "other-sub.eth", // Different sub
-                    timestamp: baseTimestamp,
-                    protocolVersion: "1",
-                    signature: baseSignature,
-                    content: "Comment in other sub"
-                }
-            });
+            // Add 1 negative sub from DB
+            addKarmaFromSub(db, "hostile-sub.eth", -100, -50);
 
             const ctx: RiskContext = {
                 challengeRequest,
@@ -175,45 +270,23 @@ describe("calculateKarma", () => {
                 combinedData
             };
 
-            const result = calculateKarma(ctx, 0.13);
+            const result = calculateKarma(ctx, 0.1);
 
-            // Weighted: 10 * 0.7 + 150 * 0.3 = 7 + 45 = 52 (rounded)
-            expect(result.score).toBe(0.2); // HIGH (>= 50)
-            expect(result.explanation).toContain("52");
-            expect(result.explanation).toContain("current sub: 10");
-            expect(result.explanation).toContain("1 other sub: 150");
+            expect(result.score).toBe(0.5);
+            expect(result.explanation).toContain("1 sub positive");
+            expect(result.explanation).toContain("1 sub negative");
+            expect(result.explanation).toContain("net +0");
+            expect(result.explanation).toContain("mixed reputation");
         });
 
-        it("should prioritize current sub karma (bad user in current sub should still get high risk)", () => {
-            // Current sub has very negative karma
-            const author = createMockAuthor(-20, -10); // current sub karma = -30
+        it("should calculate net correctly with mixed subs (3 positive, 1 negative = net +2)", () => {
+            const author = createMockAuthor(10, 5); // Current sub positive
             const challengeRequest = createMockChallengeRequest(author, "current-sub.eth");
 
-            // Add high karma from another sub in DB
-            const sessionId = "other-sub-comment";
-            db.insertChallengeSession({
-                sessionId,
-                subplebbitPublicKey: "pk",
-                expiresAt: baseTimestamp + 3600
-            });
-
-            db.insertComment({
-                sessionId,
-                publication: {
-                    author: {
-                        address: author.address,
-                        subplebbit: {
-                            postScore: 200,
-                            replyScore: 100
-                        }
-                    },
-                    subplebbitAddress: "other-sub.eth",
-                    timestamp: baseTimestamp,
-                    protocolVersion: "1",
-                    signature: baseSignature,
-                    content: "Comment in other sub"
-                }
-            });
+            // Add 2 positive and 1 negative
+            addKarmaFromSub(db, "sub-a.eth", 20, 10);
+            addKarmaFromSub(db, "sub-b.eth", 15, 5);
+            addKarmaFromSub(db, "hostile-sub.eth", -100, -50);
 
             const ctx: RiskContext = {
                 challengeRequest,
@@ -223,210 +296,177 @@ describe("calculateKarma", () => {
                 combinedData
             };
 
-            const result = calculateKarma(ctx, 0.13);
+            const result = calculateKarma(ctx, 0.1);
 
-            // Weighted: -30 * 0.7 + 300 * 0.3 = -21 + 90 = 69 (rounded)
-            // This shows that even with 300 karma elsewhere, negative karma in current sub
-            // significantly impacts the score
-            expect(result.score).toBe(0.2); // HIGH but not VERY_HIGH
-            expect(result.explanation).toContain("69");
-            expect(result.explanation).toContain("current sub: -30");
-            expect(result.explanation).toContain("1 other sub: 300");
-        });
-
-        it("should only use latest karma per sub from DB", () => {
-            const author = createMockAuthor(10, 10); // current sub karma = 20
-            const challengeRequest = createMockChallengeRequest(author, "current-sub.eth");
-
-            // Add old comment with low karma from other-sub
-            const oldChallengeId = "old-comment";
-            db.insertChallengeSession({
-                sessionId: oldChallengeId,
-                subplebbitPublicKey: "pk",
-                expiresAt: baseTimestamp + 3600
-            });
-
-            db.insertComment({
-                sessionId: oldChallengeId,
-                publication: {
-                    author: {
-                        address: author.address,
-                        subplebbit: {
-                            postScore: 5,
-                            replyScore: 5
-                        }
-                    },
-                    subplebbitAddress: "other-sub.eth",
-                    timestamp: baseTimestamp - 1000,
-                    protocolVersion: "1",
-                    signature: baseSignature,
-                    content: "Old comment"
-                }
-            });
-
-            // Set older receivedAt (DB stores milliseconds)
-            db.getDb()
-                .prepare("UPDATE comments SET receivedAt = ? WHERE sessionId = ?")
-                .run((baseTimestamp - 1000) * 1000, oldChallengeId);
-
-            // Add newer comment with higher karma from same other-sub
-            const newChallengeId = "new-comment";
-            db.insertChallengeSession({
-                sessionId: newChallengeId,
-                subplebbitPublicKey: "pk",
-                expiresAt: baseTimestamp + 3600
-            });
-
-            db.insertComment({
-                sessionId: newChallengeId,
-                publication: {
-                    author: {
-                        address: author.address,
-                        subplebbit: {
-                            postScore: 50,
-                            replyScore: 30
-                        }
-                    },
-                    subplebbitAddress: "other-sub.eth",
-                    timestamp: baseTimestamp,
-                    protocolVersion: "1",
-                    signature: baseSignature,
-                    content: "New comment with higher karma"
-                }
-            });
-
-            const ctx: RiskContext = {
-                challengeRequest,
-                now: baseTimestamp,
-                hasIpInfo: false,
-                db,
-                combinedData
-            };
-
-            const result = calculateKarma(ctx, 0.13);
-
-            // Should use newer karma (80) not old karma (10)
-            // Weighted: 20 * 0.7 + 80 * 0.3 = 14 + 24 = 38 (rounded)
-            expect(result.score).toBe(0.35); // MODERATE (>= 10)
-            expect(result.explanation).toContain("38");
-            expect(result.explanation).toContain("current sub: 20");
-            expect(result.explanation).toContain("1 other sub: 80");
-        });
-
-        it("should aggregate karma from multiple other subs", () => {
-            const author = createMockAuthor(10, 10); // current sub karma = 20
-            const challengeRequest = createMockChallengeRequest(author, "current-sub.eth");
-
-            // Add karma from sub-a
-            db.insertChallengeSession({
-                sessionId: "sub-a-comment",
-                subplebbitPublicKey: "pk",
-                expiresAt: baseTimestamp + 3600
-            });
-            db.insertComment({
-                sessionId: "sub-a-comment",
-                publication: {
-                    author: {
-                        address: author.address,
-                        subplebbit: { postScore: 30, replyScore: 20 }
-                    },
-                    subplebbitAddress: "sub-a.eth",
-                    timestamp: baseTimestamp,
-                    protocolVersion: "1",
-                    signature: baseSignature,
-                    content: "Comment in sub A"
-                }
-            });
-
-            // Add karma from sub-b
-            db.insertChallengeSession({
-                sessionId: "sub-b-comment",
-                subplebbitPublicKey: "pk",
-                expiresAt: baseTimestamp + 3600
-            });
-            db.insertComment({
-                sessionId: "sub-b-comment",
-                publication: {
-                    author: {
-                        address: author.address,
-                        subplebbit: { postScore: 40, replyScore: 10 }
-                    },
-                    subplebbitAddress: "sub-b.eth",
-                    timestamp: baseTimestamp,
-                    protocolVersion: "1",
-                    signature: baseSignature,
-                    content: "Comment in sub B"
-                }
-            });
-
-            const ctx: RiskContext = {
-                challengeRequest,
-                now: baseTimestamp,
-                hasIpInfo: false,
-                db,
-                combinedData
-            };
-
-            const result = calculateKarma(ctx, 0.13);
-
-            // Other subs total: 50 + 50 = 100
-            // Weighted: 20 * 0.7 + 100 * 0.3 = 14 + 30 = 44 (rounded)
-            expect(result.score).toBe(0.35); // MODERATE
-            expect(result.explanation).toContain("44");
-            expect(result.explanation).toContain("current sub: 20");
-            expect(result.explanation).toContain("2 other subs: 100");
-        });
-
-        it("should not double-count karma from current sub if it exists in DB", () => {
-            const author = createMockAuthor(50, 50); // current sub karma = 100
-            const challengeRequest = createMockChallengeRequest(author, "current-sub.eth");
-
-            // Add old record from the SAME current sub in DB (should be ignored)
-            db.insertChallengeSession({
-                sessionId: "same-sub-old",
-                subplebbitPublicKey: "pk",
-                expiresAt: baseTimestamp + 3600
-            });
-            db.insertComment({
-                sessionId: "same-sub-old",
-                publication: {
-                    author: {
-                        address: author.address,
-                        subplebbit: { postScore: 20, replyScore: 10 }
-                    },
-                    subplebbitAddress: "current-sub.eth", // Same as current sub!
-                    timestamp: baseTimestamp - 1000,
-                    protocolVersion: "1",
-                    signature: baseSignature,
-                    content: "Old comment in same sub"
-                }
-            });
-
-            const ctx: RiskContext = {
-                challengeRequest,
-                now: baseTimestamp,
-                hasIpInfo: false,
-                db,
-                combinedData
-            };
-
-            const result = calculateKarma(ctx, 0.13);
-
-            // Should only use current sub karma (100) since DB record is from same sub
-            // No "other subs" in explanation
-            expect(result.score).toBe(0.1); // VERY_HIGH (>= 100)
-            expect(result.explanation).toContain("100");
-            expect(result.explanation).not.toContain("other sub");
+            expect(result.score).toBe(0.35); // net +2 → SLIGHTLY_POSITIVE
+            expect(result.explanation).toContain("3 subs positive");
+            expect(result.explanation).toContain("1 sub negative");
+            expect(result.explanation).toContain("net +2");
         });
     });
 
-    describe("getAuthorKarmaBySubplebbit database method", () => {
-        it("should return empty map for unknown author", () => {
+    describe("collusion resistance", () => {
+        it("should NOT be affected by massive negative karma from a single hostile sub", () => {
+            // Author has -1000 karma in 1 hostile sub, but +10 karma in 2 other subs
+            const author = createMockAuthor(10, 5); // Current sub positive
+            const challengeRequest = createMockChallengeRequest(author, "current-sub.eth");
+
+            // Add 1 positive sub and 1 hostile sub with massive negative karma
+            addKarmaFromSub(db, "friendly-sub.eth", 20, 10);
+            addKarmaFromSub(db, "hostile-sub.eth", -500, -500); // -1000 karma!
+
+            const ctx: RiskContext = {
+                challengeRequest,
+                now: baseTimestamp,
+                hasIpInfo: false,
+                db,
+                combinedData
+            };
+
+            const result = calculateKarma(ctx, 0.1);
+
+            // Net = 2 positive - 1 negative = +1 → SLIGHTLY_POSITIVE
+            // The -1000 karma only counts as 1 negative vote!
+            expect(result.score).toBe(0.35);
+            expect(result.explanation).toContain("2 subs positive");
+            expect(result.explanation).toContain("1 sub negative");
+            expect(result.explanation).toContain("net +1");
+        });
+
+        it("should NOT be boosted by massive positive karma from a single friendly sub", () => {
+            // Author has +1000 karma in 1 sub, but negative in 2 others
+            const author = createMockAuthor(-10, -5); // Current sub negative
+            const challengeRequest = createMockChallengeRequest(author, "current-sub.eth");
+
+            // Add 1 sub with huge positive karma and 1 negative
+            addKarmaFromSub(db, "friendly-sub.eth", 500, 500); // +1000 karma!
+            addKarmaFromSub(db, "hostile-sub.eth", -20, -10);
+
+            const ctx: RiskContext = {
+                challengeRequest,
+                now: baseTimestamp,
+                hasIpInfo: false,
+                db,
+                combinedData
+            };
+
+            const result = calculateKarma(ctx, 0.1);
+
+            // Net = 1 positive - 2 negative = -1 → SLIGHTLY_NEGATIVE
+            // The +1000 karma only counts as 1 positive vote!
+            expect(result.score).toBe(0.65);
+            expect(result.explanation).toContain("1 sub positive");
+            expect(result.explanation).toContain("2 subs negative");
+            expect(result.explanation).toContain("net -1");
+        });
+    });
+
+    describe("current sub handling", () => {
+        it("should count current sub as 1 vote (same as other subs)", () => {
+            const author = createMockAuthor(100, 50); // High karma in current sub
+            const challengeRequest = createMockChallengeRequest(author, "current-sub.eth");
+
+            // Add 1 negative sub
+            addKarmaFromSub(db, "hostile-sub.eth", -10, -5);
+
+            const ctx: RiskContext = {
+                challengeRequest,
+                now: baseTimestamp,
+                hasIpInfo: false,
+                db,
+                combinedData
+            };
+
+            const result = calculateKarma(ctx, 0.1);
+
+            // Current sub's +150 karma counts as 1 positive vote
+            // Net = 1 positive - 1 negative = 0
+            expect(result.score).toBe(0.5);
+            expect(result.explanation).toContain("1 sub positive");
+            expect(result.explanation).toContain("1 sub negative");
+            expect(result.explanation).toContain("net +0");
+        });
+
+        it("should use current sub karma from request (not DB) when both exist", () => {
+            // Author's karma changed: was positive in DB, now negative in request
+            const author = createMockAuthor(-20, -10); // Now negative in current sub
+            const challengeRequest = createMockChallengeRequest(author, "current-sub.eth");
+
+            // Old DB record shows positive karma in current sub
+            addKarmaFromSub(db, "current-sub.eth", 50, 30);
+
+            const ctx: RiskContext = {
+                challengeRequest,
+                now: baseTimestamp,
+                hasIpInfo: false,
+                db,
+                combinedData
+            };
+
+            const result = calculateKarma(ctx, 0.1);
+
+            // Should use request's karma (-30) not DB karma (+80)
+            expect(result.score).toBe(0.65); // 0 positive, 1 negative = net -1
+            expect(result.explanation).toContain("0 subs positive");
+            expect(result.explanation).toContain("1 sub negative");
+        });
+
+        it("should not double-count current sub if it exists in DB", () => {
+            const author = createMockAuthor(20, 10); // Positive in current sub
+            const challengeRequest = createMockChallengeRequest(author, "current-sub.eth");
+
+            // DB also has record for current sub (should be ignored)
+            addKarmaFromSub(db, "current-sub.eth", 50, 30);
+
+            const ctx: RiskContext = {
+                challengeRequest,
+                now: baseTimestamp,
+                hasIpInfo: false,
+                db,
+                combinedData
+            };
+
+            const result = calculateKarma(ctx, 0.1);
+
+            // Should only count current sub once
+            expect(result.score).toBe(0.35); // 1 positive, 0 negative
+            expect(result.explanation).toContain("1 sub positive");
+            expect(result.explanation).toContain("0 subs negative");
+        });
+    });
+
+    describe("zero karma subs", () => {
+        it("should not count subs with zero karma", () => {
+            const author = createMockAuthor(0, 0); // Zero karma in current sub
+            const challengeRequest = createMockChallengeRequest(author, "current-sub.eth");
+
+            // Add subs with zero karma
+            addKarmaFromSub(db, "zero-sub-a.eth", 0, 0);
+            addKarmaFromSub(db, "zero-sub-b.eth", 5, -5); // Also nets to 0
+
+            const ctx: RiskContext = {
+                challengeRequest,
+                now: baseTimestamp,
+                hasIpInfo: false,
+                db,
+                combinedData
+            };
+
+            const result = calculateKarma(ctx, 0.1);
+
+            // No positive or negative subs
+            expect(result.score).toBe(0.5);
+            expect(result.explanation).toContain("no karma data");
+        });
+    });
+
+    describe("database methods", () => {
+        it("getAuthorKarmaBySubplebbit should return empty map for unknown author", () => {
             const karmaMap = db.getAuthorKarmaBySubplebbit("unknown-address");
             expect(karmaMap.size).toBe(0);
         });
 
-        it("should aggregate karma from votes", () => {
+        it("getAuthorKarmaBySubplebbit should aggregate from votes", () => {
             const authorPublicKey = "vote-author-pk";
             const signature = { ...baseSignature, publicKey: authorPublicKey };
 
@@ -451,7 +491,6 @@ describe("calculateKarma", () => {
                 }
             });
 
-            // Query by signature public key (not author address)
             const karmaMap = db.getAuthorKarmaBySubplebbit(authorPublicKey);
 
             expect(karmaMap.size).toBe(1);
@@ -462,43 +501,7 @@ describe("calculateKarma", () => {
             });
         });
 
-        it("should aggregate karma from comment edits", () => {
-            const authorPublicKey = "edit-author-pk";
-            const signature = { ...baseSignature, publicKey: authorPublicKey };
-
-            db.insertChallengeSession({
-                sessionId: "edit-1",
-                subplebbitPublicKey: "pk",
-                expiresAt: baseTimestamp + 3600
-            });
-            db.insertCommentEdit({
-                sessionId: "edit-1",
-                publication: {
-                    author: {
-                        address: "test-author",
-                        subplebbit: { postScore: 35, replyScore: 25 }
-                    },
-                    subplebbitAddress: "edit-sub.eth",
-                    timestamp: baseTimestamp,
-                    protocolVersion: "1",
-                    signature,
-                    commentCid: "QmComment",
-                    content: "Edited"
-                }
-            });
-
-            // Query by signature public key (not author address)
-            const karmaMap = db.getAuthorKarmaBySubplebbit(authorPublicKey);
-
-            expect(karmaMap.size).toBe(1);
-            expect(karmaMap.get("edit-sub.eth")).toEqual({
-                postScore: 35,
-                replyScore: 25,
-                receivedAt: expect.any(Number)
-            });
-        });
-
-        it("should use latest record per sub when multiple exist", () => {
+        it("getAuthorKarmaBySubplebbit should use latest record per sub", () => {
             const authorPublicKey = "same-author-pk";
             const signature = { ...baseSignature, publicKey: authorPublicKey };
 
@@ -547,82 +550,13 @@ describe("calculateKarma", () => {
                 }
             });
 
-            // Query by signature public key (not author address)
             const karmaMap = db.getAuthorKarmaBySubplebbit(authorPublicKey);
 
             expect(karmaMap.size).toBe(1);
-            // Should have the newer karma values
             expect(karmaMap.get("same-sub.eth")).toEqual({
                 postScore: 100,
                 replyScore: 50,
                 receivedAt: expect.any(Number)
-            });
-        });
-    });
-
-    describe("getAuthorAggregatedKarma database method", () => {
-        it("should return zeros for unknown author", () => {
-            const result = db.getAuthorAggregatedKarma("unknown-address");
-            expect(result).toEqual({
-                totalPostScore: 0,
-                totalReplyScore: 0,
-                subplebbitCount: 0
-            });
-        });
-
-        it("should sum karma across all subs", () => {
-            const authorPublicKey = "agg-author-pk";
-            const signature = { ...baseSignature, publicKey: authorPublicKey };
-
-            // Add karma from sub-a
-            db.insertChallengeSession({
-                sessionId: "sub-a",
-                subplebbitPublicKey: "pk",
-                expiresAt: baseTimestamp + 3600
-            });
-            db.insertComment({
-                sessionId: "sub-a",
-                publication: {
-                    author: {
-                        address: "test-author",
-                        subplebbit: { postScore: 30, replyScore: 20 }
-                    },
-                    subplebbitAddress: "sub-a.eth",
-                    timestamp: baseTimestamp,
-                    protocolVersion: "1",
-                    signature,
-                    content: "A"
-                }
-            });
-
-            // Add karma from sub-b
-            db.insertChallengeSession({
-                sessionId: "sub-b",
-                subplebbitPublicKey: "pk",
-                expiresAt: baseTimestamp + 3600
-            });
-            db.insertComment({
-                sessionId: "sub-b",
-                publication: {
-                    author: {
-                        address: "test-author",
-                        subplebbit: { postScore: 40, replyScore: 10 }
-                    },
-                    subplebbitAddress: "sub-b.eth",
-                    timestamp: baseTimestamp,
-                    protocolVersion: "1",
-                    signature,
-                    content: "B"
-                }
-            });
-
-            // Query by signature public key (not author address)
-            const result = db.getAuthorAggregatedKarma(authorPublicKey);
-
-            expect(result).toEqual({
-                totalPostScore: 70,
-                totalReplyScore: 30,
-                subplebbitCount: 2
             });
         });
     });

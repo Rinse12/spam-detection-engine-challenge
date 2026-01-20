@@ -2,58 +2,53 @@ import type { RiskContext, RiskFactor } from "../types.js";
 import { getAuthorFromChallengeRequest, getAuthorPublicKeyFromChallengeRequest, getPublicationFromChallengeRequest } from "../utils.js";
 
 /**
- * Karma thresholds for scoring.
+ * Net sub count thresholds for scoring.
+ * Net = (positive subs) - (negative subs)
  */
 const THRESHOLDS = {
-    /** Very high positive karma */
-    VERY_HIGH: 100,
-    /** High positive karma */
-    HIGH: 50,
-    /** Moderate positive karma */
-    MODERATE: 10,
-    /** Slightly negative karma */
-    NEGATIVE: 0,
-    /** Very negative karma */
-    VERY_NEGATIVE: -10
+    /** Widely trusted across network */
+    VERY_POSITIVE: 5,
+    /** Trusted in multiple communities */
+    POSITIVE: 3,
+    /** Generally positive standing */
+    SLIGHTLY_POSITIVE: 1,
+    /** Some concerns */
+    SLIGHTLY_NEGATIVE: -1,
+    /** Multiple communities flag issues */
+    NEGATIVE: -3,
+    /** Widely mistrusted */
+    VERY_NEGATIVE: -5
 };
 
 /**
- * Risk scores for different karma brackets.
+ * Risk scores for different net sub count brackets.
  * Lower values = lower risk.
  */
 const SCORES = {
-    VERY_HIGH: 0.1,
-    HIGH: 0.2,
-    MODERATE: 0.35,
+    VERY_POSITIVE: 0.1,
+    POSITIVE: 0.2,
+    SLIGHTLY_POSITIVE: 0.35,
     NEUTRAL: 0.5,
-    NEGATIVE: 0.7,
+    SLIGHTLY_NEGATIVE: 0.65,
+    NEGATIVE: 0.8,
     VERY_NEGATIVE: 0.9
 };
 
 /**
- * Weight given to the current subplebbit's karma vs other subplebbits.
- * Current sub karma is weighted higher because a user may be a good poster
- * in one sub but terrible in another.
- */
-const CURRENT_SUB_WEIGHT = 0.7;
-const OTHER_SUBS_WEIGHT = 0.3;
-
-/**
- * Calculate risk score based on karma (postScore + replyScore).
- * Uses karma data from the subplebbit author (TRUSTED) combined with
- * aggregated karma from our database across all subplebbits.
+ * Calculate risk score based on karma using a count-based approach.
+ *
+ * Instead of using raw karma values (which can be manipulated by colluding subs),
+ * we count how many subplebbits the author has positive vs negative karma in.
+ * Each sub gets exactly 1 vote regardless of karma magnitude.
+ *
+ * This approach is resistant to collusion attacks where a few hostile subs
+ * give massive negative karma to unfairly penalize authors.
  *
  * Scoring logic:
- * - High positive karma indicates a trusted contributor (lower risk)
- * - Negative karma indicates problematic behavior (higher risk)
- * - Zero or no karma is neutral
- *
- * The total karma is calculated using weighted averaging:
- * - Current subplebbit karma: 70% weight (more relevant to this sub's decision)
- * - Other subplebbits karma: 30% weight (provides context but less relevant)
- *
- * This weighting ensures that a user who is problematic in one sub doesn't
- * automatically get a pass in another sub just because they have good karma elsewhere.
+ * - Count subs with positive karma (postScore + replyScore > 0)
+ * - Count subs with negative karma (postScore + replyScore < 0)
+ * - Net = positive count - negative count
+ * - Score based on net count
  */
 export function calculateKarma(ctx: RiskContext, weight: number): RiskFactor {
     const author = getAuthorFromChallengeRequest(ctx.challengeRequest);
@@ -71,61 +66,73 @@ export function calculateKarma(ctx: RiskContext, weight: number): RiskFactor {
     // Per-subplebbit, uses the LATEST entry from either source
     const dbKarma = ctx.combinedData.getAuthorKarmaBySubplebbit(authorPublicKey);
 
-    // Calculate karma from other subplebbits (excluding current sub)
-    let otherSubsPostScore = 0;
-    let otherSubsReplyScore = 0;
-    let otherSubsCount = 0;
+    // Count positive and negative subs
+    let positiveSubCount = 0;
+    let negativeSubCount = 0;
 
     for (const [subAddress, karma] of dbKarma.entries()) {
-        // Skip the current subplebbit - we handle it separately with higher weight
+        const totalKarma = karma.postScore + karma.replyScore;
+
+        // Skip the current sub - we'll use the request's karma instead (more recent)
         if (subAddress === currentSubplebbitAddress) {
             continue;
         }
-        otherSubsPostScore += karma.postScore;
-        otherSubsReplyScore += karma.replyScore;
-        otherSubsCount++;
+
+        if (totalKarma > 0) {
+            positiveSubCount++;
+        } else if (totalKarma < 0) {
+            negativeSubCount++;
+        }
+        // Zero karma subs don't count either way
     }
 
-    const otherSubsKarma = otherSubsPostScore + otherSubsReplyScore;
-
-    // Calculate weighted total karma
-    // If there's no karma from other subs, use 100% current sub karma
-    let totalKarma: number;
-    if (otherSubsCount === 0) {
-        totalKarma = currentSubKarma;
-    } else {
-        // Weighted average: current sub karma has higher weight
-        totalKarma = Math.round(currentSubKarma * CURRENT_SUB_WEIGHT + otherSubsKarma * OTHER_SUBS_WEIGHT);
+    // Add current sub's vote (from the request, not DB)
+    if (currentSubKarma > 0) {
+        positiveSubCount++;
+    } else if (currentSubKarma < 0) {
+        negativeSubCount++;
     }
+
+    // Calculate net count
+    const netCount = positiveSubCount - negativeSubCount;
+    const totalSubsWithKarma = positiveSubCount + negativeSubCount;
 
     let score: number;
-    let explanation: string;
+    let description: string;
 
-    // Build explanation with context about karma sources
-    const karmaSourceInfo =
-        otherSubsCount > 0
-            ? ` (current sub: ${currentSubKarma}, ${otherSubsCount} other sub${otherSubsCount > 1 ? "s" : ""}: ${otherSubsKarma})`
-            : "";
-
-    if (totalKarma >= THRESHOLDS.VERY_HIGH) {
-        score = SCORES.VERY_HIGH;
-        explanation = `Karma: ${totalKarma} (very high, trusted contributor)${karmaSourceInfo}`;
-    } else if (totalKarma >= THRESHOLDS.HIGH) {
-        score = SCORES.HIGH;
-        explanation = `Karma: ${totalKarma} (high, established contributor)${karmaSourceInfo}`;
-    } else if (totalKarma >= THRESHOLDS.MODERATE) {
-        score = SCORES.MODERATE;
-        explanation = `Karma: ${totalKarma} (positive)${karmaSourceInfo}`;
-    } else if (totalKarma >= THRESHOLDS.NEGATIVE) {
+    if (totalSubsWithKarma === 0) {
+        // No karma data at all
         score = SCORES.NEUTRAL;
-        explanation = `Karma: ${totalKarma} (neutral)${karmaSourceInfo}`;
-    } else if (totalKarma >= THRESHOLDS.VERY_NEGATIVE) {
+        description = "no karma data";
+    } else if (netCount >= THRESHOLDS.VERY_POSITIVE) {
+        score = SCORES.VERY_POSITIVE;
+        description = "widely trusted";
+    } else if (netCount >= THRESHOLDS.POSITIVE) {
+        score = SCORES.POSITIVE;
+        description = "trusted in multiple communities";
+    } else if (netCount >= THRESHOLDS.SLIGHTLY_POSITIVE) {
+        score = SCORES.SLIGHTLY_POSITIVE;
+        description = "generally positive";
+    } else if (netCount > THRESHOLDS.SLIGHTLY_NEGATIVE) {
+        // netCount === 0
+        score = SCORES.NEUTRAL;
+        description = "mixed reputation";
+    } else if (netCount > THRESHOLDS.NEGATIVE) {
+        score = SCORES.SLIGHTLY_NEGATIVE;
+        description = "some concerns";
+    } else if (netCount > THRESHOLDS.VERY_NEGATIVE) {
         score = SCORES.NEGATIVE;
-        explanation = `Karma: ${totalKarma} (negative)${karmaSourceInfo}`;
+        description = "multiple communities flag issues";
     } else {
         score = SCORES.VERY_NEGATIVE;
-        explanation = `Karma: ${totalKarma} (very negative, potentially problematic)${karmaSourceInfo}`;
+        description = "widely mistrusted";
     }
+
+    // Build explanation
+    const explanation =
+        totalSubsWithKarma === 0
+            ? `Karma: ${description}`
+            : `Karma: ${positiveSubCount} sub${positiveSubCount !== 1 ? "s" : ""} positive, ${negativeSubCount} sub${negativeSubCount !== 1 ? "s" : ""} negative (net ${netCount >= 0 ? "+" : ""}${netCount}, ${description})`;
 
     return {
         name: "karmaScore",
