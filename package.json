@@ -17,6 +17,6 @@
         "typescript": "5.9.3"
     },
     "dependencies": {
-        "@plebbit/plebbit-js": "file:../plebbit-js"
+        "@plebbit/plebbit-js": "https://github.com/plebbit/plebbit-js#a21d896bd55c76070758dae65dc0693d1c3726db"
     }
 }
