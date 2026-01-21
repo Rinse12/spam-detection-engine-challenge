@@ -1,3 +1,4 @@
+- All packages require Node.js v22+
 - If you update the code and it differs than our spec at README.md, ask me if we need to update the spec to follow the implementation
 
 - Make sure to run npm run build after you're done coding and make sure it passes. Run it for all packages
@@ -15,3 +16,4 @@
 - Ideally everything should be typed properly, but if you can't please ask me and maybe I I can help you
 - Keep in mind an author can be spamming with different author signers. Plebbit-js is psudeoanonymous after all
 - When I report a bug or a problem you should try to replicate it in a test case first before fixing it.
+- If you want to switch node version you can use `nvm`

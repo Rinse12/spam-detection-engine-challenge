@@ -3,6 +3,9 @@
     "version": "0.0.0",
     "description": "Shared types for EasyCommunitySpamBlocker",
     "type": "module",
+    "engines": {
+        "node": ">=22"
+    },
     "main": "dist/types.js",
     "types": "dist/types.d.ts",
     "files": [

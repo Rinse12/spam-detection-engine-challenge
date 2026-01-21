@@ -8,8 +8,18 @@ await esbuild.build({
     platform: "node",
     target: "node22",
     sourcemap: true,
-    // Bundle the shared package but keep other dependencies external
-    external: ["@plebbit/plebbit-js", "@plebbit/plebbit-logger", "@noble/ed25519", "cborg", "uint8arrays", "zod", "i18n-iso-countries"]
+    external: [
+        "@plebbit/plebbit-js",
+        "better-sqlite3",
+        "fastify",
+        "pino-pretty",
+        "arctic",
+        "jose",
+        "cborg",
+        "uint8arrays",
+        "@noble/ed25519",
+        "zod"
+    ]
 });
 
 console.log("Build complete");
