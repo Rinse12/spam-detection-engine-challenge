@@ -35,12 +35,16 @@ export interface OAuthConfig {
         clientId: string;
         clientSecret: string;
     };
+    reddit?: {
+        clientId: string;
+        clientSecret: string;
+    };
 }
 
 /**
  * Union type of all possible Arctic provider instances.
  */
-export type ArcticProvider = arctic.GitHub | arctic.Google | arctic.Twitter | arctic.Yandex | arctic.TikTok | arctic.Discord;
+export type ArcticProvider = arctic.GitHub | arctic.Google | arctic.Twitter | arctic.Yandex | arctic.TikTok | arctic.Discord | arctic.Reddit;
 
 /**
  * Map of initialized OAuth providers.
@@ -96,6 +100,10 @@ export function createOAuthProviders(config: OAuthConfig, baseUrl: string): OAut
             config.discord.clientSecret,
             `${baseUrl}/api/v1/oauth/discord/callback`
         );
+    }
+
+    if (config.reddit) {
+        providers.reddit = new arctic.Reddit(config.reddit.clientId, config.reddit.clientSecret, `${baseUrl}/api/v1/oauth/reddit/callback`);
     }
 
     return { providers };
@@ -156,6 +164,9 @@ export function createAuthorizationUrl(provider: ArcticProvider, providerName: O
         case "discord":
             if (!codeVerifier) throw new Error("Discord requires code verifier");
             return (provider as arctic.Discord).createAuthorizationURL(state, codeVerifier, scopes);
+        case "reddit":
+            // Reddit needs "identity" scope to get user info
+            return (provider as arctic.Reddit).createAuthorizationURL(state, ["identity"]);
         default:
             throw new Error(`Unknown provider: ${providerName}`);
     }
@@ -224,6 +235,11 @@ export async function validateAuthorizationCode(
             accessToken = tokens.accessToken();
             break;
         }
+        case "reddit": {
+            const tokens = await (provider as arctic.Reddit).validateAuthorizationCode(code);
+            accessToken = tokens.accessToken();
+            break;
+        }
         default:
             throw new Error(`Unknown provider: ${providerName}`);
     }
@@ -287,6 +303,17 @@ async function fetchUserId(provider: OAuthProvider, accessToken: string): Promis
                 }
             });
             if (!response.ok) throw new Error(`Discord API error: ${response.status}`);
+            const data = (await response.json()) as { id: string };
+            return data.id;
+        }
+        case "reddit": {
+            const response = await fetch("https://oauth.reddit.com/api/v1/me", {
+                headers: {
+                    Authorization: `Bearer ${accessToken}`,
+                    "User-Agent": "spam-detection-server"
+                }
+            });
+            if (!response.ok) throw new Error(`Reddit API error: ${response.status}`);
             const data = (await response.json()) as { id: string };
             return data.id;
         }

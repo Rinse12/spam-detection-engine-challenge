@@ -243,6 +243,12 @@ if (isMainModule) {
             clientSecret: process.env.DISCORD_CLIENT_SECRET
         };
     }
+    if (process.env.REDDIT_CLIENT_ID && process.env.REDDIT_CLIENT_SECRET) {
+        oauth.reddit = {
+            clientId: process.env.REDDIT_CLIENT_ID,
+            clientSecret: process.env.REDDIT_CLIENT_SECRET
+        };
+    }
 
     createServer({
         port: parseInt(process.env.PORT ?? "3000", 10),

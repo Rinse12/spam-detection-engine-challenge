@@ -29,7 +29,7 @@ export interface IpRecord {
     timestamp: number;
 }
 
-export type OAuthProviderName = "github" | "google" | "twitter" | "yandex" | "tiktok" | "discord";
+export type OAuthProviderName = "github" | "google" | "twitter" | "yandex" | "tiktok" | "discord" | "reddit";
 
 export interface OAuthState {
     state: string;

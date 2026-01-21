@@ -7,7 +7,7 @@ export type ChallengeType = "turnstile" | "oauth";
 /**
  * Supported OAuth providers for the oauth challenge type.
  */
-export type OAuthProvider = "github" | "google" | "twitter" | "yandex" | "tiktok" | "discord";
+export type OAuthProvider = "github" | "google" | "twitter" | "yandex" | "tiktok" | "discord" | "reddit";
 
 /**
  * Options passed to iframe generator functions.
