@@ -123,6 +123,14 @@ export function registerEvaluateRoute(fastify: FastifyInstance, options: Evaluat
                 });
             }
 
+            // Check for duplicate publication (replay attack prevention)
+            const signatureValue = (publication.signature as { signature: string }).signature;
+            if (db.publicationSignatureExists(signatureValue)) {
+                const error = new Error("Publication already submitted");
+                (error as { statusCode?: number }).statusCode = 409;
+                throw error;
+            }
+
             // Calculate risk score using the risk-score module
             const riskScoreResult = calculateRiskScore({
                 challengeRequest: challengeRequest as DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor,

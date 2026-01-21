@@ -377,7 +377,7 @@ The effective rate for each check is the maximum of:
 
 **Note**: Subplebbit edits are not tracked for velocity as they are administrative actions.
 
-**Caveat - Replay attack vulnerability**: Currently, a malicious subplebbit could repeatedly call `/evaluate` with the same publication (different session IDs) to artificially inflate an author's velocity count, making them appear to be spamming. The fix is to add a uniqueness constraint on `publication.signature.signature` for all database insertions under `/evaluate`, so duplicate publications are ignored. Until this is implemented, velocity counts from the engine database may be manipulated.
+**Replay attack protection**: The `/evaluate` endpoint rejects duplicate publications by checking `publication.signature.signature` before insertion. If the same publication is submitted multiple times, subsequent attempts return a 409 Conflict error. This prevents malicious subplebbits from artificially inflating an author's velocity count.
 
 ### 6. Wallet Velocity Risk (Weight: 14% without IP, 14% with IP)
 

@@ -444,6 +444,28 @@ export class SpamDetectionDatabase {
     }
 
     // ============================================
+    // Duplicate Publication Check Methods
+    // ============================================
+
+    /**
+     * Check if a publication with the given signature already exists.
+     * Used to prevent replay attacks where the same publication is submitted multiple times.
+     *
+     * @param signatureValue - The cryptographic signature from publication.signature.signature
+     * @returns true if the signature exists in any publication table
+     */
+    publicationSignatureExists(signatureValue: string): boolean {
+        const tables = ["comments", "votes", "commentEdits", "commentModerations"] as const;
+        for (const table of tables) {
+            const result = this.db
+                .prepare(`SELECT 1 FROM ${table} WHERE json_extract(signature, '$.signature') = ? LIMIT 1`)
+                .get(signatureValue);
+            if (result) return true;
+        }
+        return false;
+    }
+
+    // ============================================
     // Publication Insertion Methods
     // ============================================
 

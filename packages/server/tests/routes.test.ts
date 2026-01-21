@@ -9,6 +9,13 @@ import { resetPlebbitLoaderForTest, setPlebbitLoaderForTest } from "../src/subpl
 const TURNSTILE_TEST_SITE_KEY = "1x00000000000000000000AA"; // Always passes
 
 const baseTimestamp = Math.floor(Date.now() / 1000);
+let signatureCounter = 0;
+const createUniqueSignature = () => ({
+    type: "ed25519",
+    signature: `sig-${Date.now()}-${signatureCounter++}`,
+    publicKey: "pk",
+    signedPropertyNames: ["author"]
+});
 const baseSignature = {
     type: "ed25519",
     signature: "sig",
@@ -117,7 +124,7 @@ const createEvaluatePayload = async ({
         subplebbitAddress: "test-sub.eth",
         timestamp: baseTimestamp,
         protocolVersion: "1",
-        signature: baseSignature,
+        signature: createUniqueSignature(),
         content: "Hello world",
         ...commentOverrides
     };
@@ -331,6 +338,63 @@ describe("API Routes", () => {
             expect(response.statusCode).toBe(400);
             const body = response.json();
             expect(body.error).toContain("Only domain-addressed subplebbits are supported");
+        });
+
+        it("should return 409 Conflict when same publication is submitted twice (replay attack prevention)", async () => {
+            const uniqueSignature = "replay-attack-test-sig-" + Date.now();
+            const payload1 = await createEvaluatePayload({
+                commentOverrides: {
+                    signature: {
+                        ...baseSignature,
+                        signature: uniqueSignature
+                    }
+                }
+            });
+
+            // First submission should succeed
+            const firstResponse = await injectCbor(server.fastify, "POST", "/api/v1/evaluate", payload1);
+            expect(firstResponse.statusCode).toBe(200);
+            const firstBody = firstResponse.json();
+            expect(firstBody.sessionId).toBeDefined();
+
+            // Create a new payload with same publication signature but fresh request timestamp/signature
+            const payload2 = await createEvaluatePayload({
+                commentOverrides: {
+                    signature: {
+                        ...baseSignature,
+                        signature: uniqueSignature
+                    }
+                }
+            });
+
+            // Second submission with same publication signature should fail with 409
+            const secondResponse = await injectCbor(server.fastify, "POST", "/api/v1/evaluate", payload2);
+            expect(secondResponse.statusCode).toBe(409);
+            const secondBody = secondResponse.json();
+            expect(secondBody.error).toContain("Publication already submitted");
+        });
+
+        it("should not inflate velocity when replay attack is attempted", async () => {
+            const uniqueSignature = "velocity-replay-test-sig-" + Date.now();
+            const authorPublicKey = baseSignature.publicKey;
+
+            // Submit the same publication multiple times (with fresh request signatures each time)
+            for (let i = 0; i < 3; i++) {
+                const payload = await createEvaluatePayload({
+                    commentOverrides: {
+                        signature: {
+                            ...baseSignature,
+                            signature: uniqueSignature
+                        }
+                    }
+                });
+                await injectCbor(server.fastify, "POST", "/api/v1/evaluate", payload);
+            }
+
+            // Check that velocity only counts 1 (not 3)
+            const stats = server.db.getAuthorVelocityStats(authorPublicKey, "post");
+            expect(stats.lastHour).toBe(1);
+            expect(stats.last24Hours).toBe(1);
         });
 
         it("should verify signature correctly when challengeRequest has extra fields (like full ChallengeRequestMessage from plebbit-js)", async () => {
