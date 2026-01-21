@@ -19,3 +19,4 @@
 - If you want to switch node version you can use `nvm`
 - It's much more preferable when you write a function parameters to have them under a single arg within an object like {funcParam1, funcParam2} since it's more readable and can be easily updated
 - There's usually no need to include new tables or columns, especially if we already have the value we need in a JSON column. If there's still a need, ask me and I will answer you.
+- You should update ## Worked Examples in RISK_SCORING.md if whenever risk scoring logic changes

@@ -643,17 +643,19 @@ comment.title: "Question about plebbit development"
 comment.content: "Has anyone figured out how to run a subplebbit on a VPS?"
 ```
 
-| Factor             | Score                        | Weight | Weighted |
-| ------------------ | ---------------------------- | ------ | -------- |
-| Account Age        | 0.2 (>90 days)               | 14%    | 0.028    |
-| Karma              | 0.2 (+3 to +4 subs positive) | 12%    | 0.024    |
-| Content Risk       | 0.2 (base, unique)           | 14%    | 0.028    |
-| URL Risk           | 0.2 (no URLs - positive)     | 12%    | 0.024    |
-| Velocity           | 0.1 (normal)                 | 10%    | 0.010    |
-| Wallet Velocity    | — (skipped)                  | 0%     | 0        |
-| Ban History        | 0.0                          | 10%    | 0        |
-| ModQueue Rejection | 0.1 (0-10% rejected)         | 6%     | 0.006    |
-| Removal Rate       | 0.1 (0-5% removed)           | 8%     | 0.008    |
+| Factor             | Score                        | Original Weight | Effective Weight | Weighted |
+| ------------------ | ---------------------------- | --------------- | ---------------- | -------- |
+| Account Age        | 0.2 (>90 days)               | 14%             | 16.3%            | 0.033    |
+| Karma              | 0.2 (+3 to +4 subs positive) | 12%             | 14.0%            | 0.028    |
+| Content Risk       | 0.2 (base, unique)           | 14%             | 16.3%            | 0.033    |
+| URL Risk           | 0.2 (no URLs - positive)     | 12%             | 14.0%            | 0.028    |
+| Velocity           | 0.1 (normal)                 | 10%             | 11.6%            | 0.012    |
+| Wallet Velocity    | — (skipped, no wallet)       | 0%              | 0%               | 0        |
+| Ban History        | 0.0                          | 10%             | 11.6%            | 0        |
+| ModQueue Rejection | 0.1 (0-10% rejected)         | 6%              | 7.0%             | 0.007    |
+| Removal Rate       | 0.1 (0-5% removed)           | 8%              | 9.3%             | 0.009    |
+
+**Note**: Wallet Velocity is skipped (no wallets), so weights are redistributed proportionally.
 
 **Final Score: ~0.15** → Low risk, auto-accepted
 
@@ -667,19 +669,21 @@ comment.title: "FREE CRYPTO - Don't miss out!!!"
 comment.content: "Click here for FREE money!!!"
 ```
 
-| Factor             | Score                                                                     | Weight | Weighted |
-| ------------------ | ------------------------------------------------------------------------- | ------ | -------- |
-| Account Age        | 0.85 (<1 day old)                                                         | 14%    | 0.119    |
-| Karma              | 0.6 (no data)                                                             | 12%    | 0.072    |
-| Content Risk       | 0.53 (base 0.2 + caps 0.08 + 3 duplicates 0.25)                           | 14%    | 0.074    |
-| URL Risk           | 0.85 (base 0.2 + 5+ same URL 0.4 + 5-9 domain 0.15 + time clustering 0.1) | 12%    | 0.102    |
-| Velocity           | 0.4 (3-5 posts/hr)                                                        | 10%    | 0.040    |
-| Wallet Velocity    | — (skipped)                                                               | 0%     | 0        |
-| Ban History        | 0.0                                                                       | 10%    | 0        |
-| ModQueue Rejection | 0.5 (no data)                                                             | 6%     | 0.030    |
-| Removal Rate       | 0.5 (no data)                                                             | 8%     | 0.040    |
+| Factor             | Score                                                                     | Original Weight | Effective Weight | Weighted |
+| ------------------ | ------------------------------------------------------------------------- | --------------- | ---------------- | -------- |
+| Account Age        | 0.85 (<1 day old)                                                         | 14%             | 16.3%            | 0.139    |
+| Karma              | 0.6 (no data)                                                             | 12%             | 14.0%            | 0.084    |
+| Content Risk       | 0.53 (base 0.2 + caps 0.08 + 3 duplicates 0.25)                           | 14%             | 16.3%            | 0.086    |
+| URL Risk           | 0.85 (base 0.2 + 5+ same URL 0.4 + 5-9 domain 0.15 + time clustering 0.1) | 12%             | 14.0%            | 0.119    |
+| Velocity           | 0.4 (3-5 posts/hr)                                                        | 10%             | 11.6%            | 0.046    |
+| Wallet Velocity    | — (skipped, no wallet)                                                    | 0%              | 0%               | 0        |
+| Ban History        | 0.0                                                                       | 10%             | 11.6%            | 0        |
+| ModQueue Rejection | 0.5 (no data)                                                             | 6%              | 7.0%             | 0.035    |
+| Removal Rate       | 0.5 (no data)                                                             | 8%              | 9.3%             | 0.047    |
 
-**Final Score: ~0.55** → Moderate-high risk, CAPTCHA required
+**Note**: Wallet Velocity is skipped (no wallets), so weights are redistributed proportionally.
+
+**Final Score: ~0.56** → Moderate-high risk, CAPTCHA required
 
 ### Example 4: Coordinated Spam Campaign
 
@@ -693,17 +697,19 @@ comment.content: "Get in early on this opportunity!"
 
 10 other authors posted the same URL and similar content within the last hour.
 
-| Factor             | Score                                                      | Weight | Weighted |
-| ------------------ | ---------------------------------------------------------- | ------ | -------- |
-| Account Age        | 1.0 (no history)                                           | 14%    | 0.140    |
-| Karma              | 0.6 (no data)                                              | 12%    | 0.072    |
-| Content Risk       | 0.6 (base 0.2 + 5+ identical from others 0.4)              | 14%    | 0.084    |
-| URL Risk           | 1.0 (base 0.2 + 10+ coordinated 0.5 + time clustering 0.3) | 12%    | 0.120    |
-| Velocity           | 0.1 (first post)                                           | 10%    | 0.010    |
-| Wallet Velocity    | — (skipped)                                                | 0%     | 0        |
-| Ban History        | 0.0                                                        | 10%    | 0        |
-| ModQueue Rejection | 0.5 (no data)                                              | 6%     | 0.030    |
-| Removal Rate       | 0.5 (no data)                                              | 8%     | 0.040    |
+| Factor             | Score                                                      | Original Weight | Effective Weight | Weighted |
+| ------------------ | ---------------------------------------------------------- | --------------- | ---------------- | -------- |
+| Account Age        | 1.0 (no history)                                           | 14%             | 16.3%            | 0.163    |
+| Karma              | 0.6 (no data)                                              | 12%             | 14.0%            | 0.084    |
+| Content Risk       | 0.6 (base 0.2 + 5+ identical from others 0.4)              | 14%             | 16.3%            | 0.098    |
+| URL Risk           | 1.0 (base 0.2 + 10+ coordinated 0.5 + time clustering 0.3) | 12%             | 14.0%            | 0.140    |
+| Velocity           | 0.1 (first post)                                           | 10%             | 11.6%            | 0.012    |
+| Wallet Velocity    | — (skipped, no wallet)                                     | 0%              | 0%               | 0        |
+| Ban History        | 0.0                                                        | 10%             | 11.6%            | 0        |
+| ModQueue Rejection | 0.5 (no data)                                              | 6%              | 7.0%             | 0.035    |
+| Removal Rate       | 0.5 (no data)                                              | 8%              | 9.3%             | 0.047    |
+
+**Note**: Wallet Velocity is skipped (no wallets), so weights are redistributed proportionally.
 
 **Final Score: ~0.58** → Moderate-high risk, CAPTCHA required
 
@@ -719,19 +725,21 @@ comment.content: null
 
 Same author has posted 5 similar URLs (`spam.com/promo/deal?ref=user1`, etc.) within 30 minutes.
 
-| Factor             | Score                                                        | Weight | Weighted |
-| ------------------ | ------------------------------------------------------------ | ------ | -------- |
-| Account Age        | 0.85 (<1 day old)                                            | 14%    | 0.119    |
-| Karma              | 0.6 (no data)                                                | 12%    | 0.072    |
-| Content Risk       | 0.35 (base 0.2 + similar titles 0.15)                        | 14%    | 0.049    |
-| URL Risk           | 0.85 (base 0.2 + 5+ similar clustered 0.35 + time bonus 0.3) | 12%    | 0.102    |
-| Velocity           | 0.7 (6-8 posts/hr)                                           | 10%    | 0.070    |
-| Wallet Velocity    | — (skipped)                                                  | 0%     | 0        |
-| Ban History        | 0.4 (1 ban from another sub)                                 | 10%    | 0.040    |
-| ModQueue Rejection | 0.5 (no data)                                                | 6%     | 0.030    |
-| Removal Rate       | 0.5 (no data)                                                | 8%     | 0.040    |
+| Factor             | Score                                                        | Original Weight | Effective Weight | Weighted |
+| ------------------ | ------------------------------------------------------------ | --------------- | ---------------- | -------- |
+| Account Age        | 0.85 (<1 day old)                                            | 14%             | 16.3%            | 0.139    |
+| Karma              | 0.6 (no data)                                                | 12%             | 14.0%            | 0.084    |
+| Content Risk       | 0.35 (base 0.2 + similar titles 0.15)                        | 14%             | 16.3%            | 0.057    |
+| URL Risk           | 0.85 (base 0.2 + 5+ similar clustered 0.35 + time bonus 0.3) | 12%             | 14.0%            | 0.119    |
+| Velocity           | 0.7 (6-8 posts/hr)                                           | 10%             | 11.6%            | 0.081    |
+| Wallet Velocity    | — (skipped, no wallet)                                       | 0%              | 0%               | 0        |
+| Ban History        | 0.4 (1 ban from another sub)                                 | 10%             | 11.6%            | 0.046    |
+| ModQueue Rejection | 0.5 (no data)                                                | 6%              | 7.0%             | 0.035    |
+| Removal Rate       | 0.5 (no data)                                                | 8%              | 9.3%             | 0.047    |
 
-**Final Score: ~0.60** → Moderate-high risk, CAPTCHA required
+**Note**: Wallet Velocity is skipped (no wallets), so weights are redistributed proportionally.
+
+**Final Score: ~0.61** → Moderate-high risk, CAPTCHA required
 
 ### Example 6: Repeat Offender (Banned, High Removal Rate)
 
@@ -743,19 +751,21 @@ comment.title: "FREE SOFTWARE DOWNLOAD NOW"
 comment.content: "CLICK HERE NOW!!! DON'T MISS OUT!!!"
 ```
 
-| Factor             | Score                                                              | Weight | Weighted |
-| ------------------ | ------------------------------------------------------------------ | ------ | -------- |
-| Account Age        | 0.7 (>1 day, <7 days)                                              | 14%    | 0.098    |
-| Karma              | 0.8 (-3 to -4 subs negative)                                       | 12%    | 0.096    |
-| Content Risk       | 0.58 (base 0.2 + caps 0.08 + repetitive 0.1 + duplicate title 0.2) | 14%    | 0.081    |
-| URL Risk           | 0.4 (base 0.2 + IP address 0.2)                                    | 12%    | 0.048    |
-| Velocity           | 0.4 (elevated)                                                     | 10%    | 0.040    |
-| Wallet Velocity    | — (skipped)                                                        | 0%     | 0        |
-| Ban History        | 0.85 (3+ bans)                                                     | 10%    | 0.085    |
-| ModQueue Rejection | 0.9 (70%+ rejected)                                                | 6%     | 0.054    |
-| Removal Rate       | 0.9 (50%+ removed)                                                 | 8%     | 0.072    |
+| Factor             | Score                                                              | Original Weight | Effective Weight | Weighted |
+| ------------------ | ------------------------------------------------------------------ | --------------- | ---------------- | -------- |
+| Account Age        | 0.7 (>1 day, <7 days)                                              | 14%             | 16.3%            | 0.114    |
+| Karma              | 0.8 (-3 to -4 subs negative)                                       | 12%             | 14.0%            | 0.112    |
+| Content Risk       | 0.58 (base 0.2 + caps 0.08 + repetitive 0.1 + duplicate title 0.2) | 14%             | 16.3%            | 0.095    |
+| URL Risk           | 0.4 (base 0.2 + IP address 0.2)                                    | 12%             | 14.0%            | 0.056    |
+| Velocity           | 0.4 (elevated)                                                     | 10%             | 11.6%            | 0.046    |
+| Wallet Velocity    | — (skipped, no wallet)                                             | 0%              | 0%               | 0        |
+| Ban History        | 0.85 (3+ bans)                                                     | 10%             | 11.6%            | 0.099    |
+| ModQueue Rejection | 0.9 (70%+ rejected)                                                | 6%              | 7.0%             | 0.063    |
+| Removal Rate       | 0.9 (50%+ removed)                                                 | 8%              | 9.3%             | 0.084    |
 
-**Final Score: ~0.69** → High risk, close to auto-reject threshold
+**Note**: Wallet Velocity is skipped (no wallets), so weights are redistributed proportionally.
+
+**Final Score: ~0.67** → High risk, close to auto-reject threshold
 
 ### Summary Table
 
@@ -763,10 +773,10 @@ comment.content: "CLICK HERE NOW!!! DON'T MISS OUT!!!"
 | -------------------------------------- | ----------- | -------------------- |
 | New user, first post with link         | ~0.40       | CAPTCHA              |
 | Established user, no URLs              | ~0.15       | Auto-accept          |
-| Affiliate link spammer                 | ~0.55       | CAPTCHA              |
+| Affiliate link spammer                 | ~0.56       | CAPTCHA              |
 | Coordinated campaign (10+ authors)     | ~0.58       | CAPTCHA              |
-| URL variation spam (time-clustered)    | ~0.60       | CAPTCHA              |
-| Repeat offender (banned, high removal) | ~0.69       | Close to auto-reject |
+| URL variation spam (time-clustered)    | ~0.61       | CAPTCHA              |
+| Repeat offender (banned, high removal) | ~0.67       | Close to auto-reject |
 
 ## Limitations
 
