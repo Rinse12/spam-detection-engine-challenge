@@ -1,6 +1,5 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import type { DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor } from "@plebbit/plebbit-js/dist/node/pubsub-messages/types.js";
-import { getPlebbitAddressFromPublicKey } from "../plebbit-js-signer.js";
 import { toString as uint8ArrayToString } from "uint8arrays/to-string";
 import type { EvaluateResponse } from "@easy-community-spam-blocker/shared";
 import type { SpamDetectionDatabase } from "../db/index.js";
@@ -32,6 +31,7 @@ export function registerEvaluateRoute(fastify: FastifyInstance, options: Evaluat
     fastify.post(
         "/api/v1/evaluate",
         async (request: FastifyRequest<{ Body: EvaluateRequest }>, reply: FastifyReply): Promise<EvaluateResponse> => {
+            // TODO need to record IP address of /evaluate callers somewhere too so we can mitgate spam if needd
             const parseResult = EvaluateRequestSchema.safeParse(request.body);
             if (!parseResult.success) {
                 const error = new Error(`Invalid request body: ${parseResult.error.issues.map((issue) => issue.message).join(", ")}`);
@@ -71,31 +71,31 @@ export function registerEvaluateRoute(fastify: FastifyInstance, options: Evaluat
 
             const subplebbitAddress = publication.subplebbitAddress;
             // Convert Uint8Array publicKey to base64 string for comparisons and storage
-            const subplebbitPublicKey = uint8ArrayToString(signature.publicKey, "base64");
+            const subplebbitPublicKeyFromRequestBody = uint8ArrayToString(signature.publicKey, "base64");
 
-            if (subplebbitAddress.includes(".")) {
-                // subplebbit address is a domain
-                let resolvedPublicKey: string;
-                try {
-                    const plebbit = await fastify.getPlebbitInstance();
-                    resolvedPublicKey = await resolveSubplebbitPublicKey(subplebbitAddress, plebbit);
-                } catch (error) {
-                    const resolveError = new Error("Unable to resolve subplebbit signature");
-                    (resolveError as { statusCode?: number }).statusCode = 401;
-                    throw resolveError;
-                }
-                if (resolvedPublicKey !== subplebbitPublicKey) {
-                    const mismatchError = new Error("Request signature does not match subplebbit");
-                    (mismatchError as { statusCode?: number }).statusCode = 401;
-                    throw mismatchError;
-                }
-            } else {
-                const subplebbitIpnsB58 = await getPlebbitAddressFromPublicKey(subplebbitPublicKey);
-                if (subplebbitIpnsB58 !== subplebbitAddress) {
-                    const mismatchError = new Error("Request signature does not match subplebbit");
-                    (mismatchError as { statusCode?: number }).statusCode = 401;
-                    throw mismatchError;
-                }
+            // Only accept domain-addressed subplebbits
+            // IPNS addresses are free to create, making them vulnerable to sybil attacks
+            if (!subplebbitAddress.includes(".")) {
+                const error = new Error("Only domain-addressed subplebbits are supported");
+                (error as { statusCode?: number }).statusCode = 400;
+                throw error;
+            }
+
+            // Verify the request signature matches the resolved subplebbit public key
+            let resolvedPublicKey: string;
+            try {
+                const plebbit = await fastify.getPlebbitInstance();
+                resolvedPublicKey = await resolveSubplebbitPublicKey(subplebbitAddress, plebbit);
+            } catch (error) {
+                const resolveError = new Error("Unable to resolve subplebbit address");
+                (resolveError as { statusCode?: number }).statusCode = 401;
+                throw resolveError;
+            }
+
+            if (resolvedPublicKey !== subplebbitPublicKeyFromRequestBody) {
+                const mismatchError = new Error("Request signature does not match subplebbit");
+                (mismatchError as { statusCode?: number }).statusCode = 401;
+                throw mismatchError;
             }
 
             // Generate challenge ID
@@ -108,7 +108,7 @@ export function registerEvaluateRoute(fastify: FastifyInstance, options: Evaluat
             // Create challenge session in database
             db.insertChallengeSession({
                 sessionId,
-                subplebbitPublicKey,
+                subplebbitPublicKey: subplebbitPublicKeyFromRequestBody,
                 expiresAt
             });
 
@@ -118,7 +118,7 @@ export function registerEvaluateRoute(fastify: FastifyInstance, options: Evaluat
             if (!existingSubplebbit) {
                 indexerQueries.upsertIndexedSubplebbit({
                     address: subplebbitAddress,
-                    publicKey: subplebbitPublicKey,
+                    publicKey: subplebbitPublicKeyFromRequestBody,
                     discoveredVia: "evaluate_api"
                 });
             }

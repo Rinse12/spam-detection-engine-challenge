@@ -560,4 +560,129 @@ describe("calculateKarma (count-based)", () => {
             });
         });
     });
+
+    describe("domain-only filtering", () => {
+        it("should ignore karma from IPNS-addressed subplebbits", () => {
+            const author = createMockAuthor(10, 5); // +15 in current domain sub
+            const challengeRequest = createMockChallengeRequest(author, "current-sub.eth");
+
+            // Add karma from IPNS-addressed subs (should be ignored)
+            addKarmaFromSub(db, "12D3KooWIPNSSub1", 100, 50); // Would be positive
+            addKarmaFromSub(db, "12D3KooWIPNSSub2", 200, 100); // Would be positive
+            addKarmaFromSub(db, "QmIPNSSub3", 50, 25); // Would be positive
+
+            const ctx: RiskContext = {
+                challengeRequest,
+                now: baseTimestamp,
+                hasIpInfo: false,
+                db,
+                combinedData
+            };
+
+            const result = calculateKarma(ctx, 0.1);
+
+            // Only current sub (domain) should count: +1 positive = net +1
+            expect(result.score).toBe(0.35); // SLIGHTLY_POSITIVE
+            expect(result.explanation).toContain("1 sub positive");
+            expect(result.explanation).toContain("0 subs negative");
+        });
+
+        it("should count karma only from domain-addressed subplebbits", () => {
+            const author = createMockAuthor(10, 5); // +15 in current domain sub
+            const challengeRequest = createMockChallengeRequest(author, "current-sub.eth");
+
+            // Add karma from domain-addressed subs (should be counted)
+            addKarmaFromSub(db, "sub-a.eth", 20, 10); // +30, positive
+            addKarmaFromSub(db, "sub-b.sol", 15, 5); // +20, positive
+            addKarmaFromSub(db, "sub-c.com", 30, 10); // +40, positive
+
+            const ctx: RiskContext = {
+                challengeRequest,
+                now: baseTimestamp,
+                hasIpInfo: false,
+                db,
+                combinedData
+            };
+
+            const result = calculateKarma(ctx, 0.1);
+
+            // Current + 3 domain subs = 4 positive = net +4
+            expect(result.score).toBe(0.2); // POSITIVE (3-4 net)
+            expect(result.explanation).toContain("4 subs positive");
+        });
+
+        it("should handle mixed domain and IPNS subplebbits", () => {
+            const author = createMockAuthor(10, 5); // +15 in current domain sub
+            const challengeRequest = createMockChallengeRequest(author, "current-sub.eth");
+
+            // Add karma from domain subs (should count)
+            addKarmaFromSub(db, "domain-a.eth", 20, 10); // positive
+            addKarmaFromSub(db, "domain-b.eth", -10, -5); // negative
+
+            // Add karma from IPNS subs (should be ignored)
+            addKarmaFromSub(db, "12D3KooWIPNS1", 1000, 500); // Would be positive (ignored)
+            addKarmaFromSub(db, "12D3KooWIPNS2", -1000, -500); // Would be negative (ignored)
+
+            const ctx: RiskContext = {
+                challengeRequest,
+                now: baseTimestamp,
+                hasIpInfo: false,
+                db,
+                combinedData
+            };
+
+            const result = calculateKarma(ctx, 0.1);
+
+            // Current (positive) + domain-a (positive) + domain-b (negative) = 2 positive, 1 negative = net +1
+            expect(result.score).toBe(0.35); // SLIGHTLY_POSITIVE
+            expect(result.explanation).toContain("2 subs positive");
+            expect(result.explanation).toContain("1 sub negative");
+        });
+
+        it("should ignore current sub karma when it has IPNS address", () => {
+            const author = createMockAuthor(100, 50); // +150 in current IPNS sub (should be ignored)
+            const challengeRequest = createMockChallengeRequest(author, "12D3KooWCurrentSub");
+
+            // Add karma from domain subs
+            addKarmaFromSub(db, "domain-a.eth", 20, 10); // positive
+
+            const ctx: RiskContext = {
+                challengeRequest,
+                now: baseTimestamp,
+                hasIpInfo: false,
+                db,
+                combinedData
+            };
+
+            const result = calculateKarma(ctx, 0.1);
+
+            // Only domain-a counts: 1 positive = net +1
+            expect(result.score).toBe(0.35); // SLIGHTLY_POSITIVE
+            expect(result.explanation).toContain("1 sub positive");
+        });
+
+        it("should return NEUTRAL when all karma is from IPNS subplebbits", () => {
+            const author = createMockAuthor(0, 0); // Zero in current sub
+            const challengeRequest = createMockChallengeRequest(author, "current-sub.eth");
+
+            // Add karma from IPNS-addressed subs only (all should be ignored)
+            addKarmaFromSub(db, "12D3KooWIPNSSub1", 100, 50);
+            addKarmaFromSub(db, "12D3KooWIPNSSub2", 200, 100);
+            addKarmaFromSub(db, "QmIPNSSub3", -50, -25);
+
+            const ctx: RiskContext = {
+                challengeRequest,
+                now: baseTimestamp,
+                hasIpInfo: false,
+                db,
+                combinedData
+            };
+
+            const result = calculateKarma(ctx, 0.1);
+
+            // No domain subs with karma = NEUTRAL
+            expect(result.score).toBe(0.5);
+            expect(result.explanation).toBe("Karma: no karma data");
+        });
+    });
 });

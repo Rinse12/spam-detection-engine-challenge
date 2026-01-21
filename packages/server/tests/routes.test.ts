@@ -319,6 +319,20 @@ describe("API Routes", () => {
             expect(response.statusCode).toBe(400);
         });
 
+        it("should return 400 for IPNS-addressed subplebbit", async () => {
+            // IPNS addresses are free to create, making them vulnerable to sybil attacks
+            // Only domain-addressed subplebbits are supported
+            const payload = await createEvaluatePayload({
+                commentOverrides: { subplebbitAddress: "12D3KooWIPNSSubplebbit" }
+            });
+
+            const response = await injectCbor(server.fastify, "POST", "/api/v1/evaluate", payload);
+
+            expect(response.statusCode).toBe(400);
+            const body = response.json();
+            expect(body.error).toContain("Only domain-addressed subplebbits are supported");
+        });
+
         it("should verify signature correctly when challengeRequest has extra fields (like full ChallengeRequestMessage from plebbit-js)", async () => {
             // This replicates the real structure sent by plebbit-js challenge package
             // The challengeRequest includes extra fields like type, encrypted, challengeRequestId, etc.

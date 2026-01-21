@@ -1,5 +1,6 @@
 import type { RiskContext, RiskFactor } from "../types.js";
 import { getAuthorFromChallengeRequest, getAuthorPublicKeyFromChallengeRequest, getPublicationFromChallengeRequest } from "../utils.js";
+import { isDomainSubplebbitAddress } from "../../utils/address.js";
 
 /**
  * Net sub count thresholds for scoring.
@@ -78,6 +79,12 @@ export function calculateKarma(ctx: RiskContext, weight: number): RiskFactor {
             continue;
         }
 
+        // Only count karma from domain-addressed subplebbits
+        // IPNS addresses are free to create, making them vulnerable to self-promotion attacks
+        if (!isDomainSubplebbitAddress(subAddress)) {
+            continue;
+        }
+
         if (totalKarma > 0) {
             positiveSubCount++;
         } else if (totalKarma < 0) {
@@ -86,11 +93,13 @@ export function calculateKarma(ctx: RiskContext, weight: number): RiskFactor {
         // Zero karma subs don't count either way
     }
 
-    // Add current sub's vote (from the request, not DB)
-    if (currentSubKarma > 0) {
-        positiveSubCount++;
-    } else if (currentSubKarma < 0) {
-        negativeSubCount++;
+    // Add current sub's vote only if it's a domain address (from the request, not DB)
+    if (isDomainSubplebbitAddress(currentSubplebbitAddress)) {
+        if (currentSubKarma > 0) {
+            positiveSubCount++;
+        } else if (currentSubKarma < 0) {
+            negativeSubCount++;
+        }
     }
 
     // Calculate net count

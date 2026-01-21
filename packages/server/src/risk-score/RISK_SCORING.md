@@ -150,7 +150,7 @@ The hostile sub's massive negative karma only counts as 1 negative vote, not eno
 
 **Rationale**: This approach asks "How many independent communities vouch for this author?" which is a more robust signal than raw karma sums that can be gamed by a single bad actor.
 
-**Caveat - Self-promotion vulnerability**: The signing requirement prevents sybil attacks against _other_ users, but it does NOT prevent self-promotion. An attacker can create multiple subplebbits, sign posts to each one, and give themselves positive karma in all of them. This would artificially inflate their net sub count (e.g., +10 subs → 0.10 risk score). Potential mitigations include: only counting karma from subplebbits with multiple unique authors, weighting karma by subplebbit size/reputation, or requiring minimum activity thresholds before a sub's karma counts.
+**Mitigation - Domain-only karma**: To prevent self-promotion attacks, only karma from **domain-addressed subplebbits** is counted. IPNS addresses (like `12D3KooW...`) are free to create, making them vulnerable to sybil attacks. Domain addresses (like `example.eth`, `example.sol`, `example.com`) cost money to acquire, creating an economic barrier that makes mass subplebbit creation impractical. Additionally, the `/evaluate` endpoint only accepts requests from domain-addressed subplebbits that can be resolved via plebbit-js.
 
 ### 3. Author Reputation (Weight: 18% without IP, 14% with IP)
 
