@@ -152,20 +152,7 @@ The hostile sub's massive negative karma only counts as 1 negative vote, not eno
 
 **Mitigation - Domain-only karma**: To prevent self-promotion attacks, only karma from **domain-addressed subplebbits** is counted. IPNS addresses (like `12D3KooW...`) are free to create, making them vulnerable to sybil attacks. Domain addresses (like `example.eth`, `example.sol`, `example.com`) cost money to acquire, creating an economic barrier that makes mass subplebbit creation impractical. Additionally, the `/evaluate` endpoint only accepts requests from domain-addressed subplebbits that can be resolved via plebbit-js.
 
-### 3. Author Reputation (Weight: 18% without IP, 14% with IP)
-
-Evaluates whether the author has verified publication history in this subplebbit.
-
-| Signal               | Score Impact | Description                                |
-| -------------------- | ------------ | ------------------------------------------ |
-| Has `lastCommentCid` | -0.20        | Verified history exists in this subplebbit |
-| No verified history  | +0.10        | No record of previous activity             |
-
-**Note**: We intentionally do NOT use `author.previousCommentCid` as a trust signal because it's user-provided and can be faked.
-
-**Rationale**: Authors with verified publication history have demonstrated willingness to participate legitimately.
-
-### 4. Comment Content/Title Risk (Weight: 12% without IP, 8% with IP)
+### 3. Comment Content/Title Risk (Weight: 14% without IP, 10% with IP)
 
 Analyzes comment content and title for spam indicators by querying both engine and indexer databases for similar past publications. **Only applies to comments (posts and replies)** - returns neutral score (0.5) for other publication types.
 
@@ -210,7 +197,7 @@ Analyzes comment content and title for spam indicators by querying both engine a
 
 **Note**: The base score for comments starts at 0.2 (low risk). Non-comment publications receive a neutral score of 0.5.
 
-### 5. Comment URL/Link Risk (Weight: 10% without IP, 8% with IP)
+### 4. Comment URL/Link Risk (Weight: 12% without IP, 10% with IP)
 
 Analyzes `comment.link` (the dedicated link field for link posts) for spam indicators by querying both engine and indexer databases. This is separate from URLs found in `comment.content`. **Only applies to comments (posts and replies) that have a link** - returns neutral score (0.5) for other publications or comments without links.
 
@@ -239,7 +226,7 @@ Link counts from both sources are **summed** to detect cross-subplebbit link spa
 
 **Note**: The base score for comments with links starts at 0.2 (low risk). Non-comment publications or comments without links receive a neutral score of 0.5. URL normalization removes tracking parameters (utm\_\*, fbclid, etc.) before comparison.
 
-### 6. Velocity Risk (Weight: 8% without IP, 6% with IP)
+### 5. Velocity Risk (Weight: 10% without IP, 8% with IP)
 
 Measures how frequently an author is publishing to detect burst spam behavior. Queries both engine and indexer databases to count publications by the author's **signature public key** in the last hour and last 24 hours. Counts from both sources are **summed** to capture total network-wide activity.
 
@@ -338,7 +325,7 @@ The effective rate for each check is the maximum of:
 
 **Caveat - Replay attack vulnerability**: Currently, a malicious subplebbit could repeatedly call `/evaluate` with the same publication (different session IDs) to artificially inflate an author's velocity count, making them appear to be spamming. The fix is to add a uniqueness constraint on `publication.signature.signature` for all database insertions under `/evaluate`, so duplicate publications are ignored. Until this is implemented, velocity counts from the engine database may be manipulated.
 
-### 7. Wallet Velocity Risk (Weight: 12% without IP, 12% with IP)
+### 6. Wallet Velocity Risk (Weight: 14% without IP, 14% with IP)
 
 Tracks publication velocity by wallet address from `author.wallets`. Detects coordinated spam from users who share the same wallet-verified identity (e.g., mintpass NFT holders).
 
@@ -382,7 +369,7 @@ This factor uses publication-type-specific thresholds since different actions ha
 
 **Note**: If an author has multiple wallets, the factor uses the highest velocity among all wallets. If no wallets are linked to the author, this factor is skipped (weight=0).
 
-### 8. IP Risk (Weight: 0% without IP, 20% with IP)
+### 7. IP Risk (Weight: 0% without IP, 20% with IP)
 
 When available (after iframe access), evaluates the author's IP address characteristics.
 
@@ -396,7 +383,7 @@ When available (after iframe access), evaluates the author's IP address characte
 
 **Note**: IP intelligence is best-effort and can have false positives. Use for informational purposes and rejection decisions only, not for auto-approval.
 
-### 9. Network Ban History (Weight: 6% without IP, 6% with IP)
+### 8. Network Ban History (Weight: 8% without IP, 6% with IP)
 
 Evaluates the author's ban history across all indexed subplebbits. Authors banned from multiple communities are higher risk.
 
@@ -415,7 +402,7 @@ This factor uses data collected by the indexer, which:
 
 **Rationale**: Authors banned from multiple subplebbits have a pattern of problematic behavior.
 
-### 10. ModQueue Rejection Rate (Weight: 6% without IP, 6% with IP)
+### 9. ModQueue Rejection Rate (Weight: 8% without IP, 6% with IP)
 
 Evaluates what percentage of the author's modQueue submissions were rejected.
 
@@ -436,7 +423,7 @@ The indexer tracks `subplebbit.modQueue.pendingApproval` entries and detects res
 
 **Rationale**: Authors whose submissions are frequently rejected by moderators are more likely to be spamming.
 
-### 11. Network Removal Rate (Weight: 6% without IP, 6% with IP)
+### 10. Network Removal Rate (Weight: 8% without IP, 8% with IP)
 
 Evaluates what percentage of the author's comments have been removed across all indexed subplebbits.
 
@@ -463,17 +450,16 @@ Weights are redistributed based on whether IP information is available:
 
 | Factor                     | Without IP | With IP  |
 | -------------------------- | ---------- | -------- |
-| Author Reputation          | 18%        | 14%      |
-| Comment Content/Title Risk | 12%        | 8%       |
-| Comment URL/Link Risk      | 10%        | 8%       |
-| Velocity Risk              | 8%         | 6%       |
-| Account Age                | 12%        | 8%       |
-| Karma Score                | 10%        | 6%       |
-| Wallet Velocity            | 12%        | 12%      |
+| Comment Content/Title Risk | 14%        | 10%      |
+| Comment URL/Link Risk      | 12%        | 10%      |
+| Velocity Risk              | 10%        | 8%       |
+| Account Age                | 14%        | 10%      |
+| Karma Score                | 12%        | 8%       |
+| Wallet Velocity            | 14%        | 14%      |
 | IP Risk                    | 0%         | 20%      |
-| Network Ban History        | 6%         | 6%       |
-| ModQueue Rejection Rate    | 6%         | 6%       |
-| Network Removal Rate       | 6%         | 6%       |
+| Network Ban History        | 8%         | 6%       |
+| ModQueue Rejection Rate    | 8%         | 6%       |
+| Network Removal Rate       | 8%         | 8%       |
 | **Total**                  | **100%**   | **100%** |
 
 ## Score Calculation

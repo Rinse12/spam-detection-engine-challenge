@@ -49,7 +49,6 @@ export interface RiskContext {
  * Two configurations: with and without IP info.
  */
 export interface WeightConfig {
-    authorReputation: number;
     commentContentTitleRisk: number;
     commentUrlRisk: number;
     velocityRisk: number;
@@ -70,17 +69,16 @@ export interface WeightConfig {
  * Total: 1.0
  */
 export const WEIGHTS_NO_IP: WeightConfig = {
-    authorReputation: 0.18,
-    commentContentTitleRisk: 0.12,
-    commentUrlRisk: 0.1,
-    velocityRisk: 0.08,
-    accountAge: 0.12,
-    karmaScore: 0.1,
+    commentContentTitleRisk: 0.14,
+    commentUrlRisk: 0.12,
+    velocityRisk: 0.1,
+    accountAge: 0.14,
+    karmaScore: 0.12,
     ipRisk: 0,
-    walletVelocity: 0.12,
-    networkBanHistory: 0.06,
-    modqueueRejectionRate: 0.06,
-    networkRemovalRate: 0.06
+    walletVelocity: 0.14,
+    networkBanHistory: 0.08,
+    modqueueRejectionRate: 0.08,
+    networkRemovalRate: 0.08
 };
 
 /**
@@ -88,15 +86,14 @@ export const WEIGHTS_NO_IP: WeightConfig = {
  * Total: 1.0
  */
 export const WEIGHTS_WITH_IP: WeightConfig = {
-    authorReputation: 0.14,
-    commentContentTitleRisk: 0.08,
-    commentUrlRisk: 0.08,
-    velocityRisk: 0.06,
-    accountAge: 0.08,
-    karmaScore: 0.06,
+    commentContentTitleRisk: 0.1,
+    commentUrlRisk: 0.1,
+    velocityRisk: 0.08,
+    accountAge: 0.1,
+    karmaScore: 0.08,
     ipRisk: 0.2,
-    walletVelocity: 0.12,
+    walletVelocity: 0.14,
     networkBanHistory: 0.06,
     modqueueRejectionRate: 0.06,
-    networkRemovalRate: 0.06
+    networkRemovalRate: 0.08
 };

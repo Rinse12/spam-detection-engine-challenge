@@ -5,7 +5,6 @@ import { WEIGHTS_NO_IP, WEIGHTS_WITH_IP } from "./types.js";
 import { CombinedDataService } from "./combined-data-service.js";
 import {
     calculateAccountAge,
-    calculateAuthorReputation,
     calculateCommentContentTitleRisk,
     calculateCommentUrlRisk,
     calculateIpRisk,
@@ -43,7 +42,6 @@ export interface CalculateRiskScoreOptions {
  * The risk score is a weighted combination of multiple factors:
  * - Account Age: How long the author has been active
  * - Karma Score: Author's accumulated karma (postScore + replyScore)
- * - Author Reputation: Whether the author has verified history
  * - Content Risk: Analysis of suspicious patterns in content
  * - Velocity Risk: How frequently the author is publishing
  * - Wallet Velocity: Publication rate per wallet address (detects coordinated spam)
@@ -81,7 +79,6 @@ export function calculateRiskScore(options: CalculateRiskScoreOptions): RiskScor
     const factors: RiskFactor[] = [
         calculateAccountAge(ctx, weights.accountAge),
         calculateKarma(ctx, weights.karmaScore),
-        calculateAuthorReputation(ctx, weights.authorReputation),
         calculateCommentContentTitleRisk(ctx, weights.commentContentTitleRisk),
         calculateCommentUrlRisk(ctx, weights.commentUrlRisk),
         calculateVelocity(ctx, weights.velocityRisk),
