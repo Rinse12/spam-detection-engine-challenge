@@ -2,36 +2,77 @@ import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from "vite
 import { createServer, type SpamDetectionServer } from "../src/index.js";
 import * as cborg from "cborg";
 import { fromString as uint8ArrayFromString } from "uint8arrays/from-string";
-import { signBufferEd25519, getPublicKeyFromPrivateKey } from "../src/plebbit-js-signer.js";
+import { toString as uint8ArrayToString } from "uint8arrays/to-string";
+import { signBufferEd25519, getPublicKeyFromPrivateKey, getPlebbitAddressFromPublicKey } from "../src/plebbit-js-signer.js";
 import { resetPlebbitLoaderForTest, setPlebbitLoaderForTest } from "../src/subplebbit-resolver.js";
 
 // Cloudflare Turnstile test keys - work on any domain including localhost
 const TURNSTILE_TEST_SITE_KEY = "1x00000000000000000000AA"; // Always passes
 
 const baseTimestamp = Math.floor(Date.now() / 1000);
-let signatureCounter = 0;
-const createUniqueSignature = () => ({
-    type: "ed25519",
-    signature: `sig-${Date.now()}-${signatureCounter++}`,
-    publicKey: "pk",
-    signedPropertyNames: ["author"]
-});
-const baseSignature = {
-    type: "ed25519",
-    signature: "sig",
-    publicKey: "pk",
-    signedPropertyNames: ["author"]
+
+// Signed property names for comment publications (from plebbit-js CommentSignedPropertyNames)
+const CommentSignedPropertyNames = [
+    "timestamp",
+    "flair",
+    "subplebbitAddress",
+    "author",
+    "protocolVersion",
+    "content",
+    "spoiler",
+    "nsfw",
+    "link",
+    "title",
+    "linkWidth",
+    "linkHeight",
+    "linkHtmlTagName",
+    "parentCid",
+    "postCid"
+];
+
+// Helper to create a properly signed publication signature (JSON format for publications)
+const signPublication = async (
+    publication: Record<string, unknown>,
+    signer: { privateKey: string; publicKey: string },
+    signedPropertyNames: string[]
+) => {
+    // Build props to sign, excluding null/undefined
+    const propsToSign: Record<string, unknown> = {};
+    for (const key of signedPropertyNames) {
+        if (publication[key] !== undefined && publication[key] !== null) {
+            propsToSign[key] = publication[key];
+        }
+    }
+
+    const encoded = cborg.encode(propsToSign);
+    const signatureBytes = await signBufferEd25519(encoded, signer.privateKey);
+
+    return {
+        type: "ed25519",
+        signature: uint8ArrayToString(signatureBytes, "base64"),
+        publicKey: signer.publicKey,
+        signedPropertyNames: Object.keys(propsToSign)
+    };
 };
+
 const baseSubplebbitAuthor = {
     postScore: 0,
     replyScore: 0,
     firstCommentTimestamp: baseTimestamp - 86400,
     lastCommentCid: "QmYwAPJzv5CZsnAzt8auVZRn9p6nxfZmZ75W6rS4ju4Khu"
 };
+
+// Subplebbit signer (signs requests to the spam detection server)
 const testPrivateKey = Buffer.alloc(32, 7).toString("base64");
 const alternatePrivateKey = Buffer.alloc(32, 3).toString("base64");
+// Author signer (signs publications - separate from subplebbit signer)
+const authorPrivateKey = Buffer.alloc(32, 9).toString("base64");
+
 let testPublicKey = "";
 let alternatePublicKey = "";
+let authorPublicKey = "";
+let authorPlebbitAddress = ""; // Derived from author's public key (B58 format)
+
 let testSigner = {
     privateKey: testPrivateKey,
     publicKey: "",
@@ -42,10 +83,18 @@ let alternateSigner = {
     publicKey: "",
     type: "ed25519"
 };
+let authorSigner = {
+    privateKey: authorPrivateKey,
+    publicKey: "",
+    type: "ed25519"
+};
 
 beforeAll(async () => {
     testPublicKey = await getPublicKeyFromPrivateKey(testPrivateKey);
     alternatePublicKey = await getPublicKeyFromPrivateKey(alternatePrivateKey);
+    authorPublicKey = await getPublicKeyFromPrivateKey(authorPrivateKey);
+    // Derive the plebbit address from the author's public key (B58 peer ID format)
+    authorPlebbitAddress = await getPlebbitAddressFromPublicKey(authorPublicKey);
     testSigner = {
         privateKey: testPrivateKey,
         publicKey: testPublicKey,
@@ -54,6 +103,11 @@ beforeAll(async () => {
     alternateSigner = {
         privateKey: alternatePrivateKey,
         publicKey: alternatePublicKey,
+        type: "ed25519"
+    };
+    authorSigner = {
+        privateKey: authorPrivateKey,
+        publicKey: authorPublicKey,
         type: "ed25519"
     };
 });
@@ -93,7 +147,8 @@ const createEvaluatePayload = async ({
     omitSubplebbitAuthor = false,
     omitAuthorAddress = false,
     omitSubplebbitAddress = false,
-    signer = testSigner
+    signer = testSigner,
+    publicationSigner = authorSigner
 }: {
     commentOverrides?: Record<string, unknown>;
     authorOverrides?: Record<string, unknown>;
@@ -102,9 +157,11 @@ const createEvaluatePayload = async ({
     omitAuthorAddress?: boolean;
     omitSubplebbitAddress?: boolean;
     signer?: typeof testSigner;
+    publicationSigner?: typeof authorSigner;
 } = {}) => {
     const author: Record<string, unknown> = {
-        address: "12D3KooWTestAddress",
+        // Use derived plebbit address (B58 peer ID) that matches the publication signer
+        address: authorPlebbitAddress,
         ...authorOverrides
     };
 
@@ -119,19 +176,32 @@ const createEvaluatePayload = async ({
         delete author.address;
     }
 
-    const comment = {
+    // Build comment without signature first
+    const commentWithoutSignature: Record<string, unknown> = {
         author,
         subplebbitAddress: "test-sub.eth",
         timestamp: baseTimestamp,
         protocolVersion: "1",
-        signature: createUniqueSignature(),
         content: "Hello world",
         ...commentOverrides
     };
 
     if (omitSubplebbitAddress) {
-        delete (comment as Record<string, unknown>).subplebbitAddress;
+        delete commentWithoutSignature.subplebbitAddress;
     }
+
+    // Sign the publication properly (unless commentOverrides already has a signature)
+    let publicationSignature;
+    if (commentOverrides.signature) {
+        publicationSignature = commentOverrides.signature;
+    } else {
+        publicationSignature = await signPublication(commentWithoutSignature, publicationSigner, CommentSignedPropertyNames);
+    }
+
+    const comment = {
+        ...commentWithoutSignature,
+        signature: publicationSignature
+    };
 
     const challengeRequest = { comment };
     const timestamp = Math.floor(Date.now() / 1000);
@@ -195,6 +265,9 @@ describe("API Routes", () => {
             const validRequest = await createEvaluatePayload();
             const response = await injectCbor(server.fastify, "POST", "/api/v1/evaluate", validRequest);
 
+            if (response.statusCode !== 200) {
+                console.log("Response body:", response.json());
+            }
             expect(response.statusCode).toBe(200);
             const body = response.json();
 
@@ -220,8 +293,9 @@ describe("API Routes", () => {
         });
 
         it("should return lower risk score for established author", async () => {
+            // Test established author - subplebbit data indicates established user
+            // (Note: address must match publication signer's public key for signature verification)
             const establishedAuthorRequest = await createEvaluatePayload({
-                authorOverrides: { address: "12D3KooWEstablished" },
                 subplebbitOverrides: {
                     firstCommentTimestamp: baseTimestamp - 400 * 86400, // 400 days ago
                     postScore: 150,
@@ -237,8 +311,8 @@ describe("API Routes", () => {
 
         it("should return higher risk score for new author", async () => {
             // First get the established author's score (100 days old with positive karma)
+            // (Note: Both use same signer/address - we're testing subplebbit data differences)
             const establishedRequest = await createEvaluatePayload({
-                authorOverrides: { address: "12D3KooWEstablished2" },
                 subplebbitOverrides: {
                     firstCommentTimestamp: baseTimestamp - 100 * 86400, // 100 days ago
                     postScore: 50,
@@ -250,7 +324,6 @@ describe("API Routes", () => {
 
             // Then get the new author's score (very new user with minimal history)
             const newAuthorRequest = await createEvaluatePayload({
-                authorOverrides: { address: "12D3KooWNewAccount" },
                 subplebbitOverrides: {
                     firstCommentTimestamp: baseTimestamp - 60, // Just 1 minute ago (very new)
                     postScore: -5, // Negative karma
@@ -340,15 +413,109 @@ describe("API Routes", () => {
             expect(body.error).toContain("Only domain-addressed subplebbits are supported");
         });
 
-        it("should return 409 Conflict when same publication is submitted twice (replay attack prevention)", async () => {
-            const uniqueSignature = "replay-attack-test-sig-" + Date.now();
-            const payload1 = await createEvaluatePayload({
+        it("should return 401 for forged publication signature (attack vector)", async () => {
+            // SECURITY TEST: A malicious subplebbit could try to forge a publication
+            // with a fake author address to inflate the victim's velocity scores
+            // Create a publication with a mismatched signature
+            const forgedPayload = await createEvaluatePayload({
+                // Use valid signer to create request signature, but forge the publication signature
                 commentOverrides: {
+                    // Provide a fake signature that doesn't match the content
                     signature: {
-                        ...baseSignature,
-                        signature: uniqueSignature
+                        type: "ed25519",
+                        signature: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", // Invalid base64 signature
+                        publicKey: authorSigner.publicKey,
+                        signedPropertyNames: ["author", "subplebbitAddress", "timestamp", "protocolVersion", "content"]
                     }
                 }
+            });
+
+            const response = await injectCbor(server.fastify, "POST", "/api/v1/evaluate", forgedPayload);
+
+            expect(response.statusCode).toBe(401);
+            const body = response.json();
+            expect(body.error).toContain("Publication signature is invalid");
+        });
+
+        it("should return 401 for publication signed by different author (impersonation attack)", async () => {
+            // SECURITY TEST: Subplebbit tries to submit publication claiming to be from
+            // author A but signed by author B
+            const victimAddress = authorPlebbitAddress; // The victim's address
+
+            // Build comment claiming to be from victim
+            const commentWithoutSig = {
+                author: {
+                    address: victimAddress, // Claiming to be the victim
+                    subplebbit: baseSubplebbitAuthor
+                },
+                subplebbitAddress: "test-sub.eth",
+                timestamp: baseTimestamp,
+                protocolVersion: "1",
+                content: "Forged content to inflate victim's velocity"
+            };
+
+            // Sign with the attacker's (testSigner) key, not the victim's
+            const attackerSignature = await signPublication(
+                commentWithoutSig,
+                testSigner, // Using wrong signer (attacker's key)
+                CommentSignedPropertyNames
+            );
+
+            const comment = {
+                ...commentWithoutSig,
+                signature: attackerSignature
+            };
+
+            const challengeRequest = { comment };
+            const timestamp = Math.floor(Date.now() / 1000);
+            const propsToSign = { challengeRequest, timestamp };
+            const requestSignature = await createRequestSignature(propsToSign, testSigner);
+
+            const payload = {
+                ...propsToSign,
+                signature: requestSignature
+            };
+
+            const response = await injectCbor(server.fastify, "POST", "/api/v1/evaluate", payload);
+
+            // Should be rejected because signature.publicKey doesn't match author.address
+            expect(response.statusCode).toBe(401);
+            const body = response.json();
+            expect(body.error).toContain("Publication signature is invalid");
+        });
+
+        it("should return 400 for unknown publication type", async () => {
+            // SECURITY TEST: Unknown publication types should be rejected
+            // Build a request with no known publication type (no comment, vote, etc.)
+            const timestamp = Math.floor(Date.now() / 1000);
+            const challengeRequest = {
+                // No comment, vote, commentEdit, commentModeration, or subplebbitEdit
+                unknownType: {
+                    author: { address: authorPlebbitAddress },
+                    content: "This is not a valid publication type"
+                }
+            };
+
+            const propsToSign = { challengeRequest, timestamp };
+            const requestSignature = await createRequestSignature(propsToSign, testSigner);
+
+            const payload = {
+                ...propsToSign,
+                signature: requestSignature
+            };
+
+            const response = await injectCbor(server.fastify, "POST", "/api/v1/evaluate", payload);
+
+            expect(response.statusCode).toBe(400);
+            const body = response.json();
+            // Zod validation catches this first with "missing publication" error
+            expect(body.error).toContain("missing publication");
+        });
+
+        it("should return 409 Conflict when same publication is submitted twice (replay attack prevention)", async () => {
+            // Create a properly signed publication
+            const payload1 = await createEvaluatePayload({
+                commentOverrides: { content: "Replay attack test content" }
             });
 
             // First submission should succeed
@@ -357,15 +524,15 @@ describe("API Routes", () => {
             const firstBody = firstResponse.json();
             expect(firstBody.sessionId).toBeDefined();
 
-            // Create a new payload with same publication signature but fresh request timestamp/signature
-            const payload2 = await createEvaluatePayload({
-                commentOverrides: {
-                    signature: {
-                        ...baseSignature,
-                        signature: uniqueSignature
-                    }
-                }
-            });
+            // Submit the exact same payload again (same publication signature)
+            // Need to re-sign the request but keep the same challengeRequest
+            const timestamp2 = Math.floor(Date.now() / 1000);
+            const propsToSign2 = { challengeRequest: payload1.challengeRequest, timestamp: timestamp2 };
+            const requestSignature2 = await createRequestSignature(propsToSign2, testSigner);
+            const payload2 = {
+                ...propsToSign2,
+                signature: requestSignature2
+            };
 
             // Second submission with same publication signature should fail with 409
             const secondResponse = await injectCbor(server.fastify, "POST", "/api/v1/evaluate", payload2);
@@ -375,24 +542,28 @@ describe("API Routes", () => {
         });
 
         it("should not inflate velocity when replay attack is attempted", async () => {
-            const uniqueSignature = "velocity-replay-test-sig-" + Date.now();
-            const authorPublicKey = baseSignature.publicKey;
+            // Create a properly signed publication
+            const payload = await createEvaluatePayload({
+                commentOverrides: { content: "Velocity replay test content" }
+            });
+
+            // Get the author's public key from the publication signature
+            const pubSignature = payload.challengeRequest.comment.signature as { publicKey: string };
 
             // Submit the same publication multiple times (with fresh request signatures each time)
             for (let i = 0; i < 3; i++) {
-                const payload = await createEvaluatePayload({
-                    commentOverrides: {
-                        signature: {
-                            ...baseSignature,
-                            signature: uniqueSignature
-                        }
-                    }
-                });
-                await injectCbor(server.fastify, "POST", "/api/v1/evaluate", payload);
+                const timestamp = Math.floor(Date.now() / 1000);
+                const propsToSign = { challengeRequest: payload.challengeRequest, timestamp };
+                const requestSignature = await createRequestSignature(propsToSign, testSigner);
+                const replayPayload = {
+                    ...propsToSign,
+                    signature: requestSignature
+                };
+                await injectCbor(server.fastify, "POST", "/api/v1/evaluate", replayPayload);
             }
 
             // Check that velocity only counts 1 (not 3)
-            const stats = server.db.getAuthorVelocityStats(authorPublicKey, "post");
+            const stats = server.db.getAuthorVelocityStats(pubSignature.publicKey, "post");
             expect(stats.lastHour).toBe(1);
             expect(stats.last24Hours).toBe(1);
         });
@@ -401,22 +572,27 @@ describe("API Routes", () => {
             // This replicates the real structure sent by plebbit-js challenge package
             // The challengeRequest includes extra fields like type, encrypted, challengeRequestId, etc.
             // that are not part of DecryptedChallengeRequestSchema but ARE signed
-            const comment = {
+
+            // Build comment without signature first
+            // Note: author.address must match the publication signer's public key
+            const commentWithoutSig = {
                 title: "Test Post",
                 author: {
-                    address: "12D3KooWTestAddress",
+                    address: authorPlebbitAddress,
                     subplebbit: baseSubplebbitAuthor
                 },
                 content: "This is a test comment to see the challenge response.",
-                signature: {
-                    type: "ed25519",
-                    publicKey: "lc91opIDUjPDf2b2Rs9IYE+DL569Og98CHNkTH5Qnkg",
-                    signature: "EHZ/TySXr4GiuJMpHbIrA4qno8e0pIkcldKyQEob39Hr1zKaExm2hMbO7JRQGyljSUlvIELKdAK1f/aq0IhLDg",
-                    signedPropertyNames: ["content", "title", "author", "subplebbitAddress", "protocolVersion", "timestamp"]
-                },
                 timestamp: baseTimestamp,
                 protocolVersion: "1.0.0",
                 subplebbitAddress: "test-sub.eth"
+            };
+
+            // Sign the comment properly
+            const commentSignature = await signPublication(commentWithoutSig, authorSigner, CommentSignedPropertyNames);
+
+            const comment = {
+                ...commentWithoutSig,
+                signature: commentSignature
             };
 
             // Full ChallengeRequestMessage structure (as sent by plebbit-js)
@@ -462,9 +638,8 @@ describe("API Routes", () => {
 
             const response = await injectCbor(server.fastify, "POST", "/api/v1/evaluate", payload);
 
-            // This should return 200, but currently returns 401 because Zod strips
-            // the extra fields (type, encrypted, signature, challengeRequestId, etc.)
-            // before signature verification
+            // This should return 200 - the extra fields in challengeRequest are allowed
+            // because they're not part of DecryptedChallengeRequestSchema
             expect(response.statusCode).toBe(200);
             const body = response.json();
             expect(body.riskScore).toBeDefined();
@@ -478,7 +653,6 @@ describe("API Routes", () => {
         beforeEach(async () => {
             // Create a challenge session first
             const evaluatePayload = await createEvaluatePayload({
-                authorOverrides: { address: "12D3KooWVerifyTest" },
                 commentOverrides: { subplebbitAddress: "verify-sub.eth" }
             });
             const evalResponse = await injectCbor(server.fastify, "POST", "/api/v1/evaluate", evaluatePayload);
@@ -559,7 +733,6 @@ describe("API Routes", () => {
         beforeEach(async () => {
             // Create a challenge session first
             const evaluatePayload = await createEvaluatePayload({
-                authorOverrides: { address: "12D3KooWIframeTest" },
                 commentOverrides: { subplebbitAddress: "iframe-sub.eth" }
             });
             const evalResponse = await injectCbor(server.fastify, "POST", "/api/v1/evaluate", evaluatePayload);
@@ -653,9 +826,7 @@ describe("Turnstile E2E Flow", () => {
 
     it("should complete full Turnstile flow with Cloudflare test keys", async () => {
         // Step 1: Create challenge session via /evaluate
-        const evaluatePayload = await createEvaluatePayload({
-            authorOverrides: { address: "12D3KooWTurnstileE2E" }
-        });
+        const evaluatePayload = await createEvaluatePayload();
         const evalResponse = await injectCbor(server.fastify, "POST", "/api/v1/evaluate", evaluatePayload);
 
         expect(evalResponse.statusCode).toBe(200);
@@ -704,9 +875,7 @@ describe("Turnstile E2E Flow", () => {
     });
 
     it("should serve iframe with correct Turnstile site key", async () => {
-        const evaluatePayload = await createEvaluatePayload({
-            authorOverrides: { address: "12D3KooWSiteKeyTest" }
-        });
+        const evaluatePayload = await createEvaluatePayload();
         const evalResponse = await injectCbor(server.fastify, "POST", "/api/v1/evaluate", evaluatePayload);
 
         const { sessionId } = evalResponse.json();
@@ -753,9 +922,7 @@ describe("Turnstile Failure Scenarios", () => {
 
     it("should return 401 when Turnstile verification fails", async () => {
         // Create challenge
-        const evaluatePayload = await createEvaluatePayload({
-            authorOverrides: { address: "12D3KooWFailTest" }
-        });
+        const evaluatePayload = await createEvaluatePayload();
         const evalResponse = await injectCbor(server.fastify, "POST", "/api/v1/evaluate", evaluatePayload);
 
         const { sessionId } = evalResponse.json();

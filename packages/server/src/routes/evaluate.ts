@@ -7,6 +7,7 @@ import { EvaluateRequestSchema, type EvaluateRequest } from "./schemas.js";
 import { derivePublicationFromChallengeRequest } from "../plebbit-js-internals.js";
 import { randomUUID } from "crypto";
 import { verifySignedRequest } from "../security/request-signature.js";
+import { verifyPublicationSignature } from "../security/publication-signature.js";
 import { resolveSubplebbitPublicKey } from "../subplebbit-resolver.js";
 import { calculateRiskScore } from "../risk-score/index.js";
 import { getAuthorFromChallengeRequest } from "../risk-score/utils.js";
@@ -69,6 +70,33 @@ export function registerEvaluateRoute(fastify: FastifyInstance, options: Evaluat
                 throw invalidError;
             }
 
+            // Validate publication type - reject unknown types
+            const typedChallengeRequest = challengeRequest as DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor;
+            const hasKnownPublicationType =
+                typedChallengeRequest.comment ||
+                typedChallengeRequest.vote ||
+                typedChallengeRequest.commentEdit ||
+                typedChallengeRequest.commentModeration ||
+                typedChallengeRequest.subplebbitEdit;
+
+            if (!hasKnownPublicationType) {
+                const error = new Error("Unknown or missing publication type");
+                (error as { statusCode?: number }).statusCode = 400;
+                throw error;
+            }
+
+            // Verify publication signature (prevents forged publications)
+            const plebbit = await fastify.getPlebbitInstance();
+            const verificationResult = await verifyPublicationSignature({
+                challengeRequest: typedChallengeRequest,
+                plebbit
+            });
+            if (!verificationResult.valid) {
+                const error = new Error(`Publication signature is invalid: ${verificationResult.reason}`);
+                (error as { statusCode?: number }).statusCode = 401;
+                throw error;
+            }
+
             const subplebbitAddress = publication.subplebbitAddress;
             // Convert Uint8Array publicKey to base64 string for comparisons and storage
             const subplebbitPublicKeyFromRequestBody = uint8ArrayToString(signature.publicKey, "base64");
@@ -84,7 +112,6 @@ export function registerEvaluateRoute(fastify: FastifyInstance, options: Evaluat
             // Verify the request signature matches the resolved subplebbit public key
             let resolvedPublicKey: string;
             try {
-                const plebbit = await fastify.getPlebbitInstance();
                 resolvedPublicKey = await resolveSubplebbitPublicKey(subplebbitAddress, plebbit);
             } catch (error) {
                 const resolveError = new Error("Unable to resolve subplebbit address");
@@ -138,7 +165,6 @@ export function registerEvaluateRoute(fastify: FastifyInstance, options: Evaluat
             });
 
             // Store publication in database for velocity tracking
-            const typedChallengeRequest = challengeRequest as DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor;
             if (typedChallengeRequest.comment) {
                 db.insertComment({
                     sessionId,
