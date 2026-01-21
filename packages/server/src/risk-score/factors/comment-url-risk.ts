@@ -13,6 +13,8 @@ import {
 // Configuration: Detection Thresholds
 // ============================================
 
+// TODO handle a highly risk case where URL is not whitelisted and is first time seen by the indexer
+// make sure with the indexer that the comment hasn't been deleted recently, or otherwise it means the URLs could be spammy
 /**
  * Risk score adjustments for URL detection patterns.
  * All values are additive to the base score.
@@ -154,11 +156,11 @@ export function calculateCommentUrlRisk(ctx: RiskContext, weight: number): RiskF
         title: comment.title
     });
 
-    // No URLs found - neutral score
+    // No URLs found - positive signal (no URLs is good)
     if (allUrls.length === 0) {
         return {
             name: "commentUrlRisk",
-            score: 0.5, // Neutral score
+            score: 0.2, // Positive signal - no URLs is good
             weight,
             explanation: "Link analysis: no URLs found"
         };

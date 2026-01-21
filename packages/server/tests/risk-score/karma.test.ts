@@ -101,7 +101,8 @@ describe("calculateKarma (count-based)", () => {
 
             const result = calculateKarma(ctx, 0.1);
 
-            expect(result.score).toBe(0.5);
+            // No karma data is a slight negative signal (unknown author)
+            expect(result.score).toBe(0.6);
             expect(result.explanation).toContain("no karma data");
         });
     });
@@ -454,8 +455,8 @@ describe("calculateKarma (count-based)", () => {
 
             const result = calculateKarma(ctx, 0.1);
 
-            // No positive or negative subs
-            expect(result.score).toBe(0.5);
+            // No positive or negative subs - no karma data is a slight negative signal
+            expect(result.score).toBe(0.6);
             expect(result.explanation).toContain("no karma data");
         });
     });
@@ -680,8 +681,8 @@ describe("calculateKarma (count-based)", () => {
 
             const result = calculateKarma(ctx, 0.1);
 
-            // No domain subs with karma = NEUTRAL
-            expect(result.score).toBe(0.5);
+            // No domain subs with karma = NO_DATA (slight negative signal)
+            expect(result.score).toBe(0.6);
             expect(result.explanation).toBe("Karma: no karma data");
         });
     });

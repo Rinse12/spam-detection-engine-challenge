@@ -30,6 +30,7 @@ const SCORES = {
     POSITIVE: 0.2,
     SLIGHTLY_POSITIVE: 0.35,
     NEUTRAL: 0.5,
+    NO_DATA: 0.6, // Unknown author is a slight negative signal
     SLIGHTLY_NEGATIVE: 0.65,
     NEGATIVE: 0.8,
     VERY_NEGATIVE: 0.9
@@ -110,8 +111,8 @@ export function calculateKarma(ctx: RiskContext, weight: number): RiskFactor {
     let description: string;
 
     if (totalSubsWithKarma === 0) {
-        // No karma data at all
-        score = SCORES.NEUTRAL;
+        // No karma data at all - unknown author is a slight negative signal
+        score = SCORES.NO_DATA;
         description = "no karma data";
     } else if (netCount >= THRESHOLDS.VERY_POSITIVE) {
         score = SCORES.VERY_POSITIVE;

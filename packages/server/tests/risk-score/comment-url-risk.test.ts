@@ -94,7 +94,7 @@ describe("calculateCommentUrlRisk", () => {
     });
 
     describe("comments without URLs", () => {
-        it("should return neutral score for comment without any URLs", () => {
+        it("should return low risk score for comment without any URLs", () => {
             const challengeRequest = createMockChallengeRequest("author1", undefined, "Just some text content without URLs");
 
             const ctx: RiskContext = {
@@ -107,7 +107,8 @@ describe("calculateCommentUrlRisk", () => {
 
             const result = calculateCommentUrlRisk(ctx, 0.12);
 
-            expect(result.score).toBe(0.5);
+            // No URLs is a positive signal (lower risk)
+            expect(result.score).toBe(0.2);
             expect(result.explanation).toContain("no URLs found");
         });
     });

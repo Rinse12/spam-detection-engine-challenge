@@ -16,8 +16,9 @@ import { getAuthorPublicKeyFromChallengeRequest, getPublicationType } from "../u
 /**
  * Time window for similarity detection (24 hours in seconds).
  */
-const SIMILARITY_WINDOW_SECONDS = 24 * 60 * 60;
+const SIMILARITY_WINDOW_SECONDS = 24 * 60 * 60; // TODO remove window
 
+// TODO remove URLs handling from this file
 /**
  * Minimum similarity ratio to consider content as similar.
  * 0.6 = 60% word overlap (Jaccard similarity)

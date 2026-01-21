@@ -97,7 +97,7 @@ We cannot detect subplebbit ownership at the protocol level (author signer keys 
 | > 7 days    | 0.50       | Some history                     |
 | > 1 day     | 0.70       | New account                      |
 | < 1 day     | 0.85       | Very new account                 |
-| No history  | 0.90       | No history in our system         |
+| No history  | 1.0        | No history in our system         |
 
 **Rationale**: Older accounts (as observed by our system) have demonstrated sustained, non-malicious behavior over time.
 
@@ -125,16 +125,16 @@ Instead of using raw karma values (which can be manipulated by colluding subpleb
 - Zero karma: Doesn't count either way
 - Net count = (positive subs) - (negative subs)
 
-| Net Sub Count | Risk Score | Description                       |
-| ------------- | ---------- | --------------------------------- |
-| >= +5         | 0.10       | Widely trusted across network     |
-| +3 to +4      | 0.20       | Trusted in multiple communities   |
-| +1 to +2      | 0.35       | Generally positive standing       |
-| 0             | 0.50       | Mixed/balanced reputation         |
-| -1 to -2      | 0.65       | Some concerns                     |
-| -3 to -4      | 0.80       | Multiple communities flag issues  |
-| <= -5         | 0.90       | Widely mistrusted                 |
-| No data       | 0.50       | Neutral (no karma data available) |
+| Net Sub Count | Risk Score | Description                      |
+| ------------- | ---------- | -------------------------------- |
+| >= +5         | 0.10       | Widely trusted across network    |
+| +3 to +4      | 0.20       | Trusted in multiple communities  |
+| +1 to +2      | 0.35       | Generally positive standing      |
+| 0             | 0.50       | Mixed/balanced reputation        |
+| -1 to -2      | 0.65       | Some concerns                    |
+| -3 to -4      | 0.80       | Multiple communities flag issues |
+| <= -5         | 0.90       | Widely mistrusted                |
+| No data       | 0.60       | Unknown author (slight negative) |
 
 **Example - Collusion resistance:**
 
@@ -278,7 +278,7 @@ Popular platforms where URL paths naturally vary (different content, not spam va
 - News/content: medium.com, substack.com
 - Crypto block explorers: etherscan.io, arbiscan.io, basescan.org, bscscan.com, polygonscan.com, ftmscan.com, snowtrace.io, avascan.info
 
-**Note**: The base score for comments with URLs starts at 0.2 (low risk). Comments without URLs and non-comment publications receive a neutral score of 0.5. URL normalization removes tracking parameters (utm\_\*, fbclid, etc.) before comparison.
+**Note**: The base score for comments with URLs starts at 0.2 (low risk). Comments without URLs receive a score of 0.2 (positive signal - no URLs is good). Non-comment publications receive a neutral score of 0.5. URL normalization removes tracking parameters (utm\_\*, fbclid, etc.) before comparison.
 
 ### 5. Velocity Risk (Weight: 10% without IP, 8% with IP)
 
@@ -437,7 +437,7 @@ When available (after iframe access), evaluates the author's IP address characte
 
 **Note**: IP intelligence is best-effort and can have false positives. Use for informational purposes and rejection decisions only, not for auto-approval.
 
-### 8. Network Ban History (Weight: 8% without IP, 6% with IP)
+### 8. Network Ban History (Weight: 10% without IP, 8% with IP)
 
 Evaluates the author's ban history across all indexed subplebbits. Authors banned from multiple communities are higher risk.
 
@@ -456,7 +456,7 @@ This factor uses data collected by the indexer, which:
 
 **Rationale**: Authors banned from multiple subplebbits have a pattern of problematic behavior.
 
-### 9. ModQueue Rejection Rate (Weight: 8% without IP, 6% with IP)
+### 9. ModQueue Rejection Rate (Weight: 6% without IP, 4% with IP)
 
 Evaluates what percentage of the author's modQueue submissions were rejected.
 
@@ -511,8 +511,8 @@ Weights are redistributed based on whether IP information is available:
 | Karma Score                | 12%        | 8%       |
 | Wallet Velocity            | 14%        | 14%      |
 | IP Risk                    | 0%         | 20%      |
-| Network Ban History        | 8%         | 6%       |
-| ModQueue Rejection Rate    | 8%         | 6%       |
+| Network Ban History        | 10%        | 8%       |
+| ModQueue Rejection Rate    | 6%         | 4%       |
 | Network Removal Rate       | 8%         | 8%       |
 | **Total**                  | **100%**   | **100%** |
 
@@ -536,6 +536,171 @@ These are suggested defaults for subplebbit configuration:
 | `autoRejectThreshold` | 0.8             | Auto-reject publications above this score |
 
 Publications between these thresholds trigger a challenge (e.g., CAPTCHA).
+
+## Worked Examples
+
+_Note: Update these examples whenever risk scoring logic changes._
+
+These examples show how the risk score is calculated for different scenarios. All examples assume no IP information is available (using the "Without IP" weight configuration).
+
+### Example 1: New User Sharing a Link (First Post)
+
+A brand new user making their first post with a link to their blog article.
+
+```
+comment.link: "https://blog.example.com/my-article"
+comment.title: "I wrote about my experience with decentralized social media"
+comment.content: "Check out my thoughts..."
+```
+
+| Factor             | Score                      | Weight | Weighted |
+| ------------------ | -------------------------- | ------ | -------- |
+| Account Age        | 1.0 (no history)           | 14%    | 0.140    |
+| Karma              | 0.6 (no data)              | 12%    | 0.072    |
+| Content Risk       | 0.2 (base, unique content) | 14%    | 0.028    |
+| URL Risk           | 0.2 (base, first time URL) | 12%    | 0.024    |
+| Velocity           | 0.1 (1 post/hr, normal)    | 10%    | 0.010    |
+| Wallet Velocity    | — (skipped, no wallet)     | 0%     | 0        |
+| Ban History        | 0.0 (no bans)              | 10%    | 0        |
+| ModQueue Rejection | 0.5 (no data)              | 6%     | 0.030    |
+| Removal Rate       | 0.5 (no data)              | 8%     | 0.040    |
+
+**Final Score: ~0.40** → Moderate risk, triggers CAPTCHA challenge
+
+### Example 2: Established User, No URLs
+
+A well-established user (90+ days, positive karma across 4 subs) posting a question without any links.
+
+```
+comment.link: null
+comment.title: "Question about plebbit development"
+comment.content: "Has anyone figured out how to run a subplebbit on a VPS?"
+```
+
+| Factor             | Score                        | Weight | Weighted |
+| ------------------ | ---------------------------- | ------ | -------- |
+| Account Age        | 0.2 (>90 days)               | 14%    | 0.028    |
+| Karma              | 0.2 (+3 to +4 subs positive) | 12%    | 0.024    |
+| Content Risk       | 0.2 (base, unique)           | 14%    | 0.028    |
+| URL Risk           | 0.2 (no URLs - positive)     | 12%    | 0.024    |
+| Velocity           | 0.1 (normal)                 | 10%    | 0.010    |
+| Wallet Velocity    | — (skipped)                  | 0%     | 0        |
+| Ban History        | 0.0                          | 10%    | 0        |
+| ModQueue Rejection | 0.1 (0-10% rejected)         | 6%     | 0.006    |
+| Removal Rate       | 0.1 (0-5% removed)           | 8%     | 0.008    |
+
+**Final Score: ~0.15** → Low risk, auto-accepted
+
+### Example 3: Affiliate Link Spammer
+
+A new user posting the same affiliate link for the 6th time with spammy content.
+
+```
+comment.link: "https://sketchy.io/buy/crypto?ref=abc123"
+comment.title: "FREE CRYPTO - Don't miss out!!!"
+comment.content: "Click here for FREE money!!!"
+```
+
+| Factor             | Score                                                                     | Weight | Weighted |
+| ------------------ | ------------------------------------------------------------------------- | ------ | -------- |
+| Account Age        | 0.85 (<1 day old)                                                         | 14%    | 0.119    |
+| Karma              | 0.6 (no data)                                                             | 12%    | 0.072    |
+| Content Risk       | 0.53 (base 0.2 + caps 0.08 + 3 duplicates 0.25)                           | 14%    | 0.074    |
+| URL Risk           | 0.85 (base 0.2 + 5+ same URL 0.4 + 5-9 domain 0.15 + time clustering 0.1) | 12%    | 0.102    |
+| Velocity           | 0.4 (3-5 posts/hr)                                                        | 10%    | 0.040    |
+| Wallet Velocity    | — (skipped)                                                               | 0%     | 0        |
+| Ban History        | 0.0                                                                       | 10%    | 0        |
+| ModQueue Rejection | 0.5 (no data)                                                             | 6%     | 0.030    |
+| Removal Rate       | 0.5 (no data)                                                             | 8%     | 0.040    |
+
+**Final Score: ~0.55** → Moderate-high risk, CAPTCHA required
+
+### Example 4: Coordinated Spam Campaign
+
+Multiple new accounts posting the same scam URL within minutes of each other. This is one of the spam accounts.
+
+```
+comment.link: "https://scam-token.io/presale"
+comment.title: "Amazing new token presale!"
+comment.content: "Get in early on this opportunity!"
+```
+
+10 other authors posted the same URL and similar content within the last hour.
+
+| Factor             | Score                                                      | Weight | Weighted |
+| ------------------ | ---------------------------------------------------------- | ------ | -------- |
+| Account Age        | 1.0 (no history)                                           | 14%    | 0.140    |
+| Karma              | 0.6 (no data)                                              | 12%    | 0.072    |
+| Content Risk       | 0.6 (base 0.2 + 5+ identical from others 0.4)              | 14%    | 0.084    |
+| URL Risk           | 1.0 (base 0.2 + 10+ coordinated 0.5 + time clustering 0.3) | 12%    | 0.120    |
+| Velocity           | 0.1 (first post)                                           | 10%    | 0.010    |
+| Wallet Velocity    | — (skipped)                                                | 0%     | 0        |
+| Ban History        | 0.0                                                        | 10%    | 0        |
+| ModQueue Rejection | 0.5 (no data)                                              | 6%     | 0.030    |
+| Removal Rate       | 0.5 (no data)                                              | 8%     | 0.040    |
+
+**Final Score: ~0.58** → Moderate-high risk, CAPTCHA required
+
+### Example 5: URL Variation Spammer (Time-Clustered)
+
+An author posting similar URLs with different referral codes, all within 30 minutes.
+
+```
+comment.link: "https://spam.com/promo/deal?ref=user99"
+comment.title: "Great deal here #99"
+comment.content: null
+```
+
+Same author has posted 5 similar URLs (`spam.com/promo/deal?ref=user1`, etc.) within 30 minutes.
+
+| Factor             | Score                                                        | Weight | Weighted |
+| ------------------ | ------------------------------------------------------------ | ------ | -------- |
+| Account Age        | 0.85 (<1 day old)                                            | 14%    | 0.119    |
+| Karma              | 0.6 (no data)                                                | 12%    | 0.072    |
+| Content Risk       | 0.35 (base 0.2 + similar titles 0.15)                        | 14%    | 0.049    |
+| URL Risk           | 0.85 (base 0.2 + 5+ similar clustered 0.35 + time bonus 0.3) | 12%    | 0.102    |
+| Velocity           | 0.7 (6-8 posts/hr)                                           | 10%    | 0.070    |
+| Wallet Velocity    | — (skipped)                                                  | 0%     | 0        |
+| Ban History        | 0.4 (1 ban from another sub)                                 | 10%    | 0.040    |
+| ModQueue Rejection | 0.5 (no data)                                                | 6%     | 0.030    |
+| Removal Rate       | 0.5 (no data)                                                | 8%     | 0.040    |
+
+**Final Score: ~0.60** → Moderate-high risk, CAPTCHA required
+
+### Example 6: Repeat Offender (Banned, High Removal Rate)
+
+A known bad actor with multiple bans and high removal rate posting suspicious content.
+
+```
+comment.link: "https://192.168.1.100/download.exe"
+comment.title: "FREE SOFTWARE DOWNLOAD NOW"
+comment.content: "CLICK HERE NOW!!! DON'T MISS OUT!!!"
+```
+
+| Factor             | Score                                                              | Weight | Weighted |
+| ------------------ | ------------------------------------------------------------------ | ------ | -------- |
+| Account Age        | 0.7 (>1 day, <7 days)                                              | 14%    | 0.098    |
+| Karma              | 0.8 (-3 to -4 subs negative)                                       | 12%    | 0.096    |
+| Content Risk       | 0.58 (base 0.2 + caps 0.08 + repetitive 0.1 + duplicate title 0.2) | 14%    | 0.081    |
+| URL Risk           | 0.4 (base 0.2 + IP address 0.2)                                    | 12%    | 0.048    |
+| Velocity           | 0.4 (elevated)                                                     | 10%    | 0.040    |
+| Wallet Velocity    | — (skipped)                                                        | 0%     | 0        |
+| Ban History        | 0.85 (3+ bans)                                                     | 10%    | 0.085    |
+| ModQueue Rejection | 0.9 (70%+ rejected)                                                | 6%     | 0.054    |
+| Removal Rate       | 0.9 (50%+ removed)                                                 | 8%     | 0.072    |
+
+**Final Score: ~0.69** → High risk, close to auto-reject threshold
+
+### Summary Table
+
+| Scenario                               | Final Score | Action               |
+| -------------------------------------- | ----------- | -------------------- |
+| New user, first post with link         | ~0.40       | CAPTCHA              |
+| Established user, no URLs              | ~0.15       | Auto-accept          |
+| Affiliate link spammer                 | ~0.55       | CAPTCHA              |
+| Coordinated campaign (10+ authors)     | ~0.58       | CAPTCHA              |
+| URL variation spam (time-clustered)    | ~0.60       | CAPTCHA              |
+| Repeat offender (banned, high removal) | ~0.69       | Close to auto-reject |
 
 ## Limitations
 

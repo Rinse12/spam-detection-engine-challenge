@@ -76,8 +76,8 @@ export const WEIGHTS_NO_IP: WeightConfig = {
     karmaScore: 0.12,
     ipRisk: 0,
     walletVelocity: 0.14,
-    networkBanHistory: 0.08,
-    modqueueRejectionRate: 0.08,
+    networkBanHistory: 0.1,
+    modqueueRejectionRate: 0.06,
     networkRemovalRate: 0.08
 };
 
@@ -93,7 +93,7 @@ export const WEIGHTS_WITH_IP: WeightConfig = {
     karmaScore: 0.08,
     ipRisk: 0.2,
     walletVelocity: 0.14,
-    networkBanHistory: 0.06,
-    modqueueRejectionRate: 0.06,
+    networkBanHistory: 0.08,
+    modqueueRejectionRate: 0.04,
     networkRemovalRate: 0.08
 };

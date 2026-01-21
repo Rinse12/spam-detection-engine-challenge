@@ -28,7 +28,7 @@ const SCORES = {
     MODERATE: 0.5,
     NEW: 0.7,
     VERY_NEW: 0.85,
-    NO_HISTORY: 0.9
+    NO_HISTORY: 1.0 // Maximum risk - completely unknown author
 };
 
 /**

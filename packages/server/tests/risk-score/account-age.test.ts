@@ -73,7 +73,8 @@ describe("calculateAccountAge", () => {
 
             const result = calculateAccountAge(ctx, 0.17);
 
-            expect(result.score).toBe(0.9);
+            // No history = maximum risk (completely unknown author)
+            expect(result.score).toBe(1.0);
             expect(result.weight).toBe(0.17);
             expect(result.explanation).toContain("No account history");
         });
@@ -98,7 +99,7 @@ describe("calculateAccountAge", () => {
             const result = calculateAccountAge(ctx, 0.17);
 
             // Should return NO_HISTORY because we don't trust firstCommentTimestamp
-            expect(result.score).toBe(0.9);
+            expect(result.score).toBe(1.0);
             expect(result.explanation).toContain("No account history");
         });
 
@@ -119,7 +120,7 @@ describe("calculateAccountAge", () => {
             const result = calculateAccountAge(ctx, 0.17);
 
             // Should return NO_HISTORY because we don't trust firstCommentTimestamp
-            expect(result.score).toBe(0.9);
+            expect(result.score).toBe(1.0);
             expect(result.explanation).toContain("No account history");
         });
     });

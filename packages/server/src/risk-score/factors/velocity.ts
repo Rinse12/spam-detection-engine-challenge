@@ -2,6 +2,8 @@ import type { CombinedDataService } from "../combined-data-service.js";
 import type { RiskContext, RiskFactor } from "../types.js";
 import { getAuthorPublicKeyFromChallengeRequest, getPublicationType, type PublicationType } from "../utils.js";
 
+// TODO rename this to author-velocity.ts
+// needs to be very clear this file only queries data about this author
 /**
  * Thresholds for author velocity by publication type.
  * Different publication types have different acceptable posting rates.
