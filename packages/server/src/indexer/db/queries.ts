@@ -439,18 +439,22 @@ export class IndexerQueries {
 
     /**
      * Get the earliest timestamp for an author across indexed comments.
-     * Returns the true network-wide account age.
+     * Uses fetchedAt (server-generated) instead of timestamp (user-provided) for security.
+     * This prevents manipulation by subplebbit owners who could backdate comment.timestamp.
+     *
+     * @returns The earliest fetchedAt timestamp in seconds, or undefined if no records
      */
     getAuthorFirstIndexedTimestamp(authorPublicKey: string): number | undefined {
         const result = this.db
             .prepare(
-                `SELECT MIN(timestamp) as minTime
+                `SELECT MIN(fetchedAt) as minTime
                  FROM indexed_comments_ipfs
                  WHERE json_extract(signature, '$.publicKey') = ?`
             )
             .get(authorPublicKey) as { minTime: number | null };
 
-        return result.minTime ?? undefined;
+        // fetchedAt is stored in milliseconds, convert to seconds for consistency with other timestamps
+        return result.minTime ? Math.floor(result.minTime / 1000) : undefined;
     }
 
     /**

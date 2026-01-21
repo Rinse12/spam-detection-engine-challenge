@@ -79,8 +79,10 @@ describe("calculateAccountAge", () => {
         });
     });
 
-    describe("using only author.subplebbit.firstCommentTimestamp", () => {
-        it("should return VERY_OLD score for accounts older than 365 days", () => {
+    describe("ignoring author.subplebbit.firstCommentTimestamp (security fix)", () => {
+        it("should return NO_HISTORY even when firstCommentTimestamp claims old account", () => {
+            // Subplebbit claims account is 400 days old, but we have no DB records
+            // We should NOT trust this claim - it could be fabricated
             const firstCommentTimestamp = baseTimestamp - 400 * SECONDS_PER_DAY;
             const author = createMockAuthor(firstCommentTimestamp);
             const challengeRequest = createMockChallengeRequest(author);
@@ -95,12 +97,13 @@ describe("calculateAccountAge", () => {
 
             const result = calculateAccountAge(ctx, 0.17);
 
-            expect(result.score).toBe(0.1);
-            expect(result.explanation).toContain("400 days old");
-            expect(result.explanation).toContain("very established");
+            // Should return NO_HISTORY because we don't trust firstCommentTimestamp
+            expect(result.score).toBe(0.9);
+            expect(result.explanation).toContain("No account history");
         });
 
-        it("should return NEW score for accounts between 1-7 days old", () => {
+        it("should return NO_HISTORY even when firstCommentTimestamp claims recent account", () => {
+            // Even if subplebbit provides a firstCommentTimestamp, we ignore it
             const firstCommentTimestamp = baseTimestamp - 3 * SECONDS_PER_DAY;
             const author = createMockAuthor(firstCommentTimestamp);
             const challengeRequest = createMockChallengeRequest(author);
@@ -115,8 +118,9 @@ describe("calculateAccountAge", () => {
 
             const result = calculateAccountAge(ctx, 0.17);
 
-            expect(result.score).toBe(0.7);
-            expect(result.explanation).toContain("new");
+            // Should return NO_HISTORY because we don't trust firstCommentTimestamp
+            expect(result.score).toBe(0.9);
+            expect(result.explanation).toContain("No account history");
         });
     });
 
@@ -173,14 +177,14 @@ describe("calculateAccountAge", () => {
         });
     });
 
-    describe("using older between DB and subplebbit", () => {
-        it("should use DB timestamp when it is older than subplebbit timestamp", () => {
-            // Subplebbit says first comment was 30 days ago
+    describe("DB-only scoring (ignoring subplebbit claims)", () => {
+        it("should use only DB timestamp even when subplebbit claims different age", () => {
+            // Subplebbit says first comment was 30 days ago, but we ignore this
             const subplebbitFirstComment = baseTimestamp - 30 * SECONDS_PER_DAY;
             const author = createMockAuthor(subplebbitFirstComment);
             const challengeRequest = createMockChallengeRequest(author);
 
-            // But our DB shows we saw them 200 days ago
+            // Our DB shows we saw them 200 days ago - this is what we trust
             const dbFirstSeen = baseTimestamp - 200 * SECONDS_PER_DAY;
             const sessionId = "very-old-comment";
             db.insertChallengeSession({
@@ -216,18 +220,18 @@ describe("calculateAccountAge", () => {
 
             const result = calculateAccountAge(ctx, 0.17);
 
-            // Should use DB's 200 days (older) -> OLD score (0.2)
+            // Should use DB's 200 days -> OLD score (0.2)
             expect(result.score).toBe(0.2);
             expect(result.explanation).toContain("200 days old");
         });
 
-        it("should use subplebbit timestamp when it is older than DB timestamp", () => {
-            // Subplebbit says first comment was 500 days ago
+        it("should NOT use subplebbit timestamp even when it claims older than DB", () => {
+            // Subplebbit claims 500 days old - could be fabricated by malicious sub owner
             const subplebbitFirstComment = baseTimestamp - 500 * SECONDS_PER_DAY;
             const author = createMockAuthor(subplebbitFirstComment);
             const challengeRequest = createMockChallengeRequest(author);
 
-            // But our DB only shows them from 10 days ago
+            // Our DB only shows them from 10 days ago - this is what we trust
             const dbFirstSeen = baseTimestamp - 10 * SECONDS_PER_DAY;
             const sessionId = "recent-in-db";
             db.insertChallengeSession({
@@ -262,10 +266,9 @@ describe("calculateAccountAge", () => {
 
             const result = calculateAccountAge(ctx, 0.17);
 
-            // Should use subplebbit's 500 days (older) -> VERY_OLD score (0.1)
-            expect(result.score).toBe(0.1);
-            expect(result.explanation).toContain("500 days old");
-            expect(result.explanation).toContain("very established");
+            // Should use DB's 10 days (ignoring subplebbit's 500 claim) -> MODERATE score (0.5)
+            expect(result.score).toBe(0.5);
+            expect(result.explanation).toContain("10 days old");
         });
     });
 

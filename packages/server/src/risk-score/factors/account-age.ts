@@ -1,5 +1,5 @@
 import type { RiskContext, RiskFactor } from "../types.js";
-import { getAuthorFromChallengeRequest, getAuthorPublicKeyFromChallengeRequest } from "../utils.js";
+import { getAuthorPublicKeyFromChallengeRequest } from "../utils.js";
 
 /**
  * Time thresholds in days for account age scoring.
@@ -33,33 +33,29 @@ const SCORES = {
 
 /**
  * Calculate risk score based on account age.
- * Uses the older of:
- * 1. firstCommentTimestamp from author.subplebbit (TRUSTED - from subplebbit)
- * 2. First seen timestamp from our own database
+ *
+ * SECURITY: Only uses server-generated timestamps (receivedAt from engine, fetchedAt from indexer).
+ * Does NOT trust author.subplebbit.firstCommentTimestamp or comment.timestamp because:
+ * - A malicious subplebbit can fabricate firstCommentTimestamp
+ * - A subplebbit owner can backdate their own comments' timestamp field
+ * - We cannot detect subplebbit ownership at the protocol level
+ *
+ * Tradeoff: Account age reflects how long the author has been known to our system,
+ * not their actual Plebbit history. This is acceptable for security.
  *
  * Scoring logic:
  * - Older accounts are considered more trustworthy (lower risk)
  * - New accounts are higher risk as they haven't built a reputation
- * - Accounts with no timestamp are treated as brand new (highest risk)
+ * - Accounts with no history in our system are treated as brand new (highest risk)
  */
 export function calculateAccountAge(ctx: RiskContext, weight: number): RiskFactor {
     const { challengeRequest, now, combinedData } = ctx;
-    const author = getAuthorFromChallengeRequest(challengeRequest);
     const authorPublicKey = getAuthorPublicKeyFromChallengeRequest(challengeRequest);
-    const subplebbitAuthor = author.subplebbit;
 
-    // Get first seen timestamp from combined data (engine + indexer)
-    // Uses the OLDEST timestamp from either source for accurate account age
-    const dbFirstSeen = combinedData.getAuthorEarliestTimestamp(authorPublicKey);
-    const subplebbitFirstComment = subplebbitAuthor?.firstCommentTimestamp;
-
-    // Determine the effective first activity timestamp (use the older one)
-    let firstActivityTimestamp: number | undefined;
-    if (subplebbitFirstComment && dbFirstSeen) {
-        firstActivityTimestamp = Math.min(subplebbitFirstComment, dbFirstSeen);
-    } else {
-        firstActivityTimestamp = subplebbitFirstComment ?? dbFirstSeen;
-    }
+    // Get first seen timestamp from combined data (engine receivedAt + indexer fetchedAt)
+    // Uses the OLDEST server-generated timestamp from either source
+    // Does NOT use author.subplebbit.firstCommentTimestamp (can be manipulated)
+    const firstActivityTimestamp = combinedData.getAuthorEarliestTimestamp(authorPublicKey);
 
     // No first activity timestamp means new account or first interaction
     if (!firstActivityTimestamp) {

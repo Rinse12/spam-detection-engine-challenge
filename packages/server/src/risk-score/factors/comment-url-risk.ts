@@ -13,6 +13,8 @@ import { getAuthorPublicKeyFromChallengeRequest, getPublicationType } from "../u
  * comment.link is the dedicated link field for link posts.
  */
 
+// TODO, remove checks for suspicious URL patterns, no need for that
+// TODO need to check if we're checking if same link is posted by same author or multiple authors over different subs
 /**
  * Time window for link spam detection (24 hours in seconds).
  */
