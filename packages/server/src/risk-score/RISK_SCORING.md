@@ -516,15 +516,79 @@ Weights are redistributed based on whether IP information is available:
 | Network Removal Rate       | 8%         | 8%       |
 | **Total**                  | **100%**   | **100%** |
 
+## Weight Redistribution
+
+Some factors may be **skipped** (return `weight: 0`) when their required data is unavailable or when they don't apply to the publication type:
+
+| Factor             | Conditions for Skipping                                           |
+| ------------------ | ----------------------------------------------------------------- |
+| Wallet Velocity    | No wallets in `author.wallets` OR publication is `subplebbitEdit` |
+| Velocity           | Publication is `subplebbitEdit`                                   |
+| IP Risk            | No IP intelligence data available (user hasn't accessed iframe)   |
+| Content/Title Risk | Publication is not a comment (vote, edit, moderation)             |
+| URL/Link Risk      | Publication is not a comment (vote, edit, moderation)             |
+
+When a factor is skipped, its weight is **proportionally redistributed** to the remaining active factors. This ensures:
+
+1. The relative importance between active factors is preserved
+2. Effective weights always sum to 1.0
+3. Skipped factors don't create "dead weight" in the calculation
+
+### Redistribution Formula
+
+For each active factor:
+
+```
+effectiveWeight = originalWeight / Σ(activeWeights)
+```
+
+### Example: Wallet Velocity Skipped (No Wallets)
+
+When an author has no wallets (without IP info):
+
+| Factor             | Original Weight | Effective Weight |
+| ------------------ | --------------- | ---------------- |
+| Content Risk       | 14%             | 16.3%            |
+| URL Risk           | 12%             | 14.0%            |
+| Velocity           | 10%             | 11.6%            |
+| Account Age        | 14%             | 16.3%            |
+| Karma              | 12%             | 14.0%            |
+| Wallet Velocity    | 14%             | **0% (skipped)** |
+| Ban History        | 10%             | 11.6%            |
+| ModQueue Rejection | 6%              | 7.0%             |
+| Removal Rate       | 8%              | 9.3%             |
+| **Total**          | 100%            | **100%**         |
+
+Calculation: `0.14 / 0.86 ≈ 0.163` for Content Risk (14% original / 86% active total)
+
+### Example: Vote Publication (Multiple Factors Skipped)
+
+For vote publications from authors without wallets, Content Risk, URL Risk, and Wallet Velocity are all skipped:
+
+| Factor             | Original Weight | Effective Weight |
+| ------------------ | --------------- | ---------------- |
+| Content Risk       | 14%             | **0% (skipped)** |
+| URL Risk           | 12%             | **0% (skipped)** |
+| Velocity           | 10%             | 17.9%            |
+| Account Age        | 14%             | 25.0%            |
+| Karma              | 12%             | 21.4%            |
+| Wallet Velocity    | 14%             | **0% (skipped)** |
+| Ban History        | 10%             | 17.9%            |
+| ModQueue Rejection | 6%              | 10.7%            |
+| Removal Rate       | 8%              | 14.3%            |
+| **Total**          | 100%            | **100%**         |
+
+Active total: 10% + 14% + 12% + 10% + 6% + 8% = 56%
+
 ## Score Calculation
 
 The final score is computed as:
 
 ```
-finalScore = Σ(factor.score × factor.weight) / Σ(factor.weight)
+finalScore = Σ(factor.score × factor.effectiveWeight)
 ```
 
-Each factor produces a score between 0.0 and 1.0, which is multiplied by its weight. The weighted scores are summed and normalized.
+Where `effectiveWeight` is the redistributed weight after accounting for skipped factors. Each factor produces a score between 0.0 and 1.0, which is multiplied by its effective weight. The weighted scores sum to the final score (since effective weights sum to 1.0).
 
 ## Recommended Thresholds
 
@@ -553,17 +617,19 @@ comment.title: "I wrote about my experience with decentralized social media"
 comment.content: "Check out my thoughts..."
 ```
 
-| Factor             | Score                      | Weight | Weighted |
-| ------------------ | -------------------------- | ------ | -------- |
-| Account Age        | 1.0 (no history)           | 14%    | 0.140    |
-| Karma              | 0.6 (no data)              | 12%    | 0.072    |
-| Content Risk       | 0.2 (base, unique content) | 14%    | 0.028    |
-| URL Risk           | 0.2 (base, first time URL) | 12%    | 0.024    |
-| Velocity           | 0.1 (1 post/hr, normal)    | 10%    | 0.010    |
-| Wallet Velocity    | — (skipped, no wallet)     | 0%     | 0        |
-| Ban History        | 0.0 (no bans)              | 10%    | 0        |
-| ModQueue Rejection | 0.5 (no data)              | 6%     | 0.030    |
-| Removal Rate       | 0.5 (no data)              | 8%     | 0.040    |
+| Factor             | Score                      | Original Weight | Effective Weight | Weighted |
+| ------------------ | -------------------------- | --------------- | ---------------- | -------- |
+| Account Age        | 1.0 (no history)           | 14%             | 16.3%            | 0.163    |
+| Karma              | 0.6 (no data)              | 12%             | 14.0%            | 0.084    |
+| Content Risk       | 0.2 (base, unique content) | 14%             | 16.3%            | 0.033    |
+| URL Risk           | 0.2 (base, first time URL) | 12%             | 14.0%            | 0.028    |
+| Velocity           | 0.1 (1 post/hr, normal)    | 10%             | 11.6%            | 0.012    |
+| Wallet Velocity    | — (skipped, no wallet)     | 0%              | 0%               | 0        |
+| Ban History        | 0.0 (no bans)              | 10%             | 11.6%            | 0        |
+| ModQueue Rejection | 0.5 (no data)              | 6%              | 7.0%             | 0.035    |
+| Removal Rate       | 0.5 (no data)              | 8%              | 9.3%             | 0.047    |
+
+**Note**: Wallet Velocity is skipped (no wallets), so the 14% weight is redistributed proportionally to other factors.
 
 **Final Score: ~0.40** → Moderate risk, triggers CAPTCHA challenge
 

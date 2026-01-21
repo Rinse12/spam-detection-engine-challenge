@@ -95,11 +95,11 @@ export function calculateCommentContentTitleRisk(ctx: RiskContext, weight: numbe
     // Check if this is a comment (post or reply)
     const publicationType = getPublicationType(challengeRequest);
     if (publicationType !== "post" && publicationType !== "reply") {
-        // Content risk doesn't apply to non-comment publications
+        // Content risk doesn't apply to non-comment publications - skip this factor
         return {
             name: "commentContentTitleRisk",
-            score: 0.5, // Neutral score
-            weight,
+            score: 0,
+            weight: 0, // Zero weight - this factor is skipped for non-comments
             explanation: "Content/title analysis: not applicable (non-comment publication)"
         };
     }

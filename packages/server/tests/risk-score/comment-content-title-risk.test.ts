@@ -84,7 +84,9 @@ describe("calculateCommentContentTitleRisk", () => {
 
             const result = calculateCommentContentTitleRisk(ctx, 0.18);
 
-            expect(result.score).toBe(0.5);
+            // Non-comment publications are skipped (weight=0), so score is 0
+            expect(result.score).toBe(0);
+            expect(result.weight).toBe(0);
             expect(result.name).toBe("commentContentTitleRisk");
             expect(result.explanation).toContain("not applicable");
         });

@@ -22,7 +22,7 @@ export async function verifyPublicationSignature({
     plebbit: PlebbitInstance;
 }) {
     const clientsManager = plebbit._clientsManager;
-    const resolveAuthorAddresses = false;
+    const resolveAuthorAddresses = true;
     const overrideAuthorAddressIfInvalid = false;
 
     if (challengeRequest.comment) {

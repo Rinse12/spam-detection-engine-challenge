@@ -89,19 +89,24 @@ export function calculateRiskScore(options: CalculateRiskScoreOptions): RiskScor
         calculateNetworkRemovalRate(ctx, weights.networkRemovalRate)
     ];
 
-    // Calculate weighted sum
-    let totalWeight = 0;
-    let weightedSum = 0;
+    // Calculate total active weight for redistribution
+    const totalActiveWeight = factors.reduce((sum, f) => sum + (f.weight > 0 ? f.weight : 0), 0);
 
+    // Calculate effective weights (proportional redistribution)
+    // When a factor is skipped (weight=0), its weight is redistributed proportionally
+    // to the remaining active factors, so effectiveWeight values always sum to 1.0
     for (const factor of factors) {
-        if (factor.weight > 0) {
-            weightedSum += factor.score * factor.weight;
-            totalWeight += factor.weight;
-        }
+        factor.effectiveWeight = totalActiveWeight > 0 && factor.weight > 0 ? factor.weight / totalActiveWeight : 0;
     }
 
-    // Normalize score (should already be normalized if weights sum to 1)
-    const finalScore = totalWeight > 0 ? weightedSum / totalWeight : 0.5;
+    // Calculate weighted sum using effective weights
+    let weightedSum = 0;
+    for (const factor of factors) {
+        weightedSum += factor.score * (factor.effectiveWeight ?? 0);
+    }
+
+    // finalScore is already normalized since effectiveWeights sum to 1
+    const finalScore = totalActiveWeight > 0 ? weightedSum : 0.5;
 
     // Clamp to [0, 1] for safety
     const clampedScore = Math.max(0, Math.min(1, finalScore));

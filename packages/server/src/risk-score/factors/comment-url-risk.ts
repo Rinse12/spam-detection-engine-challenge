@@ -138,11 +138,11 @@ export function calculateCommentUrlRisk(ctx: RiskContext, weight: number): RiskF
     // Check if this is a comment (post or reply)
     const publicationType = getPublicationType(challengeRequest);
     if (publicationType !== "post" && publicationType !== "reply") {
-        // URL risk doesn't apply to non-comment publications
+        // URL risk doesn't apply to non-comment publications - skip this factor
         return {
             name: "commentUrlRisk",
-            score: 0.5, // Neutral score
-            weight,
+            score: 0,
+            weight: 0, // Zero weight - this factor is skipped for non-comments
             explanation: "Link analysis: not applicable (non-comment publication)"
         };
     }

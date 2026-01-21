@@ -3,15 +3,19 @@ import type { SpamDetectionDatabase } from "../db/index.js";
 import type { CombinedDataService } from "./combined-data-service.js";
 
 /**
- * Individual risk factor result.
+ * Individual risk factor result returned by factor functions.
  */
 export interface RiskFactor {
     /** Name of the risk factor */
     name: string;
     /** Raw score for this factor (0.0 to 1.0, where 1.0 is highest risk) */
     score: number;
-    /** Weight applied to this factor (0.0 to 1.0) */
+    /** Original weight assigned to this factor (0.0 to 1.0). May be 0 if factor is skipped. */
     weight: number;
+    /** Effective weight after proportional redistribution from skipped factors (0.0 to 1.0).
+     * Calculated centrally in calculateRiskScore() - always sums to 1.0 across all factors.
+     * Optional because factor functions don't set this - it's computed after all factors are collected. */
+    effectiveWeight?: number;
     /** Human-readable explanation for this factor's score */
     explanation: string;
 }

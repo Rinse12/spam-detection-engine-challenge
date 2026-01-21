@@ -87,7 +87,9 @@ describe("calculateCommentUrlRisk", () => {
 
             const result = calculateCommentUrlRisk(ctx, 0.12);
 
-            expect(result.score).toBe(0.5);
+            // Non-comment publications are skipped (weight=0), so score is 0
+            expect(result.score).toBe(0);
+            expect(result.weight).toBe(0);
             expect(result.name).toBe("commentUrlRisk");
             expect(result.explanation).toContain("not applicable");
         });
