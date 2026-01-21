@@ -44,7 +44,14 @@ export interface OAuthConfig {
 /**
  * Union type of all possible Arctic provider instances.
  */
-export type ArcticProvider = arctic.GitHub | arctic.Google | arctic.Twitter | arctic.Yandex | arctic.TikTok | arctic.Discord | arctic.Reddit;
+export type ArcticProvider =
+    | arctic.GitHub
+    | arctic.Google
+    | arctic.Twitter
+    | arctic.Yandex
+    | arctic.TikTok
+    | arctic.Discord
+    | arctic.Reddit;
 
 /**
  * Map of initialized OAuth providers.

@@ -113,20 +113,21 @@ Instead of using raw karma values (which can be manipulated by colluding subpleb
 - Zero karma: Doesn't count either way
 - Net count = (positive subs) - (negative subs)
 
-| Net Sub Count | Risk Score | Description                        |
-| ------------- | ---------- | ---------------------------------- |
-| >= +5         | 0.10       | Widely trusted across network      |
-| +3 to +4      | 0.20       | Trusted in multiple communities    |
-| +1 to +2      | 0.35       | Generally positive standing        |
-| 0             | 0.50       | Mixed/balanced reputation          |
-| -1 to -2      | 0.65       | Some concerns                      |
-| -3 to -4      | 0.80       | Multiple communities flag issues   |
-| <= -5         | 0.90       | Widely mistrusted                  |
-| No data       | 0.50       | Neutral (no karma data available)  |
+| Net Sub Count | Risk Score | Description                       |
+| ------------- | ---------- | --------------------------------- |
+| >= +5         | 0.10       | Widely trusted across network     |
+| +3 to +4      | 0.20       | Trusted in multiple communities   |
+| +1 to +2      | 0.35       | Generally positive standing       |
+| 0             | 0.50       | Mixed/balanced reputation         |
+| -1 to -2      | 0.65       | Some concerns                     |
+| -3 to -4      | 0.80       | Multiple communities flag issues  |
+| <= -5         | 0.90       | Widely mistrusted                 |
+| No data       | 0.50       | Neutral (no karma data available) |
 
 **Example - Collusion resistance:**
 
 An author has:
+
 - +10 karma in sub-a.eth (1 positive vote)
 - +20 karma in sub-b.eth (1 positive vote)
 - -1000 karma in hostile-sub.eth (1 negative vote)
