@@ -199,32 +199,86 @@ Analyzes comment content and title for spam indicators by querying both engine a
 
 ### 4. Comment URL/Link Risk (Weight: 12% without IP, 10% with IP)
 
-Analyzes `comment.link` (the dedicated link field for link posts) for spam indicators by querying both engine and indexer databases. This is separate from URLs found in `comment.content`. **Only applies to comments (posts and replies) that have a link** - returns neutral score (0.5) for other publications or comments without links.
+Analyzes URLs from multiple sources in comments for spam indicators by querying both engine and indexer databases. **Only applies to comments (posts and replies)** - returns neutral score (0.5) for other publication types.
+
+**URL Sources:**
+
+- `comment.link` - dedicated link field for link posts
+- `comment.content` - URLs embedded in post/reply content
+- `comment.title` - URLs in post titles
+
+All URLs from these sources are extracted, normalized, and analyzed for spam patterns.
 
 Link counts from both sources are **summed** to detect cross-subplebbit link spam campaigns.
 
-| Indicator                                         | Score Impact | Description                      |
-| ------------------------------------------------- | ------------ | -------------------------------- |
-| **Same Author - Duplicate Links**                 |              |                                  |
-| 5+ posts with same link from author in 24h        | +0.40        | Heavy link spam                  |
-| 3-4 posts with same link from author in 24h       | +0.25        | Moderate link spam               |
-| 1-2 posts with same link from author in 24h       | +0.15        | Possible duplicate posting       |
-| **Other Authors - Duplicate Links (Coordinated)** |              |                                  |
-| 10+ posts with same link from other authors       | +0.50        | Likely coordinated spam campaign |
-| 5-9 posts with same link from other authors       | +0.35        | Possible coordinated spam        |
-| 2-4 posts with same link from other authors       | +0.20        | Link seen from multiple authors  |
-| 1 post with same link from another author         | +0.10        | Link seen from another author    |
-| **Domain Spam (Same Author)**                     |              |                                  |
-| 10+ links to same domain from author in 24h       | +0.25        | Domain-focused spam              |
-| 5-9 links to same domain from author in 24h       | +0.15        | Elevated domain promotion        |
-| **Suspicious URL Patterns**                       |              |                                  |
-| Uses URL shortener (bit.ly, tinyurl, etc.)        | +0.15        | Link obfuscation                 |
-| Uses IP address instead of domain                 | +0.20        | Suspicious direct IP link        |
-| Unusually long URL (>500 chars)                   | +0.10        | Possible obfuscation             |
-| Excessive query parameters (>5)                   | +0.05        | Possible tracking/affiliate link |
-| Invalid URL format                                | +0.10        | Malformed link                   |
+**No Fixed Time Window:**
 
-**Note**: The base score for comments with links starts at 0.2 (low risk). Non-comment publications or comments without links receive a neutral score of 0.5. URL normalization removes tracking parameters (utm\_\*, fbclid, etc.) before comparison.
+Unlike some spam detection systems that only look at the last 24 hours, this factor analyzes the **entire historical record** of URL patterns. The key signal for distinguishing spam from organic behavior is **time clustering** - how closely together posts are made, not an arbitrary cutoff.
+
+| Indicator                                          | Score Impact   | Description                                |
+| -------------------------------------------------- | -------------- | ------------------------------------------ |
+| **Same Author - Duplicate Links**                  |                |                                            |
+| 5+ posts with same URL from author                 | +0.40          | Heavy link spam                            |
+| 3-4 posts with same URL from author                | +0.25          | Moderate link spam                         |
+| 1-2 posts with same URL from author                | +0.15          | Possible duplicate posting                 |
+| **Other Authors - Duplicate Links (Coordinated)**  |                |                                            |
+| 10+ posts with same URL from other authors         | +0.50          | Likely coordinated spam campaign           |
+| 5-9 posts with same URL from other authors         | +0.35          | Possible coordinated spam                  |
+| 2-4 posts with same URL from other authors         | +0.20          | URL seen from multiple authors             |
+| 1 post with same URL from another author           | +0.10          | URL seen from another author               |
+| **Domain Spam (Same Author)**                      |                |                                            |
+| 10+ links to same domain from author               | +0.25          | Domain-focused spam                        |
+| 5-9 links to same domain from author               | +0.15          | Elevated domain promotion                  |
+| **Similar URL Detection (Prefix Matching)**        |                |                                            |
+| 3+ similar URLs from author (clustered)            | +0.25 to +0.65 | URL variation spam (see time clustering)   |
+| 3+ similar URLs from author (spread out)           | +0.10 to +0.20 | Lower risk if spread over time             |
+| 5+ similar URLs from 3+ other authors (clustered)  | +0.30 to +0.60 | Coordinated campaign (see time clustering) |
+| 5+ similar URLs from 3+ other authors (spread out) | +0.15          | Organic sharing pattern                    |
+| **Suspicious URL Patterns**                        |                |                                            |
+| Uses IP address instead of domain                  | +0.20          | Suspicious direct IP link                  |
+
+**URL Similarity Detection:**
+
+To catch spammers who slightly modify URLs (e.g., changing query parameters or referral codes), we extract a **URL prefix** consisting of `domain/path1/path2` (first two path segments). URLs with the same prefix are considered "similar."
+
+**Example:** `https://spam.com/promo/deal?ref=abc` and `https://spam.com/promo/deal?ref=xyz` both have prefix `spam.com/promo/deal` and would be flagged as similar.
+
+**Time Clustering Analysis:**
+
+Time clustering is used to distinguish coordinated spam bursts from organic sharing that happens over days/weeks/months. We analyze the **standard deviation** of posting timestamps (using `publication.timestamp`) to measure how clustered posts are:
+
+| Time Clustering (stddev) | Additional Risk | Description                                |
+| ------------------------ | --------------- | ------------------------------------------ |
+| < 1 hour                 | +0.30           | Very tight clustering - likely coordinated |
+| 1-3 hours                | +0.20           | Moderate clustering - suspicious           |
+| 3-6 hours                | +0.10           | Some clustering                            |
+| > 6 hours                | +0.00           | Spread out - likely organic sharing        |
+
+**Time clustering is applied to both same-author and cross-author URL detection:**
+
+- **Same-author**: Rapid-fire posting of similar URLs gets higher risk than occasional reposting
+- **Cross-author**: Multiple authors posting similar URLs within a short time indicates coordination
+
+**Example - Cross-author:** 5 posts with the same URL prefix from 5 different authors:
+
+- Posted within 10 minutes of each other → stddev ≈ 3 minutes → base +0.30, clustering +0.30 = +0.60 total risk
+- Posted over 20 hours → stddev ≈ 7 hours → +0.15 risk (spread out, likely organic)
+
+**Example - Same-author:** An author posts 5 similar URLs:
+
+- All within 30 minutes → stddev ≈ 10 minutes → base +0.35, clustering +0.30 = +0.65 total risk
+- Spread over 2 weeks → stddev > 24 hours → +0.20 risk (occasional sharing, not spam burst)
+
+**Similarity Allowlist:**
+
+Popular platforms where URL paths naturally vary (different content, not spam variations) are **excluded from similarity detection** but still checked for exact URL matches:
+
+- Social media: x.com, twitter.com, youtube.com, youtu.be, reddit.com, facebook.com, instagram.com, tiktok.com, linkedin.com
+- Developer platforms: github.com, gitlab.com, stackoverflow.com
+- News/content: medium.com, substack.com
+- Crypto block explorers: etherscan.io, arbiscan.io, basescan.org, bscscan.com, polygonscan.com, ftmscan.com, snowtrace.io, avascan.info
+
+**Note**: The base score for comments with URLs starts at 0.2 (low risk). Comments without URLs and non-comment publications receive a neutral score of 0.5. URL normalization removes tracking parameters (utm\_\*, fbclid, etc.) before comparison.
 
 ### 5. Velocity Risk (Weight: 10% without IP, 8% with IP)
 

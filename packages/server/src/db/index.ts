@@ -1175,18 +1175,21 @@ export class SpamDetectionDatabase {
      * @param params.sinceTimestamp - Only count links posted after this timestamp
      * @returns Number of times this link has been posted by this author
      */
-    findLinksByAuthor(params: { authorPublicKey: string; link: string; sinceTimestamp: number }): number {
+    findLinksByAuthor(params: { authorPublicKey: string; link: string; sinceTimestamp?: number }): number {
         const { authorPublicKey, link, sinceTimestamp } = params;
 
-        const result = this.db
-            .prepare(
-                `SELECT COUNT(*) as count FROM comments
+        let query = `SELECT COUNT(*) as count FROM comments
                  WHERE json_extract(signature, '$.publicKey') = ?
                  AND link IS NOT NULL
-                 AND LOWER(link) = LOWER(?)
-                 AND receivedAt >= ?`
-            )
-            .get(authorPublicKey, link, sinceTimestamp) as { count: number };
+                 AND LOWER(link) = LOWER(?)`;
+        const queryParams: unknown[] = [authorPublicKey, link];
+
+        if (sinceTimestamp !== undefined) {
+            query += ` AND receivedAt >= ?`;
+            queryParams.push(sinceTimestamp);
+        }
+
+        const result = this.db.prepare(query).get(...queryParams) as { count: number };
 
         return result.count;
     }
@@ -1200,23 +1203,171 @@ export class SpamDetectionDatabase {
      * @param params.sinceTimestamp - Only count links posted after this timestamp
      * @returns Object with count of posts and unique authors (by public key)
      */
-    findLinksByOthers(params: { authorPublicKey: string; link: string; sinceTimestamp: number }): { count: number; uniqueAuthors: number } {
+    findLinksByOthers(params: { authorPublicKey: string; link: string; sinceTimestamp?: number }): {
+        count: number;
+        uniqueAuthors: number;
+    } {
         const { authorPublicKey, link, sinceTimestamp } = params;
 
-        const result = this.db
-            .prepare(
-                `SELECT
+        let query = `SELECT
                     COUNT(*) as count,
                     COUNT(DISTINCT json_extract(signature, '$.publicKey')) as uniqueAuthors
                  FROM comments
                  WHERE json_extract(signature, '$.publicKey') != ?
                  AND link IS NOT NULL
-                 AND LOWER(link) = LOWER(?)
-                 AND receivedAt >= ?`
-            )
-            .get(authorPublicKey, link, sinceTimestamp) as { count: number; uniqueAuthors: number };
+                 AND LOWER(link) = LOWER(?)`;
+        const queryParams: unknown[] = [authorPublicKey, link];
+
+        if (sinceTimestamp !== undefined) {
+            query += ` AND receivedAt >= ?`;
+            queryParams.push(sinceTimestamp);
+        }
+
+        const result = this.db.prepare(query).get(...queryParams) as { count: number; uniqueAuthors: number };
 
         return result;
+    }
+
+    // ============================================
+    // Similar URL Detection Methods
+    // ============================================
+
+    /**
+     * Find comments with similar URLs (matching prefix) from the same author.
+     * Used to detect link spam with URL variations (e.g., same domain/path with different query params).
+     *
+     * @param params.authorPublicKey - The Ed25519 public key from the publication's signature
+     * @param params.urlPrefix - The URL prefix to match (e.g., "spam.com/promo/deal")
+     * @param params.sinceTimestamp - Only count links posted after this timestamp (milliseconds)
+     * @returns Number of comments with similar URLs from this author
+     */
+    findSimilarUrlsByAuthor(params: { authorPublicKey: string; urlPrefix: string; sinceTimestamp?: number }): number {
+        const { authorPublicKey, urlPrefix, sinceTimestamp } = params;
+
+        // Use LIKE to match URLs that start with the prefix pattern
+        // We need to escape special LIKE characters in the prefix
+        const escapedPrefix = urlPrefix.replace(/[%_]/g, "\\$&");
+        const likePattern = `%${escapedPrefix}%`;
+
+        let query = `SELECT COUNT(*) as count FROM comments
+                 WHERE json_extract(signature, '$.publicKey') = ?
+                 AND link IS NOT NULL
+                 AND LOWER(link) LIKE LOWER(?) ESCAPE '\\'`;
+        const queryParams: unknown[] = [authorPublicKey, likePattern];
+
+        if (sinceTimestamp !== undefined) {
+            query += ` AND receivedAt >= ?`;
+            queryParams.push(sinceTimestamp);
+        }
+
+        const result = this.db.prepare(query).get(...queryParams) as { count: number };
+
+        return result.count;
+    }
+
+    /**
+     * Find comments with similar URLs (matching prefix) from other authors.
+     * Used to detect coordinated link spam with URL variations.
+     *
+     * @param params.authorPublicKey - The Ed25519 public key to exclude
+     * @param params.urlPrefix - The URL prefix to match
+     * @param params.sinceTimestamp - Only count links posted after this timestamp (milliseconds)
+     * @returns Object with count of posts and unique authors
+     */
+    findSimilarUrlsByOthers(params: { authorPublicKey: string; urlPrefix: string; sinceTimestamp?: number }): {
+        count: number;
+        uniqueAuthors: number;
+    } {
+        const { authorPublicKey, urlPrefix, sinceTimestamp } = params;
+
+        const escapedPrefix = urlPrefix.replace(/[%_]/g, "\\$&");
+        const likePattern = `%${escapedPrefix}%`;
+
+        let query = `SELECT
+                    COUNT(*) as count,
+                    COUNT(DISTINCT json_extract(signature, '$.publicKey')) as uniqueAuthors
+                 FROM comments
+                 WHERE json_extract(signature, '$.publicKey') != ?
+                 AND link IS NOT NULL
+                 AND LOWER(link) LIKE LOWER(?) ESCAPE '\\'`;
+        const queryParams: unknown[] = [authorPublicKey, likePattern];
+
+        if (sinceTimestamp !== undefined) {
+            query += ` AND receivedAt >= ?`;
+            queryParams.push(sinceTimestamp);
+        }
+
+        const result = this.db.prepare(query).get(...queryParams) as { count: number; uniqueAuthors: number };
+
+        return result;
+    }
+
+    /**
+     * Find similar URLs from the same author and return their publication timestamps.
+     * Used for time clustering analysis to detect rapid-fire URL spam.
+     *
+     * @param params.authorPublicKey - The Ed25519 public key to match
+     * @param params.urlPrefix - The URL prefix to match
+     * @param params.sinceTimestamp - Only include posts after this timestamp (milliseconds)
+     * @returns Array of publication timestamps (in seconds, from the protocol)
+     */
+    findSimilarUrlTimestampsByAuthor(params: { authorPublicKey: string; urlPrefix: string; sinceTimestamp?: number }): number[] {
+        const { authorPublicKey, urlPrefix, sinceTimestamp } = params;
+
+        const escapedPrefix = urlPrefix.replace(/[%_]/g, "\\$&");
+        const likePattern = `%${escapedPrefix}%`;
+
+        let query = `SELECT timestamp
+                 FROM comments
+                 WHERE json_extract(signature, '$.publicKey') = ?
+                 AND link IS NOT NULL
+                 AND LOWER(link) LIKE LOWER(?) ESCAPE '\\'`;
+        const queryParams: unknown[] = [authorPublicKey, likePattern];
+
+        if (sinceTimestamp !== undefined) {
+            query += ` AND receivedAt >= ?`;
+            queryParams.push(sinceTimestamp);
+        }
+
+        query += ` ORDER BY timestamp LIMIT 100`;
+
+        const rows = this.db.prepare(query).all(...queryParams) as Array<{ timestamp: number }>;
+
+        return rows.map((row) => row.timestamp);
+    }
+
+    /**
+     * Find similar URLs from other authors and return their publication timestamps.
+     * Used for time clustering analysis to detect coordinated spam campaigns.
+     *
+     * @param params.authorPublicKey - The Ed25519 public key to exclude
+     * @param params.urlPrefix - The URL prefix to match
+     * @param params.sinceTimestamp - Only include posts after this timestamp (milliseconds)
+     * @returns Array of publication timestamps (in seconds, from the protocol)
+     */
+    findSimilarUrlTimestampsByOthers(params: { authorPublicKey: string; urlPrefix: string; sinceTimestamp?: number }): number[] {
+        const { authorPublicKey, urlPrefix, sinceTimestamp } = params;
+
+        const escapedPrefix = urlPrefix.replace(/[%_]/g, "\\$&");
+        const likePattern = `%${escapedPrefix}%`;
+
+        let query = `SELECT timestamp
+                 FROM comments
+                 WHERE json_extract(signature, '$.publicKey') != ?
+                 AND link IS NOT NULL
+                 AND LOWER(link) LIKE LOWER(?) ESCAPE '\\'`;
+        const queryParams: unknown[] = [authorPublicKey, likePattern];
+
+        if (sinceTimestamp !== undefined) {
+            query += ` AND receivedAt >= ?`;
+            queryParams.push(sinceTimestamp);
+        }
+
+        query += ` ORDER BY timestamp LIMIT 100`;
+
+        const rows = this.db.prepare(query).all(...queryParams) as Array<{ timestamp: number }>;
+
+        return rows.map((row) => row.timestamp);
     }
 
     // ============================================
@@ -1293,15 +1444,13 @@ export class SpamDetectionDatabase {
      * @param params.sinceTimestamp - Only count links posted after this timestamp
      * @returns Number of links to this domain from this author
      */
-    countLinkDomainByAuthor(params: { authorPublicKey: string; domain: string; sinceTimestamp: number }): number {
+    countLinkDomainByAuthor(params: { authorPublicKey: string; domain: string; sinceTimestamp?: number }): number {
         const { authorPublicKey, domain, sinceTimestamp } = params;
 
         // Match domain in link URL - handles both with and without www prefix
         // The link column stores URLs like "https://example.com/path"
         // We use LIKE to match the domain portion
-        const result = this.db
-            .prepare(
-                `SELECT COUNT(*) as count FROM comments
+        let query = `SELECT COUNT(*) as count FROM comments
                  WHERE json_extract(signature, '$.publicKey') = ?
                  AND link IS NOT NULL
                  AND (
@@ -1313,10 +1462,15 @@ export class SpamDetectionDatabase {
                      OR LOWER(link) LIKE '%://www.' || LOWER(?) || '#%'
                      OR LOWER(link) = '%://' || LOWER(?)
                      OR LOWER(link) = '%://www.' || LOWER(?)
-                 )
-                 AND receivedAt >= ?`
-            )
-            .get(authorPublicKey, domain, domain, domain, domain, domain, domain, domain, domain, sinceTimestamp) as { count: number };
+                 )`;
+        const queryParams: unknown[] = [authorPublicKey, domain, domain, domain, domain, domain, domain, domain, domain];
+
+        if (sinceTimestamp !== undefined) {
+            query += ` AND receivedAt >= ?`;
+            queryParams.push(sinceTimestamp);
+        }
+
+        const result = this.db.prepare(query).get(...queryParams) as { count: number };
 
         return result.count;
     }

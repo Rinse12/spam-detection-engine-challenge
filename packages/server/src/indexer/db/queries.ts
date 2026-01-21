@@ -744,17 +744,77 @@ export class IndexerQueries {
      * Find links from indexed comments.
      * Used for cross-subplebbit link spam detection.
      */
-    findLinksFromIndexer(params: { link: string; sinceTimestamp: number; authorPublicKey?: string; excludeAuthorPublicKey?: string }): {
+    findLinksFromIndexer(params: { link: string; sinceTimestamp?: number; authorPublicKey?: string; excludeAuthorPublicKey?: string }): {
         count: number;
         uniqueAuthors: number;
     } {
         const { link, sinceTimestamp, authorPublicKey, excludeAuthorPublicKey } = params;
 
-        const conditions: string[] = ["i.timestamp >= @sinceTimestamp", "i.link IS NOT NULL", "LOWER(i.link) = LOWER(@link)"];
+        const conditions: string[] = ["i.link IS NOT NULL", "LOWER(i.link) = LOWER(@link)"];
         const queryParams: Record<string, unknown> = {
-            sinceTimestamp,
             link
         };
+
+        if (sinceTimestamp !== undefined) {
+            conditions.push("i.timestamp >= @sinceTimestamp");
+            queryParams.sinceTimestamp = sinceTimestamp;
+        }
+
+        if (authorPublicKey) {
+            conditions.push("json_extract(i.signature, '$.publicKey') = @authorPublicKey");
+            queryParams.authorPublicKey = authorPublicKey;
+        }
+
+        if (excludeAuthorPublicKey) {
+            conditions.push("json_extract(i.signature, '$.publicKey') != @excludeAuthorPublicKey");
+            queryParams.excludeAuthorPublicKey = excludeAuthorPublicKey;
+        }
+
+        const query = `
+            SELECT
+                COUNT(*) as count,
+                COUNT(DISTINCT json_extract(i.signature, '$.publicKey')) as uniqueAuthors
+            FROM indexed_comments_ipfs i
+            WHERE ${conditions.join(" AND ")}
+        `;
+
+        const result = this.db.prepare(query).get(queryParams) as { count: number; uniqueAuthors: number };
+        return result;
+    }
+
+    /**
+     * Find similar URLs (matching prefix) from indexed comments.
+     * Used for cross-subplebbit similar link spam detection.
+     *
+     * @param params.urlPrefix - The URL prefix to match (e.g., "spam.com/promo/deal")
+     * @param params.sinceTimestamp - Only count links posted after this timestamp (seconds, protocol format)
+     * @param params.authorPublicKey - If set, only count links from this author
+     * @param params.excludeAuthorPublicKey - If set, exclude this author from results
+     */
+    findSimilarUrlsFromIndexer(params: {
+        urlPrefix: string;
+        sinceTimestamp?: number;
+        authorPublicKey?: string;
+        excludeAuthorPublicKey?: string;
+    }): {
+        count: number;
+        uniqueAuthors: number;
+    } {
+        const { urlPrefix, sinceTimestamp, authorPublicKey, excludeAuthorPublicKey } = params;
+
+        // Escape special LIKE characters in the prefix
+        const escapedPrefix = urlPrefix.replace(/[%_]/g, "\\$&");
+        const likePattern = `%${escapedPrefix}%`;
+
+        const conditions: string[] = ["i.link IS NOT NULL", "LOWER(i.link) LIKE LOWER(@likePattern) ESCAPE '\\'"];
+        const queryParams: Record<string, unknown> = {
+            likePattern
+        };
+
+        if (sinceTimestamp !== undefined) {
+            conditions.push("i.timestamp >= @sinceTimestamp");
+            queryParams.sinceTimestamp = sinceTimestamp;
+        }
 
         if (authorPublicKey) {
             conditions.push("json_extract(i.signature, '$.publicKey') = @authorPublicKey");
@@ -781,11 +841,10 @@ export class IndexerQueries {
     /**
      * Count links to a specific domain from indexed comments.
      */
-    countLinkDomainFromIndexer(params: { domain: string; sinceTimestamp: number; authorPublicKey?: string }): number {
+    countLinkDomainFromIndexer(params: { domain: string; sinceTimestamp?: number; authorPublicKey?: string }): number {
         const { domain, sinceTimestamp, authorPublicKey } = params;
 
         const conditions: string[] = [
-            "i.timestamp >= @sinceTimestamp",
             "i.link IS NOT NULL",
             `(
                 LOWER(i.link) LIKE '%://' || LOWER(@domain) || '/%'
@@ -799,9 +858,13 @@ export class IndexerQueries {
             )`
         ];
         const queryParams: Record<string, unknown> = {
-            sinceTimestamp,
             domain
         };
+
+        if (sinceTimestamp !== undefined) {
+            conditions.push("i.timestamp >= @sinceTimestamp");
+            queryParams.sinceTimestamp = sinceTimestamp;
+        }
 
         if (authorPublicKey) {
             conditions.push("json_extract(i.signature, '$.publicKey') = @authorPublicKey");
@@ -816,5 +879,58 @@ export class IndexerQueries {
 
         const result = this.db.prepare(query).get(queryParams) as { count: number };
         return result.count;
+    }
+
+    /**
+     * Find similar URLs from indexed comments and return their publication timestamps.
+     * Used for time clustering analysis to detect coordinated spam campaigns.
+     *
+     * @param params.urlPrefix - The URL prefix to match
+     * @param params.sinceTimestamp - Only include posts after this timestamp (seconds, protocol time)
+     * @param params.excludeAuthorPublicKey - Optional author to exclude
+     * @returns Array of publication timestamps (in seconds, from the protocol)
+     */
+    findSimilarUrlTimestampsFromIndexer(params: {
+        urlPrefix: string;
+        sinceTimestamp?: number;
+        authorPublicKey?: string;
+        excludeAuthorPublicKey?: string;
+    }): number[] {
+        const { urlPrefix, sinceTimestamp, authorPublicKey, excludeAuthorPublicKey } = params;
+
+        // Escape special LIKE characters in the prefix
+        const escapedPrefix = urlPrefix.replace(/[%_]/g, "\\$&");
+        const likePattern = `%${escapedPrefix}%`;
+
+        const conditions: string[] = ["i.link IS NOT NULL", "LOWER(i.link) LIKE LOWER(@likePattern) ESCAPE '\\'"];
+        const queryParams: Record<string, unknown> = {
+            likePattern
+        };
+
+        if (sinceTimestamp !== undefined) {
+            conditions.push("i.timestamp >= @sinceTimestamp");
+            queryParams.sinceTimestamp = sinceTimestamp;
+        }
+
+        if (authorPublicKey) {
+            conditions.push("json_extract(i.signature, '$.publicKey') = @authorPublicKey");
+            queryParams.authorPublicKey = authorPublicKey;
+        }
+
+        if (excludeAuthorPublicKey) {
+            conditions.push("json_extract(i.signature, '$.publicKey') != @excludeAuthorPublicKey");
+            queryParams.excludeAuthorPublicKey = excludeAuthorPublicKey;
+        }
+
+        const query = `
+            SELECT i.timestamp
+            FROM indexed_comments_ipfs i
+            WHERE ${conditions.join(" AND ")}
+            ORDER BY i.timestamp
+            LIMIT 100
+        `;
+
+        const rows = this.db.prepare(query).all(queryParams) as Array<{ timestamp: number }>;
+        return rows.map((row) => row.timestamp);
     }
 }

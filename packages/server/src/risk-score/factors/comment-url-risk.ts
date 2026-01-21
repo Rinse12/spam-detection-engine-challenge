@@ -1,178 +1,137 @@
 import type { RiskContext, RiskFactor } from "../types.js";
 import { getAuthorPublicKeyFromChallengeRequest, getPublicationType } from "../utils.js";
+import {
+    calculateTimestampStdDev,
+    collectAllUrls,
+    collectUrlPrefixesForSimilarity,
+    extractDomain,
+    getTimeClusteringRisk,
+    isIpAddressUrl
+} from "../url-utils.js";
+
+// ============================================
+// Configuration: Detection Thresholds
+// ============================================
+
+/**
+ * Risk score adjustments for URL detection patterns.
+ * All values are additive to the base score.
+ */
+const RISK_SCORES = {
+    /** Base risk score for comments containing URLs */
+    BASE_WITH_URLS: 0.2,
+
+    /** Same author posting same exact URL */
+    SAME_AUTHOR_URL: {
+        HEAVY: 0.4, // 5+ posts
+        MODERATE: 0.25, // 3-4 posts
+        LOW: 0.15 // 1-2 posts
+    },
+
+    /** Other authors posting same exact URL (coordinated spam) */
+    OTHER_AUTHORS_URL: {
+        LIKELY_COORDINATED: 0.5, // 10+ posts
+        POSSIBLE_COORDINATED: 0.35, // 5-9 posts
+        MULTIPLE_AUTHORS: 0.2, // 2-4 posts
+        SEEN_ONCE: 0.1 // 1 post
+    },
+
+    /** Same author posting to same domain repeatedly */
+    SAME_DOMAIN: {
+        HEAVY: 0.25, // 10+ links
+        MODERATE: 0.15 // 5-9 links
+    },
+
+    /** IP address URLs (suspicious) */
+    IP_ADDRESS_URL: 0.2,
+
+    /** Same author posting similar URLs (prefix match) */
+    SIMILAR_URLS_AUTHOR: {
+        CLUSTERED_HEAVY: 0.35, // 5+ similar, clustered in time
+        CLUSTERED_MODERATE: 0.25, // 3-4 similar, clustered in time
+        SPREAD_HEAVY: 0.2, // 5+ similar, spread over time
+        SPREAD_MODERATE: 0.1 // 3-4 similar, spread over time
+    },
+
+    /** Cross-author similar URLs (coordinated campaign) */
+    SIMILAR_URLS_OTHERS: {
+        CLUSTERED_BASE: 0.3, // Base for time-clustered campaign (+ clustering bonus)
+        SPREAD: 0.15 // Spread over time (organic sharing)
+    }
+};
+
+/**
+ * Count thresholds for triggering different risk levels.
+ */
+const THRESHOLDS = {
+    /** Same author exact URL thresholds */
+    SAME_AUTHOR_URL: {
+        HEAVY: 5,
+        MODERATE: 3,
+        LOW: 1
+    },
+
+    /** Other authors exact URL thresholds */
+    OTHER_AUTHORS_URL: {
+        LIKELY_COORDINATED: 10,
+        POSSIBLE_COORDINATED: 5,
+        MULTIPLE_AUTHORS: 2,
+        SEEN_ONCE: 1
+    },
+
+    /** Same domain thresholds */
+    SAME_DOMAIN: {
+        HEAVY: 10,
+        MODERATE: 5
+    },
+
+    /** Similar URL (prefix match) thresholds */
+    SIMILAR_URLS: {
+        /** Minimum similar URLs from same author to trigger detection */
+        AUTHOR_MIN: 3,
+        /** High count of similar URLs from same author */
+        AUTHOR_HEAVY: 5,
+        /** Minimum similar URLs from other authors for coordinated detection */
+        OTHERS_MIN_COUNT: 5,
+        /** Minimum unique authors for coordinated detection */
+        OTHERS_MIN_AUTHORS: 3
+    }
+};
 
 /**
  * URL/link risk analysis for comments (posts and replies).
  *
- * This module analyzes comment.link for spam indicators:
- * - Same link posted multiple times by the same author
- * - Same link posted by multiple different authors (coordinated spam)
- * - Suspicious URL patterns (link shorteners, excessive query params, etc.)
+ * This module analyzes URLs from multiple sources:
+ * - comment.link (dedicated link field for link posts)
+ * - comment.content (URLs embedded in post/reply content)
+ * - comment.title (URLs in post titles)
  *
- * Note: comment.link is different from URLs in comment.content.
- * comment.link is the dedicated link field for link posts.
+ * Detection patterns:
+ * - Same URL posted multiple times by the same author
+ * - Same URL posted by multiple different authors (coordinated spam)
+ * - Similar URLs (same domain/path prefix) from same or different authors
+ * - IP address URLs (often used for malicious links)
  */
 
-// TODO, remove checks for suspicious URL patterns, no need for that
-// TODO need to check if we're checking if same link is posted by same author or multiple authors over different subs
 /**
- * Time window for link spam detection (24 hours in seconds).
- */
-const LINK_SPAM_WINDOW_SECONDS = 24 * 60 * 60;
-
-/**
- * Common URL shortener domains that are often used to mask spam links.
- */
-const URL_SHORTENERS = new Set([
-    "bit.ly",
-    "tinyurl.com",
-    "t.co",
-    "goo.gl",
-    "ow.ly",
-    "is.gd",
-    "buff.ly",
-    "adf.ly",
-    "j.mp",
-    "rb.gy",
-    "shorturl.at",
-    "cutt.ly",
-    "t.ly",
-    "tiny.cc",
-    "v.gd",
-    "x.co",
-    "soo.gd",
-    "s.id",
-    "clck.ru",
-    "rebrand.ly"
-]);
-
-/**
- * Extract domain from a URL string.
- * Returns lowercase domain without www. prefix.
- */
-function extractDomain(url: string): string | null {
-    try {
-        const parsed = new URL(url);
-        return parsed.hostname.toLowerCase().replace(/^www\./, "");
-    } catch {
-        return null;
-    }
-}
-
-/**
- * Normalize a URL for comparison purposes.
- * - Lowercase the whole URL
- * - Remove tracking parameters (utm_*, fbclid, etc.)
- * - Remove trailing slashes
- * - Remove www. prefix from domain
- */
-function normalizeUrl(url: string): string | null {
-    try {
-        const parsed = new URL(url);
-
-        // Remove common tracking parameters
-        const trackingParams = ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "fbclid", "gclid", "ref", "source"];
-        for (const param of trackingParams) {
-            parsed.searchParams.delete(param);
-        }
-
-        // Normalize domain (lowercase, remove www.)
-        let host = parsed.hostname.toLowerCase();
-        if (host.startsWith("www.")) {
-            host = host.substring(4);
-        }
-
-        // Rebuild URL with normalized components
-        let normalized = `${parsed.protocol}//${host}`;
-        if (parsed.port && parsed.port !== "80" && parsed.port !== "443") {
-            normalized += `:${parsed.port}`;
-        }
-        normalized += parsed.pathname.replace(/\/+$/, "") || "/"; // Remove trailing slashes
-
-        // Add remaining query params (sorted for consistency)
-        const sortedParams = new URLSearchParams([...parsed.searchParams.entries()].sort());
-        const queryString = sortedParams.toString();
-        if (queryString) {
-            normalized += `?${queryString}`;
-        }
-
-        // Add hash if present
-        if (parsed.hash) {
-            normalized += parsed.hash;
-        }
-
-        return normalized.toLowerCase();
-    } catch {
-        return null;
-    }
-}
-
-/**
- * Check if a URL uses a known URL shortener service.
- */
-function isUrlShortener(url: string): boolean {
-    const domain = extractDomain(url);
-    return domain !== null && URL_SHORTENERS.has(domain);
-}
-
-/**
- * Count query parameters in a URL.
- * Many query params can indicate tracking/affiliate links.
- */
-function countQueryParams(url: string): number {
-    try {
-        const parsed = new URL(url);
-        return parsed.searchParams.size;
-    } catch {
-        return 0;
-    }
-}
-
-/**
- * Check if URL has suspicious patterns.
- * Returns an array of detected issues.
- */
-function detectSuspiciousUrlPatterns(url: string): string[] {
-    const issues: string[] = [];
-
-    // Check for URL shortener
-    if (isUrlShortener(url)) {
-        issues.push("uses URL shortener");
-    }
-
-    // Check for excessive query parameters (common in affiliate/tracking links)
-    const paramCount = countQueryParams(url);
-    if (paramCount > 5) {
-        issues.push(`${paramCount} query parameters`);
-    }
-
-    // Check for IP address instead of domain
-    const domain = extractDomain(url);
-    if (domain && /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(domain)) {
-        issues.push("uses IP address instead of domain");
-    }
-
-    // Check for very long URLs (often obfuscated spam)
-    if (url.length > 500) {
-        issues.push("unusually long URL");
-    }
-
-    return issues;
-}
-
-/**
- * Calculate risk score based on comment.link analysis.
+ * Calculate risk score based on URL analysis.
  *
  * Factors analyzed:
- * - Same link posted multiple times by the same author (link spam)
- * - Same link posted by different authors (coordinated link spam)
- * - Suspicious URL patterns (shorteners, IP addresses, etc.)
+ * - Same URL posted multiple times by the same author (link spam)
+ * - Same URL posted by different authors (coordinated link spam)
+ * - Similar URLs (same prefix) from same author (URL variation spam)
+ * - Similar URLs (same prefix) from different authors (coordinated campaign with URL rotation)
+ * - IP address URLs
  *
- * Note: This factor only applies to comments (posts and replies) that have a link.
- * For non-comment publications or comments without links, returns a neutral score.
+ * Time clustering is used to distinguish coordinated spam bursts from organic sharing.
+ * No fixed time window is used - instead, the standard deviation of posting timestamps
+ * determines whether posts are clustered (suspicious) or spread out (organic).
+ *
+ * Note: This factor only applies to comments (posts and replies).
+ * For non-comment publications, returns a neutral score.
  */
 export function calculateCommentUrlRisk(ctx: RiskContext, weight: number): RiskFactor {
-    const { challengeRequest, combinedData, now } = ctx;
+    const { challengeRequest, combinedData } = ctx;
 
     // Check if this is a comment (post or reply)
     const publicationType = getPublicationType(challengeRequest);
@@ -187,114 +146,180 @@ export function calculateCommentUrlRisk(ctx: RiskContext, weight: number): RiskF
     }
 
     const comment = challengeRequest.comment!;
-    const link = comment.link;
 
-    // No link provided - neutral score
-    if (!link || link.trim().length === 0) {
+    // Collect all URLs from link, content, and title
+    const allUrls = collectAllUrls({
+        link: comment.link,
+        content: comment.content,
+        title: comment.title
+    });
+
+    // No URLs found - neutral score
+    if (allUrls.length === 0) {
         return {
             name: "commentUrlRisk",
             score: 0.5, // Neutral score
             weight,
-            explanation: "Link analysis: no link provided"
+            explanation: "Link analysis: no URLs found"
         };
     }
 
     // Use the author's cryptographic public key for identity tracking
-    // (author.address can be a domain and is not cryptographically tied to the author)
     const authorPublicKey = getAuthorPublicKeyFromChallengeRequest(challengeRequest);
 
-    let score = 0.2; // Start at low risk for comments with links
+    let score = RISK_SCORES.BASE_WITH_URLS;
     const issues: string[] = [];
 
-    // Normalize the link for comparison
-    const normalizedLink = normalizeUrl(link);
+    // ============================================
+    // Exact URL matching (for all URLs)
+    // ============================================
 
-    if (!normalizedLink) {
-        // Invalid URL format
-        score += 0.1;
-        issues.push("invalid URL format");
-    } else {
-        // Calculate time window for spam detection
-        const sinceTimestamp = now - LINK_SPAM_WINDOW_SECONDS;
-
-        // ============================================
-        // Database queries for duplicate link detection
-        // ============================================
-
-        // Check for same link from the same author
+    for (const url of allUrls) {
+        // Check for same URL from the same author
         const sameAuthorLinks = combinedData.findLinksByAuthor({
             authorPublicKey,
-            link: normalizedLink,
-            sinceTimestamp
+            link: url
         });
 
-        if (sameAuthorLinks >= 5) {
-            score += 0.4;
-            issues.push(`${sameAuthorLinks} posts with same link from author in 24h`);
-        } else if (sameAuthorLinks >= 3) {
-            score += 0.25;
-            issues.push(`${sameAuthorLinks} posts with same link from author in 24h`);
-        } else if (sameAuthorLinks >= 1) {
-            score += 0.15;
-            issues.push(`${sameAuthorLinks} post(s) with same link from author in 24h`);
+        if (sameAuthorLinks >= THRESHOLDS.SAME_AUTHOR_URL.HEAVY) {
+            score += RISK_SCORES.SAME_AUTHOR_URL.HEAVY;
+            issues.push(`${sameAuthorLinks} posts with same URL from author`);
+        } else if (sameAuthorLinks >= THRESHOLDS.SAME_AUTHOR_URL.MODERATE) {
+            score += RISK_SCORES.SAME_AUTHOR_URL.MODERATE;
+            issues.push(`${sameAuthorLinks} posts with same URL from author`);
+        } else if (sameAuthorLinks >= THRESHOLDS.SAME_AUTHOR_URL.LOW) {
+            score += RISK_SCORES.SAME_AUTHOR_URL.LOW;
+            issues.push(`${sameAuthorLinks} post(s) with same URL from author`);
         }
 
-        // Check for same link from different authors (coordinated spam)
+        // Check for same URL from different authors (coordinated spam)
         const otherAuthorsResult = combinedData.findLinksByOthers({
             excludeAuthorPublicKey: authorPublicKey,
-            link: normalizedLink,
-            sinceTimestamp
+            link: url
         });
 
-        if (otherAuthorsResult.count >= 10) {
-            score += 0.5;
+        if (otherAuthorsResult.count >= THRESHOLDS.OTHER_AUTHORS_URL.LIKELY_COORDINATED) {
+            score += RISK_SCORES.OTHER_AUTHORS_URL.LIKELY_COORDINATED;
             issues.push(
-                `${otherAuthorsResult.count} posts with same link from ${otherAuthorsResult.uniqueAuthors} other authors (likely coordinated spam)`
+                `${otherAuthorsResult.count} posts with same URL from ${otherAuthorsResult.uniqueAuthors} other authors (likely coordinated spam)`
             );
-        } else if (otherAuthorsResult.count >= 5) {
-            score += 0.35;
+        } else if (otherAuthorsResult.count >= THRESHOLDS.OTHER_AUTHORS_URL.POSSIBLE_COORDINATED) {
+            score += RISK_SCORES.OTHER_AUTHORS_URL.POSSIBLE_COORDINATED;
             issues.push(
-                `${otherAuthorsResult.count} posts with same link from ${otherAuthorsResult.uniqueAuthors} other authors (possible coordinated spam)`
+                `${otherAuthorsResult.count} posts with same URL from ${otherAuthorsResult.uniqueAuthors} other authors (possible coordinated spam)`
             );
-        } else if (otherAuthorsResult.count >= 2) {
-            score += 0.2;
-            issues.push(`${otherAuthorsResult.count} posts with same link from other authors`);
-        } else if (otherAuthorsResult.count >= 1) {
-            score += 0.1;
-            issues.push("link seen from another author");
+        } else if (otherAuthorsResult.count >= THRESHOLDS.OTHER_AUTHORS_URL.MULTIPLE_AUTHORS) {
+            score += RISK_SCORES.OTHER_AUTHORS_URL.MULTIPLE_AUTHORS;
+            issues.push(`${otherAuthorsResult.count} posts with same URL from other authors`);
+        } else if (otherAuthorsResult.count >= THRESHOLDS.OTHER_AUTHORS_URL.SEEN_ONCE) {
+            score += RISK_SCORES.OTHER_AUTHORS_URL.SEEN_ONCE;
+            issues.push("URL seen from another author");
         }
 
-        // ============================================
-        // Static URL analysis
-        // ============================================
+        // Check for IP address URLs
+        if (isIpAddressUrl(url)) {
+            score += RISK_SCORES.IP_ADDRESS_URL;
+            issues.push("uses IP address instead of domain");
+        }
 
-        const urlIssues = detectSuspiciousUrlPatterns(link);
-        for (const issue of urlIssues) {
-            if (issue === "uses URL shortener") {
-                score += 0.15;
-            } else if (issue === "uses IP address instead of domain") {
-                score += 0.2;
-            } else if (issue === "unusually long URL") {
-                score += 0.1;
-            } else if (issue.includes("query parameters")) {
-                score += 0.05;
+        // Check domain diversity - same domain posted repeatedly
+        const domain = extractDomain(url);
+        if (domain) {
+            const domainCount = combinedData.countLinkDomainByAuthor({
+                authorPublicKey,
+                domain
+            });
+
+            if (domainCount >= THRESHOLDS.SAME_DOMAIN.HEAVY) {
+                score += RISK_SCORES.SAME_DOMAIN.HEAVY;
+                issues.push(`${domainCount} links to same domain from author`);
+            } else if (domainCount >= THRESHOLDS.SAME_DOMAIN.MODERATE) {
+                score += RISK_SCORES.SAME_DOMAIN.MODERATE;
+                issues.push(`${domainCount} links to same domain from author`);
             }
-            issues.push(issue);
         }
+    }
 
-        // Check domain diversity - same domain posted repeatedly is suspicious
-        const domainCount = combinedData.countLinkDomainByAuthor({
+    // ============================================
+    // Similar URL detection (prefix matching)
+    // Only for non-allowlisted domains
+    // ============================================
+
+    const urlPrefixes = collectUrlPrefixesForSimilarity({
+        link: comment.link,
+        content: comment.content,
+        title: comment.title
+    });
+
+    for (const prefix of urlPrefixes) {
+        // Check for similar URLs from the same author
+        const similarFromAuthor = combinedData.findSimilarUrlsByAuthor({
             authorPublicKey,
-            domain: extractDomain(link)!,
-            sinceTimestamp
+            urlPrefix: prefix
         });
 
-        if (domainCount >= 10) {
-            score += 0.25;
-            issues.push(`${domainCount} links to same domain from author in 24h`);
-        } else if (domainCount >= 5) {
-            score += 0.15;
-            issues.push(`${domainCount} links to same domain from author in 24h`);
+        if (similarFromAuthor >= THRESHOLDS.SIMILAR_URLS.AUTHOR_MIN) {
+            // Get timestamps to analyze time clustering for same-author spam
+            const authorTimestamps = combinedData.getSimilarUrlTimestampsByAuthor({
+                authorPublicKey,
+                urlPrefix: prefix
+            });
+
+            const authorStddev = calculateTimestampStdDev(authorTimestamps);
+            const authorClusteringRisk = getTimeClusteringRisk(authorStddev, authorTimestamps.length);
+
+            if (authorClusteringRisk > 0) {
+                // Rapid-fire same-author posting - higher risk
+                const baseRisk =
+                    similarFromAuthor >= THRESHOLDS.SIMILAR_URLS.AUTHOR_HEAVY
+                        ? RISK_SCORES.SIMILAR_URLS_AUTHOR.CLUSTERED_HEAVY
+                        : RISK_SCORES.SIMILAR_URLS_AUTHOR.CLUSTERED_MODERATE;
+                score += baseRisk + authorClusteringRisk; // base + up to 0.3 for tight clustering
+                const stddevHours = authorStddev ? (authorStddev / 3600).toFixed(1) : "N/A";
+                issues.push(`${similarFromAuthor} similar URLs from author clustered in time (stddev: ${stddevHours}h)`);
+            } else {
+                // Spread out over time - still add risk but less severe
+                if (similarFromAuthor >= THRESHOLDS.SIMILAR_URLS.AUTHOR_HEAVY) {
+                    score += RISK_SCORES.SIMILAR_URLS_AUTHOR.SPREAD_HEAVY;
+                    issues.push(`${similarFromAuthor} similar URLs (same prefix) from author (spread over time)`);
+                } else {
+                    score += RISK_SCORES.SIMILAR_URLS_AUTHOR.SPREAD_MODERATE;
+                    issues.push(`${similarFromAuthor} similar URLs (same prefix) from author (spread over time)`);
+                }
+            }
+        }
+
+        // Check for similar URLs from other authors (coordinated campaign with URL rotation)
+        const similarFromOthers = combinedData.findSimilarUrlsByOthers({
+            excludeAuthorPublicKey: authorPublicKey,
+            urlPrefix: prefix
+        });
+
+        if (
+            similarFromOthers.count >= THRESHOLDS.SIMILAR_URLS.OTHERS_MIN_COUNT &&
+            similarFromOthers.uniqueAuthors >= THRESHOLDS.SIMILAR_URLS.OTHERS_MIN_AUTHORS
+        ) {
+            // Get timestamps to analyze time clustering
+            const timestamps = combinedData.getSimilarUrlTimestampsByOthers({
+                excludeAuthorPublicKey: authorPublicKey,
+                urlPrefix: prefix
+            });
+
+            const stddev = calculateTimestampStdDev(timestamps);
+            const clusteringRisk = getTimeClusteringRisk(stddev, timestamps.length);
+
+            if (clusteringRisk > 0) {
+                // Time-clustered coordinated campaign - higher risk
+                score += RISK_SCORES.SIMILAR_URLS_OTHERS.CLUSTERED_BASE + clusteringRisk; // base + up to 0.3 for tight clustering
+                const stddevHours = stddev ? (stddev / 3600).toFixed(1) : "N/A";
+                issues.push(
+                    `${similarFromOthers.count} similar URLs from ${similarFromOthers.uniqueAuthors} authors clustered in time (stddev: ${stddevHours}h) - likely coordinated campaign`
+                );
+            } else {
+                // Spread out over time - less suspicious, use lower base score
+                score += RISK_SCORES.SIMILAR_URLS_OTHERS.SPREAD;
+                issues.push(`${similarFromOthers.count} similar URLs from ${similarFromOthers.uniqueAuthors} authors (spread over time)`);
+            }
         }
     }
 

@@ -427,13 +427,14 @@ export class CombinedDataService {
     /**
      * Find links posted by a specific author from both sources.
      *
-     * @param params.sinceTimestamp - Time window in seconds (for protocol compatibility)
+     * @param params.sinceTimestamp - Optional time window in seconds (for protocol compatibility)
      */
-    findLinksByAuthor(params: { authorPublicKey: string; link: string; sinceTimestamp: number }): number {
-        // Convert sinceTimestamp from seconds to milliseconds for engine queries
+    findLinksByAuthor(params: { authorPublicKey: string; link: string; sinceTimestamp?: number }): number {
+        // Convert sinceTimestamp from seconds to milliseconds for engine queries (if provided)
         const engineCount = this.db.findLinksByAuthor({
-            ...params,
-            sinceTimestamp: params.sinceTimestamp * 1000
+            authorPublicKey: params.authorPublicKey,
+            link: params.link,
+            sinceTimestamp: params.sinceTimestamp !== undefined ? params.sinceTimestamp * 1000 : undefined
         });
         // Indexer uses seconds (protocol timestamp)
         const indexerResult = this.indexerQueries.findLinksFromIndexer({
@@ -449,17 +450,17 @@ export class CombinedDataService {
      * Find links posted by other authors from both sources.
      * Returns total count and unique authors across both sources.
      *
-     * @param params.sinceTimestamp - Time window in seconds (for protocol compatibility)
+     * @param params.sinceTimestamp - Optional time window in seconds (for protocol compatibility)
      */
-    findLinksByOthers(params: { excludeAuthorPublicKey: string; link: string; sinceTimestamp: number }): {
+    findLinksByOthers(params: { excludeAuthorPublicKey: string; link: string; sinceTimestamp?: number }): {
         count: number;
         uniqueAuthors: number;
     } {
-        // Convert sinceTimestamp from seconds to milliseconds for engine queries
+        // Convert sinceTimestamp from seconds to milliseconds for engine queries (if provided)
         const engineResult = this.db.findLinksByOthers({
             authorPublicKey: params.excludeAuthorPublicKey,
             link: params.link,
-            sinceTimestamp: params.sinceTimestamp * 1000
+            sinceTimestamp: params.sinceTimestamp !== undefined ? params.sinceTimestamp * 1000 : undefined
         });
         // Indexer uses seconds (protocol timestamp)
         const indexerResult = this.indexerQueries.findLinksFromIndexer({
@@ -480,13 +481,14 @@ export class CombinedDataService {
     /**
      * Count links to a specific domain by an author from both sources.
      *
-     * @param params.sinceTimestamp - Time window in seconds (for protocol compatibility)
+     * @param params.sinceTimestamp - Optional time window in seconds (for protocol compatibility)
      */
-    countLinkDomainByAuthor(params: { authorPublicKey: string; domain: string; sinceTimestamp: number }): number {
-        // Convert sinceTimestamp from seconds to milliseconds for engine queries
+    countLinkDomainByAuthor(params: { authorPublicKey: string; domain: string; sinceTimestamp?: number }): number {
+        // Convert sinceTimestamp from seconds to milliseconds for engine queries (if provided)
         const engineCount = this.db.countLinkDomainByAuthor({
-            ...params,
-            sinceTimestamp: params.sinceTimestamp * 1000
+            authorPublicKey: params.authorPublicKey,
+            domain: params.domain,
+            sinceTimestamp: params.sinceTimestamp !== undefined ? params.sinceTimestamp * 1000 : undefined
         });
         // Indexer uses seconds (protocol timestamp)
         const indexerCount = this.indexerQueries.countLinkDomainFromIndexer({
@@ -496,5 +498,122 @@ export class CombinedDataService {
         });
 
         return engineCount + indexerCount;
+    }
+
+    // ============================================
+    // Similar URL Detection: Query both sources (UNION)
+    // ============================================
+
+    /**
+     * Find similar URLs (matching prefix) from the same author across both sources.
+     * Used to detect link spam with URL variations.
+     *
+     * @param params.sinceTimestamp - Optional time window in seconds (for protocol compatibility)
+     */
+    findSimilarUrlsByAuthor(params: { authorPublicKey: string; urlPrefix: string; sinceTimestamp?: number }): number {
+        // Convert sinceTimestamp from seconds to milliseconds for engine queries (if provided)
+        const engineCount = this.db.findSimilarUrlsByAuthor({
+            authorPublicKey: params.authorPublicKey,
+            urlPrefix: params.urlPrefix,
+            sinceTimestamp: params.sinceTimestamp !== undefined ? params.sinceTimestamp * 1000 : undefined
+        });
+        // Indexer uses seconds (protocol timestamp)
+        const indexerResult = this.indexerQueries.findSimilarUrlsFromIndexer({
+            urlPrefix: params.urlPrefix,
+            sinceTimestamp: params.sinceTimestamp,
+            authorPublicKey: params.authorPublicKey
+        });
+
+        return engineCount + indexerResult.count;
+    }
+
+    /**
+     * Find similar URLs (matching prefix) from other authors across both sources.
+     * Used to detect coordinated link spam with URL variations.
+     *
+     * @param params.sinceTimestamp - Optional time window in seconds (for protocol compatibility)
+     */
+    findSimilarUrlsByOthers(params: { excludeAuthorPublicKey: string; urlPrefix: string; sinceTimestamp?: number }): {
+        count: number;
+        uniqueAuthors: number;
+    } {
+        // Convert sinceTimestamp from seconds to milliseconds for engine queries (if provided)
+        const engineResult = this.db.findSimilarUrlsByOthers({
+            authorPublicKey: params.excludeAuthorPublicKey,
+            urlPrefix: params.urlPrefix,
+            sinceTimestamp: params.sinceTimestamp !== undefined ? params.sinceTimestamp * 1000 : undefined
+        });
+        // Indexer uses seconds (protocol timestamp)
+        const indexerResult = this.indexerQueries.findSimilarUrlsFromIndexer({
+            urlPrefix: params.urlPrefix,
+            sinceTimestamp: params.sinceTimestamp,
+            excludeAuthorPublicKey: params.excludeAuthorPublicKey
+        });
+
+        // Note: uniqueAuthors might be slightly inaccurate if the same author
+        // appears in both sources. For a more accurate count, we'd need to
+        // query and deduplicate, but this approximation is good enough for risk scoring.
+        return {
+            count: engineResult.count + indexerResult.count,
+            uniqueAuthors: engineResult.uniqueAuthors + indexerResult.uniqueAuthors
+        };
+    }
+
+    /**
+     * Get timestamps of similar URLs from the same author across both sources.
+     * Used for time clustering analysis to detect rapid-fire URL spam.
+     * Combines engine + indexer timestamps, deduplicates, and returns sorted array.
+     *
+     * @param params.sinceTimestamp - Optional time window in seconds (for protocol compatibility)
+     */
+    getSimilarUrlTimestampsByAuthor(params: { authorPublicKey: string; urlPrefix: string; sinceTimestamp?: number }): number[] {
+        // Convert sinceTimestamp from seconds to milliseconds for engine queries (if provided)
+        const engineTimestamps = this.db.findSimilarUrlTimestampsByAuthor({
+            authorPublicKey: params.authorPublicKey,
+            urlPrefix: params.urlPrefix,
+            sinceTimestamp: params.sinceTimestamp !== undefined ? params.sinceTimestamp * 1000 : undefined
+        });
+
+        // Indexer uses seconds (protocol timestamp)
+        const indexerTimestamps = this.indexerQueries.findSimilarUrlTimestampsFromIndexer({
+            urlPrefix: params.urlPrefix,
+            sinceTimestamp: params.sinceTimestamp,
+            authorPublicKey: params.authorPublicKey
+        });
+
+        // Combine, deduplicate, and sort
+        const allTimestamps = [...new Set([...engineTimestamps, ...indexerTimestamps])];
+        allTimestamps.sort((a, b) => a - b);
+
+        return allTimestamps;
+    }
+
+    /**
+     * Get timestamps of similar URLs from other authors across both sources.
+     * Used for time clustering analysis to detect coordinated spam campaigns.
+     * Combines engine + indexer timestamps, deduplicates, and returns sorted array.
+     *
+     * @param params.sinceTimestamp - Optional time window in seconds (for protocol compatibility)
+     */
+    getSimilarUrlTimestampsByOthers(params: { excludeAuthorPublicKey: string; urlPrefix: string; sinceTimestamp?: number }): number[] {
+        // Convert sinceTimestamp from seconds to milliseconds for engine queries (if provided)
+        const engineTimestamps = this.db.findSimilarUrlTimestampsByOthers({
+            authorPublicKey: params.excludeAuthorPublicKey,
+            urlPrefix: params.urlPrefix,
+            sinceTimestamp: params.sinceTimestamp !== undefined ? params.sinceTimestamp * 1000 : undefined
+        });
+
+        // Indexer uses seconds (protocol timestamp)
+        const indexerTimestamps = this.indexerQueries.findSimilarUrlTimestampsFromIndexer({
+            urlPrefix: params.urlPrefix,
+            sinceTimestamp: params.sinceTimestamp,
+            excludeAuthorPublicKey: params.excludeAuthorPublicKey
+        });
+
+        // Combine, deduplicate, and sort
+        const allTimestamps = [...new Set([...engineTimestamps, ...indexerTimestamps])];
+        allTimestamps.sort((a, b) => a - b);
+
+        return allTimestamps;
     }
 }
