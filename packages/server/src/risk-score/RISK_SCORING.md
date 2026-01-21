@@ -25,7 +25,7 @@ The score is calculated as a weighted combination of multiple factors, each anal
 - **Domain wallet addresses** (e.g., ENS): Verified that the `plebbit-author-address` TXT record matches the publication's signing key
 - **Avatar (NFT) signatures**: Verified against the **current NFT owner** by querying the blockchain
 
-If wallet or avatar signature verification fails, the publication is **rejected** by the `/evaluate` endpoint. Therefore, these fields can be **TRUSTED** for risk scoring purposes once the publication passes verification. The wallet velocity factor uses these verified wallet addresses for tracking coordinated spam from users who share the same wallet-verified identity.
+If wallet or avatar signature verification fails, the publication is **rejected** by the `/evaluate` endpoint. Therefore, these fields can be **TRUSTED** for risk scoring purposes once the publication passes verification.
 
 The risk scoring system primarily relies on `author.subplebbit` data for reputation signals, with mitigations for manipulation.
 
@@ -385,51 +385,7 @@ The effective rate for each check is the maximum of:
 
 **Replay attack protection**: The `/evaluate` endpoint rejects duplicate publications by checking `publication.signature.signature` before insertion. If the same publication is submitted multiple times, subsequent attempts return a 409 Conflict error. This prevents malicious subplebbits from artificially inflating an author's velocity count.
 
-### 6. Wallet Velocity Risk (Weight: 14% without IP, 14% with IP)
-
-Tracks publication velocity by wallet address from `author.wallets`. Detects coordinated spam from users who share the same wallet-verified identity (e.g., mintpass NFT holders).
-
-This factor uses publication-type-specific thresholds since different actions have different natural rates.
-
-**Post thresholds (comments without parentCid):**
-
-| Posts/Hour | Risk Score | Description          |
-| ---------- | ---------- | -------------------- |
-| 0-2        | 0.10       | Normal posting rate  |
-| 3-5        | 0.40       | Elevated rate        |
-| 6-8        | 0.70       | Suspicious rate      |
-| 12+        | 0.95       | Likely automated/bot |
-
-**Reply thresholds (comments with parentCid):**
-
-| Replies/Hour | Risk Score | Description          |
-| ------------ | ---------- | -------------------- |
-| 0-5          | 0.10       | Normal posting rate  |
-| 6-10         | 0.40       | Elevated rate        |
-| 11-15        | 0.70       | Suspicious rate      |
-| 25+          | 0.95       | Likely automated/bot |
-
-**Vote thresholds:**
-
-| Votes/Hour | Risk Score | Description          |
-| ---------- | ---------- | -------------------- |
-| 0-20       | 0.10       | Normal voting rate   |
-| 21-40      | 0.40       | Elevated rate        |
-| 41-60      | 0.70       | Suspicious rate      |
-| 100+       | 0.95       | Likely automated/bot |
-
-**Comment edit thresholds:**
-
-| Edits/Hour | Risk Score | Description          |
-| ---------- | ---------- | -------------------- |
-| 0-3        | 0.10       | Normal editing rate  |
-| 4-5        | 0.40       | Elevated rate        |
-| 6-10       | 0.70       | Suspicious rate      |
-| 15+        | 0.95       | Likely automated/bot |
-
-**Note**: If an author has multiple wallets, the factor uses the highest velocity among all wallets. If no wallets are linked to the author, this factor is skipped (weight=0).
-
-### 7. IP Risk (Weight: 0% without IP, 20% with IP)
+### 6. IP Risk (Weight: 0% without IP, 20% with IP)
 
 When available (after iframe access), evaluates the author's IP address characteristics.
 
@@ -443,7 +399,7 @@ When available (after iframe access), evaluates the author's IP address characte
 
 **Note**: IP intelligence is best-effort and can have false positives. Use for informational purposes and rejection decisions only, not for auto-approval.
 
-### 8. Network Ban History (Weight: 10% without IP, 8% with IP)
+### 7. Network Ban History (Weight: 10% without IP, 8% with IP)
 
 Evaluates the author's ban history across all indexed subplebbits. Authors banned from multiple communities are higher risk.
 
@@ -462,7 +418,7 @@ This factor uses data collected by the indexer, which:
 
 **Rationale**: Authors banned from multiple subplebbits have a pattern of problematic behavior.
 
-### 9. ModQueue Rejection Rate (Weight: 6% without IP, 4% with IP)
+### 8. ModQueue Rejection Rate (Weight: 6% without IP, 4% with IP)
 
 Evaluates what percentage of the author's modQueue submissions were rejected.
 
@@ -483,7 +439,7 @@ The indexer tracks `subplebbit.modQueue.pendingApproval` entries and detects res
 
 **Rationale**: Authors whose submissions are frequently rejected by moderators are more likely to be spamming.
 
-### 10. Network Removal Rate (Weight: 8% without IP, 8% with IP)
+### 9. Network Removal Rate (Weight: 8% without IP, 8% with IP)
 
 Evaluates what percentage of the author's comments have been removed across all indexed subplebbits.
 
@@ -508,31 +464,31 @@ This includes:
 
 Weights are redistributed based on whether IP information is available:
 
-| Factor                     | Without IP | With IP  |
-| -------------------------- | ---------- | -------- |
-| Comment Content/Title Risk | 14%        | 10%      |
-| Comment URL/Link Risk      | 12%        | 10%      |
-| Velocity Risk              | 10%        | 8%       |
-| Account Age                | 14%        | 10%      |
-| Karma Score                | 12%        | 8%       |
-| Wallet Velocity            | 14%        | 14%      |
-| IP Risk                    | 0%         | 20%      |
-| Network Ban History        | 10%        | 8%       |
-| ModQueue Rejection Rate    | 6%         | 4%       |
-| Network Removal Rate       | 8%         | 8%       |
-| **Total**                  | **100%**   | **100%** |
+| Factor                     | Without IP | With IP |
+| -------------------------- | ---------- | ------- |
+| Comment Content/Title Risk | 14%        | 10%     |
+| Comment URL/Link Risk      | 12%        | 10%     |
+| Velocity Risk              | 10%        | 8%      |
+| Account Age                | 14%        | 10%     |
+| Karma Score                | 12%        | 8%      |
+| IP Risk                    | 0%         | 20%     |
+| Network Ban History        | 10%        | 8%      |
+| ModQueue Rejection Rate    | 6%         | 4%      |
+| Network Removal Rate       | 8%         | 8%      |
+| **Total**                  | **86%**    | **86%** |
+
+**Note**: Total weights sum to 86%. Active factors receive proportionally redistributed weights that sum to 100% (see Weight Redistribution below).
 
 ## Weight Redistribution
 
 Some factors may be **skipped** (return `weight: 0`) when their required data is unavailable or when they don't apply to the publication type:
 
-| Factor             | Conditions for Skipping                                           |
-| ------------------ | ----------------------------------------------------------------- |
-| Wallet Velocity    | No wallets in `author.wallets` OR publication is `subplebbitEdit` |
-| Velocity           | Publication is `subplebbitEdit`                                   |
-| IP Risk            | No IP intelligence data available (user hasn't accessed iframe)   |
-| Content/Title Risk | Publication is not a comment (vote, edit, moderation)             |
-| URL/Link Risk      | Publication is not a comment (vote, edit, moderation)             |
+| Factor             | Conditions for Skipping                                         |
+| ------------------ | --------------------------------------------------------------- |
+| Velocity           | Publication is `subplebbitEdit`                                 |
+| IP Risk            | No IP intelligence data available (user hasn't accessed iframe) |
+| Content/Title Risk | Publication is not a comment (vote, edit, moderation)           |
+| URL/Link Risk      | Publication is not a comment (vote, edit, moderation)           |
 
 When a factor is skipped, its weight is **proportionally redistributed** to the remaining active factors. This ensures:
 
@@ -548,43 +504,25 @@ For each active factor:
 effectiveWeight = originalWeight / Σ(activeWeights)
 ```
 
-### Example: Wallet Velocity Skipped (No Wallets)
-
-When an author has no wallets (without IP info):
-
-| Factor             | Original Weight | Effective Weight |
-| ------------------ | --------------- | ---------------- |
-| Content Risk       | 14%             | 16.3%            |
-| URL Risk           | 12%             | 14.0%            |
-| Velocity           | 10%             | 11.6%            |
-| Account Age        | 14%             | 16.3%            |
-| Karma              | 12%             | 14.0%            |
-| Wallet Velocity    | 14%             | **0% (skipped)** |
-| Ban History        | 10%             | 11.6%            |
-| ModQueue Rejection | 6%              | 7.0%             |
-| Removal Rate       | 8%              | 9.3%             |
-| **Total**          | 100%            | **100%**         |
-
-Calculation: `0.14 / 0.86 ≈ 0.163` for Content Risk (14% original / 86% active total)
-
 ### Example: Vote Publication (Multiple Factors Skipped)
 
-For vote publications from authors without wallets, Content Risk, URL Risk, and Wallet Velocity are all skipped:
+For vote publications, Content Risk and URL Risk are skipped:
 
 | Factor             | Original Weight | Effective Weight |
 | ------------------ | --------------- | ---------------- |
 | Content Risk       | 14%             | **0% (skipped)** |
 | URL Risk           | 12%             | **0% (skipped)** |
-| Velocity           | 10%             | 17.9%            |
-| Account Age        | 14%             | 25.0%            |
-| Karma              | 12%             | 21.4%            |
-| Wallet Velocity    | 14%             | **0% (skipped)** |
-| Ban History        | 10%             | 17.9%            |
-| ModQueue Rejection | 6%              | 10.7%            |
-| Removal Rate       | 8%              | 14.3%            |
-| **Total**          | 100%            | **100%**         |
+| Velocity           | 10%             | 16.7%            |
+| Account Age        | 14%             | 23.3%            |
+| Karma              | 12%             | 20.0%            |
+| Ban History        | 10%             | 16.7%            |
+| ModQueue Rejection | 6%              | 10.0%            |
+| Removal Rate       | 8%              | 13.3%            |
+| **Total**          | 86%             | **100%**         |
 
-Active total: 10% + 14% + 12% + 10% + 6% + 8% = 56%
+Active total: 10% + 14% + 12% + 10% + 6% + 8% = 60%
+
+Calculation: `0.10 / 0.60 ≈ 0.167` for Velocity (10% original / 60% active total)
 
 ## Score Calculation
 
@@ -630,12 +568,9 @@ comment.content: "Check out my thoughts..."
 | Content Risk       | 0.2 (base, unique content) | 14%             | 16.3%            | 0.033    |
 | URL Risk           | 0.2 (base, first time URL) | 12%             | 14.0%            | 0.028    |
 | Velocity           | 0.1 (1 post/hr, normal)    | 10%             | 11.6%            | 0.012    |
-| Wallet Velocity    | — (skipped, no wallet)     | 0%              | 0%               | 0        |
 | Ban History        | 0.0 (no bans)              | 10%             | 11.6%            | 0        |
 | ModQueue Rejection | 0.5 (no data)              | 6%              | 7.0%             | 0.035    |
 | Removal Rate       | 0.5 (no data)              | 8%              | 9.3%             | 0.047    |
-
-**Note**: Wallet Velocity is skipped (no wallets), so the 14% weight is redistributed proportionally to other factors.
 
 **Final Score: ~0.40** → Moderate risk, triggers CAPTCHA challenge
 
@@ -656,12 +591,9 @@ comment.content: "Has anyone figured out how to run a subplebbit on a VPS?"
 | Content Risk       | 0.2 (base, unique)           | 14%             | 16.3%            | 0.033    |
 | URL Risk           | 0.2 (no URLs - positive)     | 12%             | 14.0%            | 0.028    |
 | Velocity           | 0.1 (normal)                 | 10%             | 11.6%            | 0.012    |
-| Wallet Velocity    | — (skipped, no wallet)       | 0%              | 0%               | 0        |
 | Ban History        | 0.0                          | 10%             | 11.6%            | 0        |
 | ModQueue Rejection | 0.1 (0-10% rejected)         | 6%              | 7.0%             | 0.007    |
 | Removal Rate       | 0.1 (0-5% removed)           | 8%              | 9.3%             | 0.009    |
-
-**Note**: Wallet Velocity is skipped (no wallets), so weights are redistributed proportionally.
 
 **Final Score: ~0.15** → Low risk, auto-accepted
 
@@ -682,12 +614,9 @@ comment.content: "Click here for FREE money!!!"
 | Content Risk       | 0.53 (base 0.2 + caps 0.08 + 3 duplicates 0.25)                           | 14%             | 16.3%            | 0.086    |
 | URL Risk           | 0.85 (base 0.2 + 5+ same URL 0.4 + 5-9 domain 0.15 + time clustering 0.1) | 12%             | 14.0%            | 0.119    |
 | Velocity           | 0.4 (3-5 posts/hr)                                                        | 10%             | 11.6%            | 0.046    |
-| Wallet Velocity    | — (skipped, no wallet)                                                    | 0%              | 0%               | 0        |
 | Ban History        | 0.0                                                                       | 10%             | 11.6%            | 0        |
 | ModQueue Rejection | 0.5 (no data)                                                             | 6%              | 7.0%             | 0.035    |
 | Removal Rate       | 0.5 (no data)                                                             | 8%              | 9.3%             | 0.047    |
-
-**Note**: Wallet Velocity is skipped (no wallets), so weights are redistributed proportionally.
 
 **Final Score: ~0.56** → Moderate-high risk, CAPTCHA required
 
@@ -710,12 +639,9 @@ comment.content: "Get in early on this opportunity!"
 | Content Risk       | 0.6 (base 0.2 + 5+ identical from others 0.4)              | 14%             | 16.3%            | 0.098    |
 | URL Risk           | 1.0 (base 0.2 + 10+ coordinated 0.5 + time clustering 0.3) | 12%             | 14.0%            | 0.140    |
 | Velocity           | 0.1 (first post)                                           | 10%             | 11.6%            | 0.012    |
-| Wallet Velocity    | — (skipped, no wallet)                                     | 0%              | 0%               | 0        |
 | Ban History        | 0.0                                                        | 10%             | 11.6%            | 0        |
 | ModQueue Rejection | 0.5 (no data)                                              | 6%              | 7.0%             | 0.035    |
 | Removal Rate       | 0.5 (no data)                                              | 8%              | 9.3%             | 0.047    |
-
-**Note**: Wallet Velocity is skipped (no wallets), so weights are redistributed proportionally.
 
 **Final Score: ~0.58** → Moderate-high risk, CAPTCHA required
 
@@ -738,12 +664,9 @@ Same author has posted 5 similar URLs (`spam.com/promo/deal?ref=user1`, etc.) wi
 | Content Risk       | 0.35 (base 0.2 + similar titles 0.15)                        | 14%             | 16.3%            | 0.057    |
 | URL Risk           | 0.85 (base 0.2 + 5+ similar clustered 0.35 + time bonus 0.3) | 12%             | 14.0%            | 0.119    |
 | Velocity           | 0.7 (6-8 posts/hr)                                           | 10%             | 11.6%            | 0.081    |
-| Wallet Velocity    | — (skipped, no wallet)                                       | 0%              | 0%               | 0        |
 | Ban History        | 0.4 (1 ban from another sub)                                 | 10%             | 11.6%            | 0.046    |
 | ModQueue Rejection | 0.5 (no data)                                                | 6%              | 7.0%             | 0.035    |
 | Removal Rate       | 0.5 (no data)                                                | 8%              | 9.3%             | 0.047    |
-
-**Note**: Wallet Velocity is skipped (no wallets), so weights are redistributed proportionally.
 
 **Final Score: ~0.61** → Moderate-high risk, CAPTCHA required
 
@@ -764,12 +687,9 @@ comment.content: "CLICK HERE NOW!!! DON'T MISS OUT!!!"
 | Content Risk       | 0.58 (base 0.2 + caps 0.08 + repetitive 0.1 + duplicate title 0.2) | 14%             | 16.3%            | 0.095    |
 | URL Risk           | 0.4 (base 0.2 + IP address 0.2)                                    | 12%             | 14.0%            | 0.056    |
 | Velocity           | 0.4 (elevated)                                                     | 10%             | 11.6%            | 0.046    |
-| Wallet Velocity    | — (skipped, no wallet)                                             | 0%              | 0%               | 0        |
 | Ban History        | 0.85 (3+ bans)                                                     | 10%             | 11.6%            | 0.099    |
 | ModQueue Rejection | 0.9 (70%+ rejected)                                                | 6%              | 7.0%             | 0.063    |
 | Removal Rate       | 0.9 (50%+ removed)                                                 | 8%              | 9.3%             | 0.084    |
-
-**Note**: Wallet Velocity is skipped (no wallets), so weights are redistributed proportionally.
 
 **Final Score: ~0.67** → High risk, close to auto-reject threshold
 

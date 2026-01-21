@@ -11,9 +11,7 @@ const baseSignature = {
     signedPropertyNames: ["author"]
 };
 
-function createMockAuthor(options: {
-    wallets?: Record<string, { address: string; timestamp: number; signature: { signature: string; type: string } }>;
-}) {
+function createMockAuthor() {
     return {
         address: "12D3KooWTestAddress",
         subplebbit: {
@@ -21,8 +19,7 @@ function createMockAuthor(options: {
             replyScore: 0,
             firstCommentTimestamp: baseTimestamp - 86400,
             lastCommentCid: "QmYwAPJzv5CZsnAzt8auVZRn9p6nxfZmZ75W6rS4ju4Khu"
-        },
-        wallets: options.wallets
+        }
     };
 }
 
@@ -72,15 +69,7 @@ describe("weight redistribution", () => {
 
     describe("effectiveWeight calculation", () => {
         it("should have effectiveWeights sum to 1.0 when all factors are active", () => {
-            const author = createMockAuthor({
-                wallets: {
-                    eth: {
-                        address: "0x742d35Cc6634C0532925a3b844Bc9e7595f42d11",
-                        timestamp: baseTimestamp - 1000,
-                        signature: { signature: "sig", type: "ethereum" }
-                    }
-                }
-            });
+            const author = createMockAuthor();
             const challengeRequest = createMockCommentRequest(author);
 
             const result = calculateRiskScore({
@@ -101,38 +90,9 @@ describe("weight redistribution", () => {
             }
         });
 
-        it("should redistribute weight when wallet velocity is skipped (no wallets)", () => {
-            const author = createMockAuthor({ wallets: undefined });
-            const challengeRequest = createMockCommentRequest(author);
-
-            const result = calculateRiskScore({
-                challengeRequest,
-                db,
-                now: baseTimestamp
-            });
-
-            // Wallet velocity should be skipped (weight=0, effectiveWeight=0)
-            const walletFactor = result.factors.find((f) => f.name === "walletVelocity");
-            expect(walletFactor).toBeDefined();
-            expect(walletFactor!.weight).toBe(0);
-            expect(walletFactor!.effectiveWeight).toBe(0);
-
-            // Other factors should have increased effectiveWeight
-            const accountAgeFactor = result.factors.find((f) => f.name === "accountAge");
-            expect(accountAgeFactor).toBeDefined();
-            expect(accountAgeFactor!.weight).toBe(0.14); // Original weight
-            // Effective weight should be higher since wallet velocity (14%) was skipped
-            // 0.14 / (1.0 - 0.14) = 0.14 / 0.86 ≈ 0.163
-            expect(accountAgeFactor!.effectiveWeight).toBeGreaterThan(accountAgeFactor!.weight);
-
-            // Total should still be 1.0
-            const totalEffectiveWeight = result.factors.reduce((sum, f) => sum + f.effectiveWeight, 0);
-            expect(totalEffectiveWeight).toBeCloseTo(1.0, 5);
-        });
-
-        it("should redistribute weight when multiple factors are skipped (vote without wallets)", () => {
-            // For votes: content risk, URL risk, and wallet velocity are all skipped
-            const author = createMockAuthor({ wallets: undefined });
+        it("should redistribute weight when multiple factors are skipped (vote publication)", () => {
+            // For votes: content risk and URL risk are skipped
+            const author = createMockAuthor();
             const challengeRequest = createMockVoteRequest(author);
 
             const result = calculateRiskScore({
@@ -143,7 +103,7 @@ describe("weight redistribution", () => {
 
             // Count skipped factors
             const skippedFactors = result.factors.filter((f) => f.weight === 0);
-            expect(skippedFactors.length).toBeGreaterThanOrEqual(3); // At least content, URL, wallet velocity
+            expect(skippedFactors.length).toBeGreaterThanOrEqual(2); // At least content and URL risk
 
             // All skipped factors should have effectiveWeight = 0
             for (const factor of skippedFactors) {
@@ -163,7 +123,7 @@ describe("weight redistribution", () => {
 
         it("should preserve relative weight ratios between active factors", () => {
             // Two factors with different original weights should maintain their ratio
-            const author = createMockAuthor({ wallets: undefined }); // Skip wallet velocity
+            const author = createMockAuthor();
             const challengeRequest = createMockCommentRequest(author);
 
             const result = calculateRiskScore({
@@ -185,15 +145,7 @@ describe("weight redistribution", () => {
         });
 
         it("should handle IP risk being available (with ipIntelligence)", () => {
-            const author = createMockAuthor({
-                wallets: {
-                    eth: {
-                        address: "0x742d35Cc6634C0532925a3b844Bc9e7595f42d11",
-                        timestamp: baseTimestamp - 1000,
-                        signature: { signature: "sig", type: "ethereum" }
-                    }
-                }
-            });
+            const author = createMockAuthor();
             const challengeRequest = createMockCommentRequest(author);
 
             const result = calculateRiskScore({
@@ -215,15 +167,7 @@ describe("weight redistribution", () => {
         });
 
         it("should skip IP risk when no ipIntelligence is provided", () => {
-            const author = createMockAuthor({
-                wallets: {
-                    eth: {
-                        address: "0x742d35Cc6634C0532925a3b844Bc9e7595f42d11",
-                        timestamp: baseTimestamp - 1000,
-                        signature: { signature: "sig", type: "ethereum" }
-                    }
-                }
-            });
+            const author = createMockAuthor();
             const challengeRequest = createMockCommentRequest(author);
 
             const result = calculateRiskScore({
@@ -243,7 +187,7 @@ describe("weight redistribution", () => {
 
     describe("final score calculation", () => {
         it("should calculate score using effectiveWeights", () => {
-            const author = createMockAuthor({ wallets: undefined });
+            const author = createMockAuthor();
             const challengeRequest = createMockCommentRequest(author);
 
             const result = calculateRiskScore({
@@ -264,7 +208,7 @@ describe("weight redistribution", () => {
         it("should return 0.5 if all factors are skipped (edge case)", () => {
             // This is an extreme edge case that shouldn't happen in practice
             // but tests the fallback behavior
-            const author = createMockAuthor({ wallets: undefined });
+            const author = createMockAuthor();
             const challengeRequest = createMockCommentRequest(author);
 
             // Use custom weights that are all zero
@@ -278,7 +222,6 @@ describe("weight redistribution", () => {
                     accountAge: 0,
                     karmaScore: 0,
                     ipRisk: 0,
-                    walletVelocity: 0,
                     networkBanHistory: 0,
                     modqueueRejectionRate: 0,
                     networkRemovalRate: 0

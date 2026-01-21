@@ -59,7 +59,6 @@ export interface WeightConfig {
     accountAge: number;
     karmaScore: number;
     ipRisk: number;
-    walletVelocity: number;
     /** Network-wide ban history from indexed data */
     networkBanHistory: number;
     /** ModQueue rejection rate from indexed data */
@@ -79,7 +78,6 @@ export const WEIGHTS_NO_IP: WeightConfig = {
     accountAge: 0.14,
     karmaScore: 0.12,
     ipRisk: 0,
-    walletVelocity: 0.14,
     networkBanHistory: 0.1,
     modqueueRejectionRate: 0.06,
     networkRemovalRate: 0.08
@@ -96,7 +94,6 @@ export const WEIGHTS_WITH_IP: WeightConfig = {
     accountAge: 0.1,
     karmaScore: 0.08,
     ipRisk: 0.2,
-    walletVelocity: 0.14,
     networkBanHistory: 0.08,
     modqueueRejectionRate: 0.04,
     networkRemovalRate: 0.08

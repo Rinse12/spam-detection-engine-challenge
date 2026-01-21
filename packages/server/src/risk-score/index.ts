@@ -10,7 +10,6 @@ import {
     calculateIpRisk,
     calculateKarma,
     calculateVelocity,
-    calculateWalletVelocity,
     calculateNetworkBanHistory,
     calculateModqueueRejectionRate,
     calculateNetworkRemovalRate,
@@ -44,7 +43,6 @@ export interface CalculateRiskScoreOptions {
  * - Karma Score: Author's accumulated karma (postScore + replyScore)
  * - Content Risk: Analysis of suspicious patterns in content
  * - Velocity Risk: How frequently the author is publishing
- * - Wallet Velocity: Publication rate per wallet address (detects coordinated spam)
  * - IP Risk: Analysis of IP type (VPN, Tor, proxy, datacenter)
  * - Network Ban History: How many subs the author has been banned from
  * - ModQueue Rejection Rate: What percentage of modQueue submissions get rejected
@@ -82,7 +80,6 @@ export function calculateRiskScore(options: CalculateRiskScoreOptions): RiskScor
         calculateCommentContentTitleRisk(ctx, weights.commentContentTitleRisk),
         calculateCommentUrlRisk(ctx, weights.commentUrlRisk),
         calculateVelocity(ctx, weights.velocityRisk),
-        calculateWalletVelocity(ctx, weights.walletVelocity),
         calculateIpRisk(ipIntelligence, weights.ipRisk),
         calculateNetworkBanHistory(ctx, weights.networkBanHistory),
         calculateModqueueRejectionRate(ctx, weights.modqueueRejectionRate),
