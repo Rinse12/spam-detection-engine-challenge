@@ -1,6 +1,8 @@
 import type { RiskContext, RiskFactor } from "../types.js";
 import { getAuthorFromChallengeRequest, getPublicationType, getWalletAddresses, type PublicationType } from "../utils.js";
 
+// TODO we need another file for avatar
+
 /**
  * Thresholds for wallet velocity by publication type.
  * Different publication types have different acceptable posting rates.
