@@ -3,6 +3,9 @@ import fs from "fs";
 import path from "path";
 import { SCHEMA_SQL } from "./schema.js";
 
+/** Challenge tier for tiered challenge selection */
+export type ChallengeTierDb = "captcha_only" | "captcha_and_oauth";
+
 export interface ChallengeSession {
     sessionId: string;
     /** Ed25519 public key of the subplebbit that created this session. Used to verify the same subplebbit completes the challenge. */
@@ -15,6 +18,10 @@ export interface ChallengeSession {
     authorAccessedIframeAt: number | null;
     /** OAuth identity in format "provider:userId" (e.g., "github:12345678") */
     oauthIdentity: string | null;
+    /** Challenge tier for tiered challenge selection (null for auto_accept/auto_reject which don't need challenges) */
+    challengeTier: ChallengeTierDb | null;
+    /** Whether CAPTCHA portion is completed (for captcha_and_oauth tier) */
+    captchaCompleted: number;
 }
 
 export interface IpRecord {
@@ -139,21 +146,28 @@ export class SpamDetectionDatabase {
         /** Ed25519 public key of the subplebbit */
         subplebbitPublicKey: string;
         expiresAt: number;
+        /** Challenge tier for tiered challenge selection */
+        challengeTier?: ChallengeTierDb;
     }): ChallengeSession {
         const stmt = this.db.prepare(`
       INSERT INTO challengeSessions (
         sessionId,
         subplebbitPublicKey,
-        expiresAt
+        expiresAt,
+        challengeTier
       )
       VALUES (
         @sessionId,
         @subplebbitPublicKey,
-        @expiresAt
+        @expiresAt,
+        @challengeTier
       )
     `);
 
-        stmt.run(params);
+        stmt.run({
+            ...params,
+            challengeTier: params.challengeTier ?? null
+        });
 
         return this.getChallengeSessionBySessionId(params.sessionId)!;
     }
@@ -235,6 +249,46 @@ export class SpamDetectionDatabase {
         });
 
         return result.changes > 0;
+    }
+
+    /**
+     * Mark CAPTCHA as completed for a combined (captcha_and_oauth) challenge.
+     * Does not mark the session as completed - OAuth must still be completed.
+     */
+    updateChallengeSessionCaptchaCompleted(sessionId: string): boolean {
+        const stmt = this.db.prepare(`
+      UPDATE challengeSessions
+      SET captchaCompleted = 1
+      WHERE sessionId = @sessionId
+    `);
+
+        const result = stmt.run({ sessionId });
+
+        return result.changes > 0;
+    }
+
+    /**
+     * Get the author's public key for a challenge session by querying publication tables.
+     * The author public key is stored in the signature.publicKey field of publications.
+     *
+     * @param sessionId - The challenge session ID
+     * @returns The author's Ed25519 public key, or undefined if no publication found
+     */
+    getAuthorPublicKeyBySessionId(sessionId: string): string | undefined {
+        // Try each publication table until we find a match
+        const tables = ["comments", "votes", "commentEdits", "commentModerations"] as const;
+
+        for (const table of tables) {
+            const result = this.db
+                .prepare(`SELECT json_extract(signature, '$.publicKey') as publicKey FROM ${table} WHERE sessionId = ? LIMIT 1`)
+                .get(sessionId) as { publicKey: string } | undefined;
+
+            if (result?.publicKey) {
+                return result.publicKey;
+            }
+        }
+
+        return undefined;
     }
 
     // ============================================
@@ -1484,6 +1538,25 @@ export class SpamDetectionDatabase {
 
         const rows = this.db.prepare(query).all({ authorPublicKey }) as Array<{ oauthIdentity: string }>;
         return rows.map((row) => row.oauthIdentity);
+    }
+
+    /**
+     * Get the OAuth provider names that an author has previously used for verification.
+     * Extracts provider names from the OAuth identities (format "provider:userId").
+     *
+     * @param authorPublicKey - The Ed25519 public key from the publication's signature
+     * @returns Array of unique provider names (e.g., ["google", "github"])
+     */
+    getAuthorOAuthProviders(authorPublicKey: string): string[] {
+        const identities = this.getAuthorOAuthIdentities(authorPublicKey);
+        const providers = new Set<string>();
+        for (const identity of identities) {
+            const colonIndex = identity.indexOf(":");
+            if (colonIndex > 0) {
+                providers.add(identity.substring(0, colonIndex));
+            }
+        }
+        return Array.from(providers);
     }
 
     /**

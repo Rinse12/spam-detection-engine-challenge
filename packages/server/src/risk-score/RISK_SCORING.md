@@ -602,16 +602,56 @@ finalScore = Σ(factor.score × factor.effectiveWeight)
 
 Where `effectiveWeight` is the redistributed weight after accounting for skipped factors. Each factor produces a score between 0.0 and 1.0, which is multiplied by its effective weight. The weighted scores sum to the final score (since effective weights sum to 1.0).
 
-## Recommended Thresholds
+## Challenge Tier System
 
-These are suggested defaults for subplebbit configuration:
+The risk score is mapped to a challenge tier that determines what verification the user must complete:
 
-| Threshold             | Suggested Value | Action                                    |
-| --------------------- | --------------- | ----------------------------------------- |
-| `autoAcceptThreshold` | 0.2             | Auto-accept publications below this score |
-| `autoRejectThreshold` | 0.8             | Auto-reject publications above this score |
+| Risk Score Range                           | Tier                | Action                    |
+| ------------------------------------------ | ------------------- | ------------------------- |
+| 0.0 - autoAcceptThreshold                  | `auto_accept`       | No challenge, auto-accept |
+| autoAcceptThreshold - captchaOnlyThreshold | `captcha_only`      | CAPTCHA (Turnstile) only  |
+| captchaOnlyThreshold - autoRejectThreshold | `captcha_and_oauth` | CAPTCHA + OAuth sign-in   |
+| autoRejectThreshold - 1.0                  | `auto_reject`       | No challenge, auto-reject |
 
-Publications between these thresholds trigger a challenge (e.g., CAPTCHA).
+### Default Thresholds
+
+| Threshold              | Default Value | Description                                               |
+| ---------------------- | ------------- | --------------------------------------------------------- |
+| `autoAcceptThreshold`  | 0.2           | Scores below this are auto-accepted without any challenge |
+| `captchaOnlyThreshold` | 0.4           | Scores between auto-accept and this get CAPTCHA only      |
+| `autoRejectThreshold`  | 0.8           | Scores at or above this are auto-rejected                 |
+
+### Challenge Tier Behavior
+
+**`auto_accept`**: The session is immediately marked as completed. The user doesn't need to solve any challenge.
+
+**`captcha_only`**: The user must complete a CAPTCHA (Cloudflare Turnstile). Once verified, the session is marked as completed.
+
+**`captcha_and_oauth`**: The user must complete both:
+
+1. CAPTCHA (Turnstile) - verifies they are human
+2. OAuth sign-in - verifies they have a real social account
+
+The CAPTCHA must be completed first, then OAuth buttons become available. This two-step verification provides stronger assurance for medium-risk submissions.
+
+**`auto_reject`**: The session is immediately marked as failed. The user cannot complete the challenge.
+
+### OAuth Provider Filtering
+
+When `captcha_and_oauth` tier is triggered, the system checks if the user has previously verified via OAuth with any providers. If so, **only providers they haven't used before** are shown. This prevents users from repeatedly using the same OAuth account.
+
+If the user has already used all available OAuth providers, the tier is downgraded to `captcha_only`.
+
+### Fallback Behavior
+
+The system gracefully degrades based on available providers:
+
+| Configured Providers | captcha_only Tier              | captcha_and_oauth Tier         |
+| -------------------- | ------------------------------ | ------------------------------ |
+| Both CAPTCHA + OAuth | Turnstile CAPTCHA              | Turnstile + OAuth              |
+| CAPTCHA only         | Turnstile CAPTCHA              | Downgrades to Turnstile only   |
+| OAuth only           | OAuth sign-in                  | Downgrades to OAuth only       |
+| Neither              | Error (no challenge available) | Error (no challenge available) |
 
 ## Worked Examples
 
@@ -793,15 +833,16 @@ comment.content: "Here's my perspective..."
 
 ### Summary Table
 
-| Scenario                                 | Final Score | Action               |
-| ---------------------------------------- | ----------- | -------------------- |
-| New user, first post with link, no OAuth | ~0.45       | CAPTCHA              |
-| Established user, Google verified        | ~0.17       | Auto-accept          |
-| Affiliate link spammer, no OAuth         | ~0.59       | CAPTCHA              |
-| Coordinated campaign, no OAuth           | ~0.61       | CAPTCHA              |
-| URL variation spam, no OAuth             | ~0.64       | CAPTCHA              |
-| Repeat offender, no OAuth                | ~0.70       | Close to auto-reject |
-| New user with Google+GitHub verified     | ~0.38       | CAPTCHA (lower risk) |
+| Scenario                                 | Final Score | Tier              | Action          |
+| ---------------------------------------- | ----------- | ----------------- | --------------- |
+| Established user, Google verified        | ~0.17       | auto_accept       | Auto-accepted   |
+| New user with Google+GitHub verified     | ~0.38       | captcha_only      | CAPTCHA only    |
+| New user, first post with link, no OAuth | ~0.45       | captcha_and_oauth | CAPTCHA + OAuth |
+| Affiliate link spammer, no OAuth         | ~0.59       | captcha_and_oauth | CAPTCHA + OAuth |
+| Coordinated campaign, no OAuth           | ~0.61       | captcha_and_oauth | CAPTCHA + OAuth |
+| URL variation spam, no OAuth             | ~0.64       | captcha_and_oauth | CAPTCHA + OAuth |
+| Repeat offender, no OAuth                | ~0.70       | captcha_and_oauth | CAPTCHA + OAuth |
+| Severe repeat offender, no OAuth         | ~0.85+      | auto_reject       | Auto-rejected   |
 
 ## Limitations
 

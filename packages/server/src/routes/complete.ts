@@ -11,6 +11,10 @@ export interface CompleteRouteOptions {
 export interface CompleteResponse {
     success: boolean;
     error?: string;
+    /** Indicates CAPTCHA was completed but OAuth is still required (for captcha_and_oauth tier) */
+    captchaCompleted?: boolean;
+    /** Indicates OAuth is still required to complete the challenge */
+    oauthRequired?: boolean;
 }
 
 /**
@@ -93,6 +97,18 @@ export function registerCompleteRoute(fastify: FastifyInstance, options: Complet
                 } else {
                     // In development/testing, allow skipping Turnstile verification
                     request.log.warn("Turnstile secret key not configured, skipping verification");
+                }
+
+                // Handle partial completion for captcha_and_oauth tier
+                if (session.challengeTier === "captcha_and_oauth") {
+                    // Mark CAPTCHA as completed but don't complete the session
+                    // OAuth is still required
+                    db.updateChallengeSessionCaptchaCompleted(sessionId);
+                    return {
+                        success: true,
+                        captchaCompleted: true,
+                        oauthRequired: true
+                    };
                 }
             } else {
                 // TODO: Implement verification for other challenge types (hcaptcha, OAuth, etc.)

@@ -2,7 +2,7 @@
  * Supported challenge types for iframe generation.
  * Each type corresponds to a different verification method.
  */
-export type ChallengeType = "turnstile" | "oauth";
+export type ChallengeType = "turnstile" | "oauth" | "captcha_and_oauth";
 
 /**
  * Supported OAuth providers for the oauth challenge type.

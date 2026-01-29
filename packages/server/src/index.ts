@@ -34,6 +34,12 @@ export interface ServerConfig {
     plebbitRpcUrl?: string;
     /** OAuth provider configurations. Only configured providers will be available. */
     oauth?: OAuthConfig;
+    /** Risk score threshold for auto-accept (no challenge). Default: 0.2 */
+    autoAcceptThreshold?: number;
+    /** Risk score threshold for CAPTCHA-only challenges. Scores between autoAcceptThreshold and this get CAPTCHA only. Above this requires CAPTCHA + OAuth. Default: 0.4 */
+    captchaOnlyThreshold?: number;
+    /** Risk score threshold for auto-reject. Default: 0.8 */
+    autoRejectThreshold?: number;
 }
 
 export interface SpamDetectionServer {
@@ -60,8 +66,18 @@ export async function createServer(config: ServerConfig): Promise<SpamDetectionS
         enableIndexer = true,
         plebbitOptions: userPlebbitOptions,
         plebbitRpcUrl = DEFAULT_PLEBBIT_RPC_URL,
-        oauth
+        oauth,
+        autoAcceptThreshold,
+        captchaOnlyThreshold,
+        autoRejectThreshold
     } = config;
+
+    // Build challenge tier config from provided thresholds
+    const challengeTierConfig = {
+        ...(autoAcceptThreshold !== undefined && { autoAcceptThreshold }),
+        ...(captchaOnlyThreshold !== undefined && { captchaOnlyThreshold }),
+        ...(autoRejectThreshold !== undefined && { autoRejectThreshold })
+    };
 
     // Merge plebbitRpcUrl into plebbitOptions
     const plebbitOptions = {
@@ -133,7 +149,8 @@ export async function createServer(config: ServerConfig): Promise<SpamDetectionS
         turnstileSecretKey,
         ipInfoToken,
         indexer,
-        oauthProvidersResult
+        oauthProvidersResult,
+        challengeTierConfig: Object.keys(challengeTierConfig).length > 0 ? challengeTierConfig : undefined
     });
 
     initPlebbitInstance();

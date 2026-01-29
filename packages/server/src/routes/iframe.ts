@@ -4,7 +4,7 @@ import type { OAuthProvidersResult } from "../oauth/providers.js";
 import { getEnabledProviders } from "../oauth/providers.js";
 import { IframeParamsSchema, type IframeParams } from "./schemas.js";
 import { refreshIpIntelIfNeeded } from "../ip-intel/index.js";
-import { generateChallengeIframe, type ChallengeType } from "../challenge-iframes/index.js";
+import { generateChallengeIframe, type ChallengeType, type OAuthProvider } from "../challenge-iframes/index.js";
 
 export interface IframeRouteOptions {
     db: SpamDetectionDatabase;
@@ -22,13 +22,10 @@ export interface IframeRouteOptions {
 export function registerIframeRoute(fastify: FastifyInstance, options: IframeRouteOptions): void {
     const { db, turnstileSiteKey, ipInfoToken, oauthProvidersResult, baseUrl } = options;
 
-    // Determine which challenge type to use based on configuration
+    // Determine which challenge types are available based on configuration
     const enabledOAuthProviders = oauthProvidersResult ? getEnabledProviders(oauthProvidersResult) : [];
     const hasOAuth = enabledOAuthProviders.length > 0;
     const hasTurnstile = !!turnstileSiteKey;
-
-    // Determine default challenge type (prefer OAuth if configured, fallback to Turnstile)
-    const challengeType: ChallengeType = hasOAuth ? "oauth" : "turnstile";
 
     fastify.get(
         "/api/v1/iframe/:sessionId",
@@ -68,6 +65,13 @@ export function registerIframeRoute(fastify: FastifyInstance, options: IframeRou
                 return;
             }
 
+            // Check if challenge failed (auto-rejected)
+            if (session.status === "failed") {
+                reply.status(403);
+                reply.send("Challenge was rejected due to high risk score");
+                return;
+            }
+
             // Check if iframe was already accessed (challenge is pending)
             if (session.authorAccessedIframeAt) {
                 reply.status(409);
@@ -99,24 +103,72 @@ export function registerIframeRoute(fastify: FastifyInstance, options: IframeRou
                 }
             }
 
-            // Serve the iframe HTML based on challenge type
+            // Determine which iframe to serve based on session's challenge tier
             let html: string;
+            const challengeTier = session.challengeTier;
 
-            if (challengeType === "oauth" && hasOAuth && baseUrl) {
-                html = generateChallengeIframe("oauth", {
-                    sessionId,
-                    enabledProviders: enabledOAuthProviders,
-                    baseUrl
-                });
-            } else if (hasTurnstile) {
-                html = generateChallengeIframe("turnstile", {
-                    sessionId,
-                    siteKey: turnstileSiteKey
-                });
+            if (challengeTier === "captcha_and_oauth" && hasTurnstile && hasOAuth && baseUrl) {
+                // For captcha_and_oauth tier, filter OAuth providers to exclude ones the author has already used
+                let availableProviders: OAuthProvider[] = enabledOAuthProviders;
+
+                const authorPublicKey = db.getAuthorPublicKeyBySessionId(sessionId);
+                if (authorPublicKey) {
+                    const usedProviders = db.getAuthorOAuthProviders(authorPublicKey);
+                    availableProviders = enabledOAuthProviders.filter((provider) => !usedProviders.includes(provider));
+                }
+
+                // If all providers already used, downgrade to captcha-only
+                if (availableProviders.length === 0) {
+                    html = generateChallengeIframe("turnstile", {
+                        sessionId,
+                        siteKey: turnstileSiteKey
+                    });
+                } else {
+                    html = generateChallengeIframe("captcha_and_oauth", {
+                        sessionId,
+                        siteKey: turnstileSiteKey,
+                        enabledProviders: availableProviders,
+                        baseUrl,
+                        captchaCompleted: session.captchaCompleted === 1
+                    });
+                }
+            } else if (challengeTier === "captcha_only") {
+                // captcha_only tier: use Turnstile if available, otherwise OAuth as fallback
+                if (hasTurnstile) {
+                    html = generateChallengeIframe("turnstile", {
+                        sessionId,
+                        siteKey: turnstileSiteKey
+                    });
+                } else if (hasOAuth && baseUrl) {
+                    html = generateChallengeIframe("oauth", {
+                        sessionId,
+                        enabledProviders: enabledOAuthProviders,
+                        baseUrl
+                    });
+                } else {
+                    reply.status(500);
+                    reply.send("No challenge provider configured");
+                    return;
+                }
             } else {
-                reply.status(500);
-                reply.send("No challenge provider configured");
-                return;
+                // Legacy sessions (null tier) or fallback: use existing logic
+                // Prefer OAuth if configured, fallback to Turnstile
+                if (hasOAuth && baseUrl) {
+                    html = generateChallengeIframe("oauth", {
+                        sessionId,
+                        enabledProviders: enabledOAuthProviders,
+                        baseUrl
+                    });
+                } else if (hasTurnstile) {
+                    html = generateChallengeIframe("turnstile", {
+                        sessionId,
+                        siteKey: turnstileSiteKey
+                    });
+                } else {
+                    reply.status(500);
+                    reply.send("No challenge provider configured");
+                    return;
+                }
             }
 
             reply.type("text/html");

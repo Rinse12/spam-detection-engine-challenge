@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import type { DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor } from "@plebbit/plebbit-js/dist/node/pubsub-messages/types.js";
 import { toString as uint8ArrayToString } from "uint8arrays/to-string";
 import type { EvaluateResponse } from "@easy-community-spam-blocker/shared";
-import type { SpamDetectionDatabase } from "../db/index.js";
+import type { SpamDetectionDatabase, ChallengeTierDb } from "../db/index.js";
 import { EvaluateRequestSchema, type EvaluateRequest } from "./schemas.js";
 import { derivePublicationFromChallengeRequest } from "../plebbit-js-internals.js";
 import { randomUUID } from "crypto";
@@ -11,6 +11,7 @@ import { verifyPublicationSignature } from "../security/publication-signature.js
 import { resolveSubplebbitPublicKey } from "../subplebbit-resolver.js";
 import { calculateRiskScore } from "../risk-score/index.js";
 import { getAuthorFromChallengeRequest } from "../risk-score/utils.js";
+import { determineChallengeTier, type ChallengeTierConfig } from "../risk-score/challenge-tier.js";
 import { IndexerQueries } from "../indexer/db/queries.js";
 import type { Indexer } from "../indexer/index.js";
 
@@ -21,13 +22,19 @@ export interface EvaluateRouteOptions {
     db: SpamDetectionDatabase;
     baseUrl: string;
     indexer?: Indexer | null;
+    /** Challenge tier configuration thresholds */
+    challengeTierConfig?: Partial<ChallengeTierConfig>;
+    /** Whether OAuth providers are available */
+    hasOAuthProviders?: boolean;
+    /** Whether Turnstile is configured */
+    hasTurnstile?: boolean;
 }
 
 /**
  * Register the /api/v1/evaluate route.
  */
 export function registerEvaluateRoute(fastify: FastifyInstance, options: EvaluateRouteOptions): void {
-    const { db, baseUrl, indexer } = options;
+    const { db, baseUrl, indexer, challengeTierConfig, hasOAuthProviders = false, hasTurnstile = false } = options;
 
     fastify.post(
         "/api/v1/evaluate",
@@ -132,13 +139,6 @@ export function registerEvaluateRoute(fastify: FastifyInstance, options: Evaluat
             const nowMs = Date.now();
             const expiresAt = nowMs + CHALLENGE_EXPIRY_MS;
 
-            // Create challenge session in database
-            db.insertChallengeSession({
-                sessionId,
-                subplebbitPublicKey: subplebbitPublicKeyFromRequestBody,
-                expiresAt
-            });
-
             // Register subplebbit for indexing (only if not already registered)
             const indexerQueries = new IndexerQueries(db.getDb());
             const existingSubplebbit = indexerQueries.getIndexedSubplebbit(subplebbitAddress);
@@ -162,6 +162,41 @@ export function registerEvaluateRoute(fastify: FastifyInstance, options: Evaluat
             const riskScoreResult = calculateRiskScore({
                 challengeRequest: challengeRequest as DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor,
                 db
+            });
+
+            // Determine challenge tier based on risk score
+            const challengeTier = determineChallengeTier(riskScoreResult.score, challengeTierConfig);
+
+            // Map challenge tier to database tier (auto_accept and auto_reject don't need sessions with tiers)
+            let dbChallengeTier: ChallengeTierDb | undefined;
+            if (challengeTier === "captcha_only") {
+                // If no Turnstile configured, can't do captcha_only - fall back to OAuth if available
+                if (hasTurnstile) {
+                    dbChallengeTier = "captcha_only";
+                } else if (hasOAuthProviders) {
+                    // Fall back to OAuth-only (treated as captcha_only tier for simplicity)
+                    dbChallengeTier = "captcha_only";
+                }
+                // If neither available, session is created without tier (legacy behavior)
+            } else if (challengeTier === "captcha_and_oauth") {
+                // Need both CAPTCHA and OAuth
+                if (hasTurnstile && hasOAuthProviders) {
+                    dbChallengeTier = "captcha_and_oauth";
+                } else if (hasOAuthProviders) {
+                    // Downgrade to OAuth-only (captcha_only tier uses OAuth as fallback)
+                    dbChallengeTier = "captcha_only";
+                } else if (hasTurnstile) {
+                    // Downgrade to CAPTCHA-only
+                    dbChallengeTier = "captcha_only";
+                }
+            }
+
+            // Create challenge session in database
+            db.insertChallengeSession({
+                sessionId,
+                subplebbitPublicKey: subplebbitPublicKeyFromRequestBody,
+                expiresAt,
+                challengeTier: dbChallengeTier
             });
 
             // Store publication in database for velocity tracking
@@ -194,7 +229,7 @@ export function registerEvaluateRoute(fastify: FastifyInstance, options: Evaluat
                 indexer.queuePreviousCidCrawl(author.previousCommentCid);
             }
 
-            // Build response (convert internal milliseconds to seconds for API)
+            // Build response based on challenge tier
             const response: EvaluateResponse = {
                 riskScore: riskScoreResult.score,
                 sessionId,
@@ -202,6 +237,16 @@ export function registerEvaluateRoute(fastify: FastifyInstance, options: Evaluat
                 challengeExpiresAt: Math.floor(expiresAt / 1000),
                 explanation: riskScoreResult.explanation
             };
+
+            // For auto_accept, mark session as completed immediately
+            if (challengeTier === "auto_accept") {
+                db.updateChallengeSessionStatus(sessionId, "completed", nowMs);
+            }
+
+            // For auto_reject, mark session as failed immediately
+            if (challengeTier === "auto_reject") {
+                db.updateChallengeSessionStatus(sessionId, "failed", nowMs);
+            }
 
             return response;
         }
