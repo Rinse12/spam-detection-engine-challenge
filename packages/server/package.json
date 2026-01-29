@@ -25,7 +25,8 @@
         "start": "node --env-file=.env --import tsx dist/index.js",
         "dev": "node --env-file=.env --import tsx src/index.ts",
         "test": "vitest run",
-        "test:watch": "vitest"
+        "test:watch": "vitest",
+        "generate-scenarios": "node --import tsx scripts/generate-risk-score-scenarios.ts"
     },
     "dependencies": {
         "@easy-community-spam-blocker/shared": "0.0.0",
