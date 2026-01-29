@@ -27,6 +27,12 @@ type IpType = "disabled" | "residential" | "datacenter" | "vpn" | "tor";
 type OAuthConfig = "disabled" | "enabled-unverified" | "google-verified" | "google+github-verified";
 type PublicationType = "post" | "reply" | "vote";
 
+interface ExampleContent {
+    link?: string;
+    title?: string;
+    content?: string;
+}
+
 interface ScenarioConfig {
     name: string;
     description: string;
@@ -40,6 +46,7 @@ interface ScenarioConfig {
     contentDuplicates: "none" | "3" | "5+";
     urlSpam: "no_urls" | "1_unique" | "5+_same";
     hasOAuthVerification?: string[]; // Provider names, empty means unverified
+    exampleContent?: ExampleContent;
 }
 
 interface ScenarioResult {
@@ -66,6 +73,197 @@ const OAUTH_CONFIGS: OAuthConfig[] = ["disabled", "enabled-unverified", "google-
 const PUBLICATION_TYPES: PublicationType[] = ["post", "reply", "vote"];
 
 // ============================================================================
+// Human-Friendly Display Names
+// ============================================================================
+
+const FACTOR_DISPLAY_NAMES: Record<string, string> = {
+    accountAge: "Account Age",
+    karmaScore: "Karma Score",
+    commentContentTitleRisk: "Content/Title Risk",
+    commentUrlRisk: "URL/Link Risk",
+    velocityRisk: "Velocity",
+    ipRisk: "IP Risk",
+    networkBanHistory: "Ban History",
+    modqueueRejectionRate: "ModQueue Rejection",
+    networkRemovalRate: "Removal Rate",
+    socialVerification: "Social Verification"
+};
+
+const TIER_DISPLAY_NAMES: Record<ChallengeTier, string> = {
+    auto_accept: "Auto-accepted",
+    captcha_only: "CAPTCHA only",
+    captcha_and_oauth: "CAPTCHA + OAuth",
+    auto_reject: "Auto-rejected"
+};
+
+const IP_TYPE_DISPLAY_NAMES: Record<IpType, string> = {
+    disabled: "No IP check",
+    residential: "Residential",
+    datacenter: "Datacenter",
+    vpn: "VPN",
+    tor: "Tor"
+};
+
+const OAUTH_CONFIG_DISPLAY_NAMES: Record<OAuthConfig, string> = {
+    disabled: "OAuth disabled",
+    "enabled-unverified": "OAuth enabled (unverified)",
+    "google-verified": "Google verified",
+    "google+github-verified": "Google + GitHub verified"
+};
+
+// ============================================================================
+// Score Description Helpers
+// ============================================================================
+
+function getAccountAgeScoreDescription(scenario: ScenarioConfig): string {
+    switch (scenario.accountAge) {
+        case "no_history":
+            return "no history";
+        case "<1_day":
+            return "<1 day old";
+        case "7_days":
+            return "~7 days";
+        case "30_days":
+            return "~30 days";
+        case "90_days":
+            return "90+ days";
+        case "365+_days":
+            return "365+ days";
+    }
+}
+
+function getKarmaScoreDescription(scenario: ScenarioConfig): string {
+    switch (scenario.karma) {
+        case "no_data":
+            return "no data";
+        case "-5":
+            return "negative karma";
+        case "0":
+            return "neutral";
+        case "+3":
+            return "positive (+3)";
+        case "+5":
+            return "positive (+5)";
+    }
+}
+
+function getVelocityScoreDescription(scenario: ScenarioConfig): string {
+    switch (scenario.velocity) {
+        case "normal":
+            return "normal rate";
+        case "elevated":
+            return "elevated rate";
+        case "suspicious":
+            return "suspicious rate";
+        case "bot_like":
+            return "bot-like rate";
+    }
+}
+
+function getBanHistoryScoreDescription(scenario: ScenarioConfig): string {
+    if (scenario.banCount === 0) return "no bans";
+    if (scenario.banCount === 1) return "1 ban";
+    return `${scenario.banCount} bans`;
+}
+
+function getModqueueScoreDescription(scenario: ScenarioConfig): string {
+    if (scenario.modqueueRejection === "no_data") return "no data";
+    return `${scenario.modqueueRejection} rejected`;
+}
+
+function getRemovalRateScoreDescription(scenario: ScenarioConfig): string {
+    if (scenario.removalRate === "no_data") return "no data";
+    return `${scenario.removalRate} removed`;
+}
+
+function getContentRiskScoreDescription(scenario: ScenarioConfig): string {
+    if (scenario.contentDuplicates === "none") return "unique content";
+    if (scenario.contentDuplicates === "3") return "3 duplicates";
+    return "5+ duplicates";
+}
+
+function getUrlRiskScoreDescription(scenario: ScenarioConfig): string {
+    switch (scenario.urlSpam) {
+        case "no_urls":
+            return "no URLs";
+        case "1_unique":
+            return "1 unique URL";
+        case "5+_same":
+            return "5+ same URL";
+    }
+}
+
+function getIpRiskScoreDescription(ipType: IpType): string {
+    switch (ipType) {
+        case "disabled":
+            return "skipped";
+        case "residential":
+            return "residential IP";
+        case "datacenter":
+            return "datacenter IP";
+        case "vpn":
+            return "VPN detected";
+        case "tor":
+            return "Tor exit node";
+    }
+}
+
+function getSocialVerificationScoreDescription(oauthConfig: OAuthConfig, scenario: ScenarioConfig): string {
+    if (oauthConfig === "disabled") return "skipped";
+
+    // Check if scenario has explicit OAuth verification
+    if (scenario.hasOAuthVerification !== undefined) {
+        if (scenario.hasOAuthVerification.length === 0) return "not verified";
+        if (scenario.hasOAuthVerification.length === 1) return `${scenario.hasOAuthVerification[0]} verified`;
+        return scenario.hasOAuthVerification.join(" + ") + " verified";
+    }
+
+    switch (oauthConfig) {
+        case "enabled-unverified":
+            return "not verified";
+        case "google-verified":
+            return "Google verified";
+        case "google+github-verified":
+            return "Google + GitHub verified";
+        default:
+            return "unknown";
+    }
+}
+
+function getFactorScoreDescription(
+    factorName: string,
+    score: number,
+    scenario: ScenarioConfig,
+    ipType: IpType,
+    oauthConfig: OAuthConfig
+): string {
+    switch (factorName) {
+        case "accountAge":
+            return getAccountAgeScoreDescription(scenario);
+        case "karmaScore":
+            return getKarmaScoreDescription(scenario);
+        case "velocityRisk":
+            return getVelocityScoreDescription(scenario);
+        case "networkBanHistory":
+            return getBanHistoryScoreDescription(scenario);
+        case "modqueueRejectionRate":
+            return getModqueueScoreDescription(scenario);
+        case "networkRemovalRate":
+            return getRemovalRateScoreDescription(scenario);
+        case "commentContentTitleRisk":
+            return getContentRiskScoreDescription(scenario);
+        case "commentUrlRisk":
+            return getUrlRiskScoreDescription(scenario);
+        case "ipRisk":
+            return getIpRiskScoreDescription(ipType);
+        case "socialVerification":
+            return getSocialVerificationScoreDescription(oauthConfig, scenario);
+        default:
+            return "";
+    }
+}
+
+// ============================================================================
 // Scenarios
 // ============================================================================
 
@@ -81,7 +279,11 @@ const SCENARIOS: ScenarioConfig[] = [
         modqueueRejection: "no_data",
         removalRate: "no_data",
         contentDuplicates: "none",
-        urlSpam: "no_urls"
+        urlSpam: "no_urls",
+        exampleContent: {
+            title: "First time posting here!",
+            content: "Hey everyone, just discovered plebbit and wanted to introduce myself..."
+        }
     },
     {
         name: "Established Trusted User",
@@ -95,7 +297,11 @@ const SCENARIOS: ScenarioConfig[] = [
         removalRate: "0%",
         contentDuplicates: "none",
         urlSpam: "no_urls",
-        hasOAuthVerification: ["google"]
+        hasOAuthVerification: ["google"],
+        exampleContent: {
+            title: "Question about plebbit development",
+            content: "Has anyone figured out how to run a subplebbit on a VPS? I've been here a while and still learning..."
+        }
     },
     {
         name: "New User with Link",
@@ -108,7 +314,12 @@ const SCENARIOS: ScenarioConfig[] = [
         modqueueRejection: "no_data",
         removalRate: "no_data",
         contentDuplicates: "none",
-        urlSpam: "1_unique"
+        urlSpam: "1_unique",
+        exampleContent: {
+            link: "https://myblog.example.com/decentralization-thoughts",
+            title: "I wrote about my experience with decentralized social media",
+            content: "Check out my thoughts on the future of social platforms..."
+        }
     },
     {
         name: "Repeat Link Spammer",
@@ -121,7 +332,12 @@ const SCENARIOS: ScenarioConfig[] = [
         modqueueRejection: "50%",
         removalRate: "30%",
         contentDuplicates: "none",
-        urlSpam: "5+_same"
+        urlSpam: "5+_same",
+        exampleContent: {
+            link: "https://sketchy.io/buy/crypto?ref=abc123",
+            title: "FREE CRYPTO - Don't miss out!!!",
+            content: "Click here for FREE money!!!"
+        }
     },
     {
         name: "Content Duplicator",
@@ -134,7 +350,11 @@ const SCENARIOS: ScenarioConfig[] = [
         modqueueRejection: "no_data",
         removalRate: "no_data",
         contentDuplicates: "5+",
-        urlSpam: "no_urls"
+        urlSpam: "no_urls",
+        exampleContent: {
+            title: "Amazing opportunity you can't miss",
+            content: "This is duplicate spam content that appears multiple times."
+        }
     },
     {
         name: "Bot-like Velocity",
@@ -147,7 +367,11 @@ const SCENARIOS: ScenarioConfig[] = [
         modqueueRejection: "no_data",
         removalRate: "no_data",
         contentDuplicates: "none",
-        urlSpam: "no_urls"
+        urlSpam: "no_urls",
+        exampleContent: {
+            title: "Post #47 in the last hour",
+            content: "Automated content generation test message..."
+        }
     },
     {
         name: "Serial Offender",
@@ -160,7 +384,12 @@ const SCENARIOS: ScenarioConfig[] = [
         modqueueRejection: "80%",
         removalRate: "60%",
         contentDuplicates: "3",
-        urlSpam: "1_unique"
+        urlSpam: "1_unique",
+        exampleContent: {
+            link: "https://192.168.1.100/download.exe",
+            title: "FREE SOFTWARE DOWNLOAD NOW",
+            content: "CLICK HERE NOW!!! DON'T MISS OUT!!!"
+        }
     },
     {
         name: "New User, Dual OAuth",
@@ -174,7 +403,11 @@ const SCENARIOS: ScenarioConfig[] = [
         removalRate: "no_data",
         contentDuplicates: "none",
         urlSpam: "no_urls",
-        hasOAuthVerification: ["google", "github"]
+        hasOAuthVerification: ["google", "github"],
+        exampleContent: {
+            title: "Excited to join the community!",
+            content: "Hi all, I'm a developer interested in decentralized platforms. Verified my accounts to show I'm legit!"
+        }
     },
     {
         name: "Vote Spammer",
@@ -187,7 +420,10 @@ const SCENARIOS: ScenarioConfig[] = [
         modqueueRejection: "no_data",
         removalRate: "no_data",
         contentDuplicates: "none",
-        urlSpam: "no_urls"
+        urlSpam: "no_urls",
+        exampleContent: {
+            content: "(vote: +1 on target comment - 110th vote in the last hour)"
+        }
     },
     {
         name: "Trusted Reply Author",
@@ -200,7 +436,10 @@ const SCENARIOS: ScenarioConfig[] = [
         modqueueRejection: "0%",
         removalRate: "0%",
         contentDuplicates: "none",
-        urlSpam: "no_urls"
+        urlSpam: "no_urls",
+        exampleContent: {
+            content: "Great question! Based on my experience over the past year, I'd recommend checking out the documentation first..."
+        }
     },
     {
         name: "Borderline Modqueue",
@@ -213,7 +452,11 @@ const SCENARIOS: ScenarioConfig[] = [
         modqueueRejection: "50%",
         removalRate: "0%",
         contentDuplicates: "none",
-        urlSpam: "no_urls"
+        urlSpam: "no_urls",
+        exampleContent: {
+            title: "Another attempt at posting",
+            content: "Half of my submissions keep getting rejected, not sure why..."
+        }
     },
     {
         name: "High Removal Rate",
@@ -226,7 +469,11 @@ const SCENARIOS: ScenarioConfig[] = [
         modqueueRejection: "no_data",
         removalRate: "60%",
         contentDuplicates: "none",
-        urlSpam: "no_urls"
+        urlSpam: "no_urls",
+        exampleContent: {
+            title: "Trying again with this post",
+            content: "Mods keep removing my content but I'm not sure what rules I'm breaking..."
+        }
     },
     {
         name: "New, OAuth Unverified",
@@ -240,7 +487,11 @@ const SCENARIOS: ScenarioConfig[] = [
         removalRate: "no_data",
         contentDuplicates: "none",
         urlSpam: "no_urls",
-        hasOAuthVerification: [] // OAuth enabled but unverified
+        hasOAuthVerification: [], // OAuth enabled but unverified
+        exampleContent: {
+            title: "New here, skipped the verification",
+            content: "Decided not to link my social accounts, is that okay?"
+        }
     },
     {
         name: "Moderate Content Spam",
@@ -253,7 +504,11 @@ const SCENARIOS: ScenarioConfig[] = [
         modqueueRejection: "no_data",
         removalRate: "no_data",
         contentDuplicates: "3",
-        urlSpam: "no_urls"
+        urlSpam: "no_urls",
+        exampleContent: {
+            title: "Check this out (posted 3 times)",
+            content: "This is duplicate spam content that appears multiple times."
+        }
     },
     {
         name: "Perfect User",
@@ -267,7 +522,11 @@ const SCENARIOS: ScenarioConfig[] = [
         removalRate: "0%",
         contentDuplicates: "none",
         urlSpam: "no_urls",
-        hasOAuthVerification: ["google", "github"]
+        hasOAuthVerification: ["google", "github"],
+        exampleContent: {
+            title: "Comprehensive guide to running your own subplebbit",
+            content: "After over a year on the platform, I've compiled everything I've learned..."
+        }
     }
 ];
 
@@ -891,13 +1150,263 @@ function formatPercentage(value: number): string {
     return `${(value * 100).toFixed(1)}%`;
 }
 
-function getTopFactors(factors: ScenarioResult["factors"], count: number = 3): string {
+function getTopFactors(
+    factors: ScenarioResult["factors"],
+    scenario: ScenarioConfig,
+    ipType: IpType,
+    oauthConfig: OAuthConfig,
+    count: number = 3
+): string {
     const sorted = [...factors]
         .filter((f) => f.weight > 0)
         .sort((a, b) => b.contribution - a.contribution)
         .slice(0, count);
 
-    return sorted.map((f) => `${f.name} (${formatScore(f.score)})`).join(", ");
+    return sorted
+        .map((f) => {
+            const displayName = FACTOR_DISPLAY_NAMES[f.name] || f.name;
+            const desc = getFactorScoreDescription(f.name, f.score, scenario, ipType, oauthConfig);
+            return `${displayName} (${formatScore(f.score)}, ${desc})`;
+        })
+        .join(", ");
+}
+
+function generateExamplePublicationBlock(scenario: ScenarioConfig): string[] {
+    const lines: string[] = [];
+
+    if (!scenario.exampleContent) {
+        return lines;
+    }
+
+    lines.push("**Example Publication:**");
+    lines.push("");
+    lines.push("```");
+
+    if (scenario.publicationType === "vote") {
+        lines.push(`vote: +1`);
+        lines.push(`commentCid: "QmTargetComment123..."`);
+        if (scenario.exampleContent.content) {
+            lines.push(`# ${scenario.exampleContent.content}`);
+        }
+    } else {
+        if (scenario.exampleContent.link) {
+            lines.push(`link: "${scenario.exampleContent.link}"`);
+        }
+        if (scenario.exampleContent.title) {
+            lines.push(`title: "${scenario.exampleContent.title}"`);
+        }
+        if (scenario.exampleContent.content) {
+            lines.push(`content: "${scenario.exampleContent.content}"`);
+        }
+        if (scenario.publicationType === "reply") {
+            lines.push(`parentCid: "QmParentComment..."`);
+        }
+    }
+
+    lines.push("```");
+    lines.push("");
+
+    return lines;
+}
+
+function generateAuthorProfileTable(scenario: ScenarioConfig): string[] {
+    const lines: string[] = [];
+
+    lines.push("**Author Profile:**");
+    lines.push("");
+    lines.push("| Attribute | Value | Risk Implication |");
+    lines.push("|-----------|-------|------------------|");
+
+    // Account Age
+    const accountAgeDisplay = scenario.accountAge.replace(/_/g, " ");
+    const accountAgeRisk =
+        scenario.accountAge === "no_history"
+            ? "High risk (no history)"
+            : scenario.accountAge === "<1_day"
+              ? "High risk (very new)"
+              : scenario.accountAge === "7_days"
+                ? "Moderate risk"
+                : scenario.accountAge === "30_days"
+                  ? "Low-moderate risk"
+                  : "Low risk (established)";
+    lines.push(`| Account Age | ${accountAgeDisplay} | ${accountAgeRisk} |`);
+
+    // Karma
+    const karmaDisplay = scenario.karma.replace(/_/g, " ");
+    const karmaRisk =
+        scenario.karma === "no_data"
+            ? "Unknown (neutral)"
+            : scenario.karma === "-5"
+              ? "High risk (negative)"
+              : scenario.karma === "0"
+                ? "Neutral"
+                : "Low risk (positive)";
+    lines.push(`| Karma | ${karmaDisplay} | ${karmaRisk} |`);
+
+    // Bans
+    const banRisk = scenario.banCount === 0 ? "No risk" : scenario.banCount === 1 ? "Moderate risk" : "High risk";
+    lines.push(`| Bans | ${scenario.banCount} | ${banRisk} |`);
+
+    // Velocity
+    const velocityRisk =
+        scenario.velocity === "normal"
+            ? "No risk"
+            : scenario.velocity === "elevated"
+              ? "Moderate risk"
+              : scenario.velocity === "suspicious"
+                ? "High risk"
+                : "Very high risk (bot-like)";
+    lines.push(`| Velocity | ${scenario.velocity} | ${velocityRisk} |`);
+
+    // Content Duplicates
+    const contentRisk =
+        scenario.contentDuplicates === "none"
+            ? "Low risk (unique)"
+            : scenario.contentDuplicates === "3"
+              ? "Moderate risk"
+              : "High risk (spam pattern)";
+    lines.push(`| Content Duplicates | ${scenario.contentDuplicates} | ${contentRisk} |`);
+
+    // URL Spam
+    const urlDisplay = scenario.urlSpam.replace(/_/g, " ");
+    const urlRisk =
+        scenario.urlSpam === "no_urls"
+            ? "Low risk"
+            : scenario.urlSpam === "1_unique"
+              ? "Low risk (single URL)"
+              : "High risk (repeated URL)";
+    lines.push(`| URL Spam | ${urlDisplay} | ${urlRisk} |`);
+
+    // Modqueue Rejection
+    const modqueueDisplay = scenario.modqueueRejection === "no_data" ? "No data" : scenario.modqueueRejection;
+    const modqueueRisk =
+        scenario.modqueueRejection === "no_data"
+            ? "Unknown (neutral)"
+            : scenario.modqueueRejection === "0%"
+              ? "Low risk"
+              : scenario.modqueueRejection === "50%"
+                ? "Moderate risk"
+                : "High risk";
+    lines.push(`| ModQueue Rejection | ${modqueueDisplay} | ${modqueueRisk} |`);
+
+    // Removal Rate
+    const removalDisplay = scenario.removalRate === "no_data" ? "No data" : scenario.removalRate;
+    const removalRisk =
+        scenario.removalRate === "no_data"
+            ? "Unknown (neutral)"
+            : scenario.removalRate === "0%"
+              ? "Low risk"
+              : scenario.removalRate === "30%"
+                ? "Moderate risk"
+                : "High risk";
+    lines.push(`| Removal Rate | ${removalDisplay} | ${removalRisk} |`);
+
+    // OAuth Verification (if applicable)
+    if (scenario.hasOAuthVerification !== undefined) {
+        const oauthDisplay = scenario.hasOAuthVerification.length > 0 ? scenario.hasOAuthVerification.join(", ") : "None (but enabled)";
+        const oauthRisk = scenario.hasOAuthVerification.length > 0 ? "Reduced risk (verified)" : "High risk (unverified)";
+        lines.push(`| OAuth Verification | ${oauthDisplay} | ${oauthRisk} |`);
+    }
+
+    lines.push("");
+
+    return lines;
+}
+
+function generatePublicationTypeResults(
+    pubType: PublicationType,
+    results: Array<{
+        pubType: PublicationType;
+        ipType: IpType;
+        oauthConfig: OAuthConfig;
+        result: ScenarioResult;
+    }>,
+    scenario: ScenarioConfig
+): string[] {
+    const lines: string[] = [];
+    // Handle pluralization correctly (reply -> Replies, not Replys)
+    const pubTypeDisplay = pubType === "reply" ? "Replies" : pubType.charAt(0).toUpperCase() + pubType.slice(1) + "s";
+
+    lines.push(`#### ${pubTypeDisplay}`);
+    lines.push("");
+    lines.push("| IP Type | OAuth Config | Score | Outcome | Top Factors |");
+    lines.push("|---------|--------------|-------|---------|-------------|");
+
+    const pubTypeResults = results.filter((r) => r.pubType === pubType);
+
+    for (const { ipType, oauthConfig, result } of pubTypeResults) {
+        const ipDisplay = IP_TYPE_DISPLAY_NAMES[ipType];
+        const oauthDisplay = OAUTH_CONFIG_DISPLAY_NAMES[oauthConfig];
+        const tierDisplay = TIER_DISPLAY_NAMES[result.tier];
+        const topFactors = getTopFactors(result.factors, scenario, ipType, oauthConfig, 2);
+
+        lines.push(`| ${ipDisplay} | ${oauthDisplay} | ${formatScore(result.riskScore)} | ${tierDisplay} | ${topFactors} |`);
+    }
+
+    lines.push("");
+
+    return lines;
+}
+
+function generateFactorBreakdownTable(
+    result: ScenarioResult,
+    scenario: ScenarioConfig,
+    ipType: IpType,
+    oauthConfig: OAuthConfig,
+    pubType: PublicationType
+): string[] {
+    const lines: string[] = [];
+
+    const pubTypeDisplay = pubType.charAt(0).toUpperCase() + pubType.slice(1);
+    const ipDisplay = IP_TYPE_DISPLAY_NAMES[ipType];
+    const oauthDisplay = OAUTH_CONFIG_DISPLAY_NAMES[oauthConfig];
+
+    lines.push(`### Detailed Factor Breakdown`);
+    lines.push("");
+    lines.push(`Configuration: **${pubTypeDisplay}** / **${ipDisplay}** / **${oauthDisplay}**`);
+    lines.push("");
+    lines.push("| Factor | Score | Description | Weight | Contribution |");
+    lines.push("|--------|-------|-------------|--------|--------------|");
+
+    for (const factor of result.factors) {
+        const displayName = FACTOR_DISPLAY_NAMES[factor.name] || factor.name;
+        const desc = getFactorScoreDescription(factor.name, factor.score, scenario, ipType, oauthConfig);
+
+        if (factor.weight === 0) {
+            lines.push(`| ${displayName} | - | ${desc} | 0% | (skipped) |`);
+        } else {
+            lines.push(
+                `| ${displayName} | ${formatScore(factor.score)} | ${desc} | ${formatPercentage(factor.effectiveWeight)} | ${formatScore(factor.contribution)} |`
+            );
+        }
+    }
+
+    lines.push(`| **Total** | | | **100%** | **${formatScore(result.riskScore)}** |`);
+    lines.push("");
+
+    // Add outcome explanation
+    const tierDisplay = TIER_DISPLAY_NAMES[result.tier];
+    let outcomeExplanation = "";
+
+    switch (result.tier) {
+        case "auto_accept":
+            outcomeExplanation = `Score ${formatScore(result.riskScore)} falls in the auto-accept tier (< 0.2), allowing the publication without any challenge.`;
+            break;
+        case "captcha_only":
+            outcomeExplanation = `Score ${formatScore(result.riskScore)} falls in the CAPTCHA-only tier (0.2-0.4), requiring a CAPTCHA challenge before publishing.`;
+            break;
+        case "captcha_and_oauth":
+            outcomeExplanation = `Score ${formatScore(result.riskScore)} falls in the CAPTCHA + OAuth tier (0.4-0.8), requiring both CAPTCHA verification and OAuth sign-in.`;
+            break;
+        case "auto_reject":
+            outcomeExplanation = `Score ${formatScore(result.riskScore)} falls in the auto-reject tier (> 0.8), automatically rejecting the publication.`;
+            break;
+    }
+
+    lines.push(`**Outcome:** ${tierDisplay} — ${outcomeExplanation}`);
+    lines.push("");
+
+    return lines;
 }
 
 function generateMarkdown(): string {
@@ -906,18 +1415,43 @@ function generateMarkdown(): string {
 
     lines.push("# Risk Score Scenarios");
     lines.push("");
-    lines.push(`Generated: ${generatedDate}`);
+    lines.push(`*Generated: ${generatedDate}*`);
     lines.push("");
-    lines.push("This document shows risk scores across different configuration combinations for various user scenarios.");
+    lines.push("This document shows how risk scores are calculated for various user scenarios across different");
+    lines.push("configuration combinations. Each scenario represents a realistic user profile with specific");
+    lines.push("behavioral patterns.");
+    lines.push("");
+    lines.push("## Configuration Variables");
+    lines.push("");
     lines.push("Each scenario is tested against all combinations of:");
     lines.push("");
-    lines.push("- **IP Types**: disabled (no IP check), residential, datacenter, vpn, tor");
-    lines.push("- **OAuth Configs**: disabled, enabled-unverified, google-verified, google+github-verified");
-    lines.push("- **Publication Types**: post, reply, vote");
+    lines.push("**IP Intelligence:**");
+    lines.push("- No IP check (disabled)");
+    lines.push("- Residential IP (low risk)");
+    lines.push("- Datacenter IP (elevated risk)");
+    lines.push("- VPN detected (high risk)");
+    lines.push("- Tor exit node (very high risk)");
+    lines.push("");
+    lines.push("**OAuth Configuration:**");
+    lines.push("- OAuth disabled");
+    lines.push("- OAuth enabled but user not verified");
+    lines.push("- Google verified");
+    lines.push("- Google + GitHub verified");
+    lines.push("");
+    lines.push("**Publication Types:** Posts, Replies, Votes");
     lines.push("");
     lines.push(
-        `**Total: ${IP_TYPES.length} x ${OAUTH_CONFIGS.length} x ${PUBLICATION_TYPES.length} = ${IP_TYPES.length * OAUTH_CONFIGS.length * PUBLICATION_TYPES.length} configurations per scenario**`
+        `**Total: ${IP_TYPES.length} IP types × ${OAUTH_CONFIGS.length} OAuth configs × ${PUBLICATION_TYPES.length} publication types = ${IP_TYPES.length * OAUTH_CONFIGS.length * PUBLICATION_TYPES.length} configurations per scenario**`
     );
+    lines.push("");
+    lines.push("## Challenge Tier Thresholds");
+    lines.push("");
+    lines.push("| Score Range | Tier | Action |");
+    lines.push("|-------------|------|--------|");
+    lines.push("| 0.0 - 0.2 | Auto-accepted | No challenge required |");
+    lines.push("| 0.2 - 0.4 | CAPTCHA only | CAPTCHA verification required |");
+    lines.push("| 0.4 - 0.8 | CAPTCHA + OAuth | Both CAPTCHA and OAuth sign-in required |");
+    lines.push("| 0.8 - 1.0 | Auto-rejected | Publication automatically rejected |");
     lines.push("");
     lines.push("---");
     lines.push("");
@@ -928,29 +1462,16 @@ function generateMarkdown(): string {
 
         lines.push(`## Scenario ${scenarioIdx + 1}: ${scenario.name}`);
         lines.push("");
-        lines.push(`**Description:** ${scenario.description}`);
+        lines.push(scenario.description);
         lines.push("");
-        lines.push("**Author State:**");
-        lines.push(`- Account Age: ${scenario.accountAge.replace(/_/g, " ")}`);
-        lines.push(`- Karma: ${scenario.karma.replace(/_/g, " ")}`);
-        lines.push(`- Bans: ${scenario.banCount}`);
-        lines.push(`- Velocity: ${scenario.velocity}`);
-        lines.push(`- Modqueue Rejection: ${scenario.modqueueRejection}`);
-        lines.push(`- Removal Rate: ${scenario.removalRate}`);
-        lines.push(`- Content Duplicates: ${scenario.contentDuplicates}`);
-        lines.push(`- URL Spam: ${scenario.urlSpam.replace(/_/g, " ")}`);
-        if (scenario.hasOAuthVerification !== undefined) {
-            lines.push(
-                `- OAuth Verification: ${scenario.hasOAuthVerification.length > 0 ? scenario.hasOAuthVerification.join(", ") : "none (but enabled)"}`
-            );
-        }
-        lines.push("");
-        lines.push("### Full Configuration Matrix");
-        lines.push("");
-        lines.push("| Pub Type | IP Type | OAuth Config | Risk Score | Tier | Top Factors |");
-        lines.push("|----------|---------|--------------|------------|------|-------------|");
 
-        // Store results for detailed breakdown later
+        // Add example publication
+        lines.push(...generateExamplePublicationBlock(scenario));
+
+        // Add author profile table
+        lines.push(...generateAuthorProfileTable(scenario));
+
+        // Store results for all configurations
         const scenarioResults: Array<{
             pubType: PublicationType;
             ipType: IpType;
@@ -960,45 +1481,33 @@ function generateMarkdown(): string {
 
         // Run all configurations
         for (const pubType of PUBLICATION_TYPES) {
-            // Override publication type for this iteration
             const modifiedScenario = { ...scenario, publicationType: pubType };
 
             for (const ipType of IP_TYPES) {
                 for (const oauthConfig of OAUTH_CONFIGS) {
                     const result = runScenario(modifiedScenario, ipType, oauthConfig);
-
                     scenarioResults.push({ pubType, ipType, oauthConfig, result });
-
-                    const topFactors = getTopFactors(result.factors);
-                    lines.push(
-                        `| ${pubType} | ${ipType} | ${oauthConfig} | ${formatScore(result.riskScore)} | ${result.tier} | ${topFactors} |`
-                    );
                 }
             }
         }
 
+        // Generate results grouped by publication type
+        lines.push("### Results by Configuration");
         lines.push("");
 
-        // Add a detailed factor breakdown for the first configuration (post / disabled / disabled)
+        for (const pubType of PUBLICATION_TYPES) {
+            lines.push(...generatePublicationTypeResults(pubType, scenarioResults, scenario));
+        }
+
+        // Add detailed factor breakdown for the base configuration
         const baseResult = scenarioResults.find(
             (r) => r.pubType === scenario.publicationType && r.ipType === "disabled" && r.oauthConfig === "disabled"
         );
 
         if (baseResult) {
-            lines.push(`### Factor Breakdown: ${scenario.publicationType} / disabled / disabled`);
-            lines.push("");
-            lines.push("| Factor | Score | Orig Weight | Eff Weight | Contribution |");
-            lines.push("|--------|-------|-------------|------------|--------------|");
-
-            for (const factor of baseResult.result.factors) {
-                const skipped = factor.weight === 0 ? "(skipped)" : formatScore(factor.contribution);
-                lines.push(
-                    `| ${factor.name} | ${formatScore(factor.score)} | ${formatPercentage(factor.weight)} | ${formatPercentage(factor.effectiveWeight)} | ${skipped} |`
-                );
-            }
-
-            lines.push(`| **Total** | | | 100% | **${formatScore(baseResult.result.riskScore)}** |`);
-            lines.push("");
+            lines.push(
+                ...generateFactorBreakdownTable(baseResult.result, scenario, baseResult.ipType, baseResult.oauthConfig, baseResult.pubType)
+            );
         }
 
         lines.push("---");
@@ -1008,10 +1517,10 @@ function generateMarkdown(): string {
     // Summary table
     lines.push("## Summary");
     lines.push("");
-    lines.push("Risk score ranges across all configurations for each scenario:");
+    lines.push("Overview of risk score ranges and outcomes for each scenario:");
     lines.push("");
-    lines.push("| Scenario | Min Score | Max Score | Tier Range |");
-    lines.push("|----------|-----------|-----------|------------|");
+    lines.push("| # | Scenario | Min Score | Max Score | Possible Outcomes |");
+    lines.push("|---|----------|-----------|-----------|-------------------|");
 
     for (let scenarioIdx = 0; scenarioIdx < SCENARIOS.length; scenarioIdx++) {
         const scenario = SCENARIOS[scenarioIdx];
@@ -1032,10 +1541,16 @@ function generateMarkdown(): string {
             }
         }
 
-        const tierList = Array.from(tiers).join(", ");
-        lines.push(`| ${scenarioIdx + 1}. ${scenario.name} | ${formatScore(minScore)} | ${formatScore(maxScore)} | ${tierList} |`);
+        const tierList = Array.from(tiers)
+            .map((t) => TIER_DISPLAY_NAMES[t])
+            .join(", ");
+        lines.push(`| ${scenarioIdx + 1} | ${scenario.name} | ${formatScore(minScore)} | ${formatScore(maxScore)} | ${tierList} |`);
     }
 
+    lines.push("");
+    lines.push("---");
+    lines.push("");
+    lines.push("*This document is auto-generated. Run `npm run generate-scenarios` to regenerate.*");
     lines.push("");
 
     return lines.join("\n");
