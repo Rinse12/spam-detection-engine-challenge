@@ -1454,6 +1454,76 @@ export class SpamDetectionDatabase {
     }
 
     // ============================================
+    // Author OAuth Identity Methods
+    // ============================================
+
+    /**
+     * Get all OAuth identities linked to an author (across all publication types).
+     * Returns array of OAuth identities in format "provider:userId" (e.g., ["google:123", "github:456"]).
+     *
+     * This queries challenge sessions that have completed successfully and are linked
+     * to publications by the author's public key.
+     *
+     * @param authorPublicKey - The Ed25519 public key from the publication's signature
+     * @returns Array of unique OAuth identity strings
+     */
+    getAuthorOAuthIdentities(authorPublicKey: string): string[] {
+        // Query across all publication tables to find OAuth identities linked to this author
+        const query = `
+            SELECT DISTINCT cs.oauthIdentity
+            FROM challengeSessions cs
+            WHERE cs.oauthIdentity IS NOT NULL
+              AND cs.status = 'completed'
+              AND (
+                EXISTS (SELECT 1 FROM comments c WHERE c.sessionId = cs.sessionId AND json_extract(c.signature, '$.publicKey') = @authorPublicKey)
+                OR EXISTS (SELECT 1 FROM votes v WHERE v.sessionId = cs.sessionId AND json_extract(v.signature, '$.publicKey') = @authorPublicKey)
+                OR EXISTS (SELECT 1 FROM commentEdits ce WHERE ce.sessionId = cs.sessionId AND json_extract(ce.signature, '$.publicKey') = @authorPublicKey)
+                OR EXISTS (SELECT 1 FROM commentModerations cm WHERE cm.sessionId = cs.sessionId AND json_extract(cm.signature, '$.publicKey') = @authorPublicKey)
+              )
+        `;
+
+        const rows = this.db.prepare(query).all({ authorPublicKey }) as Array<{ oauthIdentity: string }>;
+        return rows.map((row) => row.oauthIdentity);
+    }
+
+    /**
+     * Count how many unique authors are linked to an OAuth identity.
+     * Used to apply diminishing returns when same OAuth account is linked to multiple authors.
+     *
+     * @param oauthIdentity - OAuth identity in format "provider:userId"
+     * @returns Number of unique author public keys linked to this OAuth identity
+     */
+    countAuthorsWithOAuthIdentity(oauthIdentity: string): number {
+        // Query across all publication tables to count unique authors linked to this OAuth identity
+        const query = `
+            SELECT COUNT(DISTINCT authorPublicKey) as count FROM (
+                SELECT json_extract(c.signature, '$.publicKey') as authorPublicKey
+                FROM challengeSessions cs
+                JOIN comments c ON c.sessionId = cs.sessionId
+                WHERE cs.oauthIdentity = @oauthIdentity AND cs.status = 'completed'
+                UNION
+                SELECT json_extract(v.signature, '$.publicKey') as authorPublicKey
+                FROM challengeSessions cs
+                JOIN votes v ON v.sessionId = cs.sessionId
+                WHERE cs.oauthIdentity = @oauthIdentity AND cs.status = 'completed'
+                UNION
+                SELECT json_extract(ce.signature, '$.publicKey') as authorPublicKey
+                FROM challengeSessions cs
+                JOIN commentEdits ce ON ce.sessionId = cs.sessionId
+                WHERE cs.oauthIdentity = @oauthIdentity AND cs.status = 'completed'
+                UNION
+                SELECT json_extract(cm.signature, '$.publicKey') as authorPublicKey
+                FROM challengeSessions cs
+                JOIN commentModerations cm ON cm.sessionId = cs.sessionId
+                WHERE cs.oauthIdentity = @oauthIdentity AND cs.status = 'completed'
+            )
+        `;
+
+        const result = this.db.prepare(query).get({ oauthIdentity }) as { count: number };
+        return result.count;
+    }
+
+    // ============================================
     // Link/URL Query Methods (by public key)
     // ============================================
 

@@ -65,11 +65,13 @@ export interface WeightConfig {
     modqueueRejectionRate: number;
     /** Network-wide removal rate from indexed data */
     networkRemovalRate: number;
+    /** Social verification via OAuth (trust signal when verified) */
+    socialVerification: number;
 }
 
 /**
  * Default weights when IP info is NOT available.
- * Total: 1.0
+ * Total: 0.94 (normalized to 1.0 when all factors active)
  */
 export const WEIGHTS_NO_IP: WeightConfig = {
     commentContentTitleRisk: 0.14,
@@ -80,12 +82,13 @@ export const WEIGHTS_NO_IP: WeightConfig = {
     ipRisk: 0,
     networkBanHistory: 0.1,
     modqueueRejectionRate: 0.06,
-    networkRemovalRate: 0.08
+    networkRemovalRate: 0.08,
+    socialVerification: 0.08
 };
 
 /**
  * Weights when IP info IS available.
- * Total: 1.0
+ * Total: 0.94 (normalized to 1.0 when all factors active)
  */
 export const WEIGHTS_WITH_IP: WeightConfig = {
     commentContentTitleRisk: 0.1,
@@ -96,5 +99,6 @@ export const WEIGHTS_WITH_IP: WeightConfig = {
     ipRisk: 0.2,
     networkBanHistory: 0.08,
     modqueueRejectionRate: 0.04,
-    networkRemovalRate: 0.08
+    networkRemovalRate: 0.08,
+    socialVerification: 0.08
 };

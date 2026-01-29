@@ -13,6 +13,7 @@ import {
     calculateNetworkBanHistory,
     calculateModqueueRejectionRate,
     calculateNetworkRemovalRate,
+    calculateSocialVerification,
     type IpIntelligence
 } from "./factors/index.js";
 
@@ -33,6 +34,8 @@ export interface CalculateRiskScoreOptions {
     weights?: WeightConfig;
     /** Current Unix timestamp in seconds (defaults to now) */
     now?: number;
+    /** List of enabled OAuth providers (e.g., ["google", "github"]). Empty array disables social verification factor. */
+    enabledOAuthProviders?: string[];
 }
 
 /**
@@ -57,6 +60,7 @@ export function calculateRiskScore(options: CalculateRiskScoreOptions): RiskScor
     const { challengeRequest, db, ipIntelligence } = options;
     const now = options.now ?? Math.floor(Date.now() / 1000);
     const hasIpInfo = ipIntelligence !== undefined;
+    const enabledOAuthProviders = options.enabledOAuthProviders ?? [];
 
     // Select weight configuration based on IP availability
     const weights = options.weights ?? (hasIpInfo ? WEIGHTS_WITH_IP : WEIGHTS_NO_IP);
@@ -83,7 +87,8 @@ export function calculateRiskScore(options: CalculateRiskScoreOptions): RiskScor
         calculateIpRisk(ipIntelligence, weights.ipRisk),
         calculateNetworkBanHistory(ctx, weights.networkBanHistory),
         calculateModqueueRejectionRate(ctx, weights.modqueueRejectionRate),
-        calculateNetworkRemovalRate(ctx, weights.networkRemovalRate)
+        calculateNetworkRemovalRate(ctx, weights.networkRemovalRate),
+        calculateSocialVerification(ctx, weights.socialVerification, enabledOAuthProviders)
     ];
 
     // Calculate total active weight for redistribution
