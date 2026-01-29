@@ -409,14 +409,15 @@ This factor uses data collected by the indexer, which:
 - Tracks `CommentUpdate.author.subplebbit.banExpiresAt` to detect bans
 - Aggregates ban data across all indexed subplebbits
 
-| Bans Across Network | Risk Score | Description                    |
-| ------------------- | ---------- | ------------------------------ |
-| 0 bans              | 0.00       | No ban history                 |
-| 1 ban               | 0.40       | Banned from one sub            |
-| 2 bans              | 0.60       | Banned from multiple subs      |
-| 3+ bans             | 0.85       | Serial ban evasion (high risk) |
+| Condition             | Risk Score | Description                             |
+| --------------------- | ---------- | --------------------------------------- |
+| No posting history    | (skipped)  | Factor skipped, weight redistributed    |
+| 0 bans (with history) | 0.00       | Clean record across indexed subplebbits |
+| 1 ban                 | 0.40       | Banned from one sub                     |
+| 2 bans                | 0.60       | Banned from multiple subs               |
+| 3+ bans               | 0.85       | Serial ban evasion (high risk)          |
 
-**Rationale**: Authors banned from multiple subplebbits have a pattern of problematic behavior.
+**Rationale**: Authors banned from multiple subplebbits have a pattern of problematic behavior. "No bans" is only a positive signal if the user has actually participated somewhere - for users with no posting history, this factor is skipped entirely.
 
 ### 8. ModQueue Rejection Rate (Weight: 6% without IP, 4% with IP)
 
@@ -671,17 +672,17 @@ comment.content: "Check out my thoughts..."
 
 | Factor              | Score                      | Original Weight | Effective Weight | Weighted |
 | ------------------- | -------------------------- | --------------- | ---------------- | -------- |
-| Account Age         | 1.0 (no history)           | 14%             | 14.9%            | 0.149    |
-| Karma               | 0.6 (no data)              | 12%             | 12.8%            | 0.077    |
-| Content Risk        | 0.2 (base, unique content) | 14%             | 14.9%            | 0.030    |
-| URL Risk            | 0.2 (base, first time URL) | 12%             | 12.8%            | 0.026    |
-| Velocity            | 0.1 (1 post/hr, normal)    | 10%             | 10.6%            | 0.011    |
-| Ban History         | 0.0 (no bans)              | 10%             | 10.6%            | 0        |
-| ModQueue Rejection  | 0.5 (no data)              | 6%              | 6.4%             | 0.032    |
-| Removal Rate        | 0.5 (no data)              | 8%              | 8.5%             | 0.043    |
-| Social Verification | 1.0 (no OAuth, high risk)  | 8%              | 8.5%             | 0.085    |
+| Account Age         | 1.0 (no history)           | 14%             | 16.3%            | 0.163    |
+| Karma               | 0.6 (no data)              | 12%             | 14.0%            | 0.084    |
+| Content Risk        | 0.2 (base, unique content) | 14%             | 16.3%            | 0.033    |
+| URL Risk            | 0.2 (base, first time URL) | 12%             | 14.0%            | 0.028    |
+| Velocity            | 0.1 (1 post/hr, normal)    | 10%             | 11.6%            | 0.012    |
+| Ban History         | (skipped, no history)      | 10%             | 0%               | 0        |
+| ModQueue Rejection  | 0.5 (no data)              | 6%              | 7.0%             | 0.035    |
+| Removal Rate        | 0.5 (no data)              | 8%              | 9.3%             | 0.047    |
+| Social Verification | 1.0 (no OAuth, high risk)  | 8%              | 9.3%             | 0.093    |
 
-**Final Score: ~0.45** → Moderate risk, triggers CAPTCHA challenge
+**Final Score: ~0.49** → Moderate risk, triggers CAPTCHA challenge
 
 ### Example 2: Established User, No URLs, Google Verified
 
@@ -719,17 +720,17 @@ comment.content: "Click here for FREE money!!!"
 
 | Factor              | Score                                                                     | Original Weight | Effective Weight | Weighted |
 | ------------------- | ------------------------------------------------------------------------- | --------------- | ---------------- | -------- |
-| Account Age         | 0.85 (<1 day old)                                                         | 14%             | 14.9%            | 0.127    |
-| Karma               | 0.6 (no data)                                                             | 12%             | 12.8%            | 0.077    |
-| Content Risk        | 0.53 (base 0.2 + caps 0.08 + 3 duplicates 0.25)                           | 14%             | 14.9%            | 0.079    |
-| URL Risk            | 0.85 (base 0.2 + 5+ same URL 0.4 + 5-9 domain 0.15 + time clustering 0.1) | 12%             | 12.8%            | 0.109    |
-| Velocity            | 0.4 (3-5 posts/hr)                                                        | 10%             | 10.6%            | 0.042    |
-| Ban History         | 0.0                                                                       | 10%             | 10.6%            | 0        |
-| ModQueue Rejection  | 0.5 (no data)                                                             | 6%              | 6.4%             | 0.032    |
-| Removal Rate        | 0.5 (no data)                                                             | 8%              | 8.5%             | 0.043    |
-| Social Verification | 1.0 (no OAuth, high risk)                                                 | 8%              | 8.5%             | 0.085    |
+| Account Age         | 0.85 (<1 day old)                                                         | 14%             | 16.3%            | 0.139    |
+| Karma               | 0.6 (no data)                                                             | 12%             | 14.0%            | 0.084    |
+| Content Risk        | 0.53 (base 0.2 + caps 0.08 + 3 duplicates 0.25)                           | 14%             | 16.3%            | 0.086    |
+| URL Risk            | 0.85 (base 0.2 + 5+ same URL 0.4 + 5-9 domain 0.15 + time clustering 0.1) | 12%             | 14.0%            | 0.119    |
+| Velocity            | 0.4 (3-5 posts/hr)                                                        | 10%             | 11.6%            | 0.046    |
+| Ban History         | (skipped, no history)                                                     | 10%             | 0%               | 0        |
+| ModQueue Rejection  | 0.5 (no data)                                                             | 6%              | 7.0%             | 0.035    |
+| Removal Rate        | 0.5 (no data)                                                             | 8%              | 9.3%             | 0.047    |
+| Social Verification | 1.0 (no OAuth, high risk)                                                 | 8%              | 9.3%             | 0.093    |
 
-**Final Score: ~0.59** → Moderate-high risk, CAPTCHA required
+**Final Score: ~0.65** → Moderate-high risk, CAPTCHA required
 
 ### Example 4: Coordinated Spam Campaign (No OAuth)
 
@@ -745,17 +746,17 @@ comment.content: "Get in early on this opportunity!"
 
 | Factor              | Score                                                      | Original Weight | Effective Weight | Weighted |
 | ------------------- | ---------------------------------------------------------- | --------------- | ---------------- | -------- |
-| Account Age         | 1.0 (no history)                                           | 14%             | 14.9%            | 0.149    |
-| Karma               | 0.6 (no data)                                              | 12%             | 12.8%            | 0.077    |
-| Content Risk        | 0.6 (base 0.2 + 5+ identical from others 0.4)              | 14%             | 14.9%            | 0.089    |
-| URL Risk            | 1.0 (base 0.2 + 10+ coordinated 0.5 + time clustering 0.3) | 12%             | 12.8%            | 0.128    |
-| Velocity            | 0.1 (first post)                                           | 10%             | 10.6%            | 0.011    |
-| Ban History         | 0.0                                                        | 10%             | 10.6%            | 0        |
-| ModQueue Rejection  | 0.5 (no data)                                              | 6%              | 6.4%             | 0.032    |
-| Removal Rate        | 0.5 (no data)                                              | 8%              | 8.5%             | 0.043    |
-| Social Verification | 1.0 (no OAuth, high risk)                                  | 8%              | 8.5%             | 0.085    |
+| Account Age         | 1.0 (no history)                                           | 14%             | 16.3%            | 0.163    |
+| Karma               | 0.6 (no data)                                              | 12%             | 14.0%            | 0.084    |
+| Content Risk        | 0.6 (base 0.2 + 5+ identical from others 0.4)              | 14%             | 16.3%            | 0.098    |
+| URL Risk            | 1.0 (base 0.2 + 10+ coordinated 0.5 + time clustering 0.3) | 12%             | 14.0%            | 0.140    |
+| Velocity            | 0.1 (first post)                                           | 10%             | 11.6%            | 0.012    |
+| Ban History         | (skipped, no history)                                      | 10%             | 0%               | 0        |
+| ModQueue Rejection  | 0.5 (no data)                                              | 6%              | 7.0%             | 0.035    |
+| Removal Rate        | 0.5 (no data)                                              | 8%              | 9.3%             | 0.047    |
+| Social Verification | 1.0 (no OAuth, high risk)                                  | 8%              | 9.3%             | 0.093    |
 
-**Final Score: ~0.61** → Moderate-high risk, CAPTCHA required
+**Final Score: ~0.67** → Moderate-high risk, CAPTCHA required
 
 ### Example 5: URL Variation Spammer (Time-Clustered, No OAuth)
 

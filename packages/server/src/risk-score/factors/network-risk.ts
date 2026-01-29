@@ -25,6 +25,17 @@ export function calculateNetworkBanHistory(ctx: RiskContext, weight: number): Ri
     const indexerQueries = new IndexerQueries(ctx.db.getDb());
     const stats = indexerQueries.getAuthorNetworkStats(authorPublicKey);
 
+    // Skip factor if user has no posting history - "no bans" is only meaningful
+    // if the user has actually participated somewhere and wasn't banned
+    if (stats.totalIndexedComments === 0) {
+        return {
+            name: "networkBanHistory",
+            score: 0,
+            weight: 0, // Skip - weight redistributed to other factors
+            explanation: "No posting history to evaluate bans"
+        };
+    }
+
     const banCount = stats.banCount;
 
     let score: number;
@@ -32,7 +43,7 @@ export function calculateNetworkBanHistory(ctx: RiskContext, weight: number): Ri
 
     if (banCount === 0) {
         score = 0.0;
-        explanation = "No bans across indexed subplebbits";
+        explanation = "No bans across indexed subplebbits (has posting history)";
     } else if (banCount === 1) {
         score = 0.4;
         explanation = `Banned in 1 indexed subplebbit`;
