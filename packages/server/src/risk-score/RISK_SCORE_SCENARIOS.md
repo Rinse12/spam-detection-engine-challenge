@@ -57,7 +57,7 @@ content: "Hey everyone, just discovered plebbit and wanted to introduce myself..
 | ------------------ | ---------- | ---------------------- |
 | Account Age        | no history | High risk (no history) |
 | Karma              | no data    | Unknown (neutral)      |
-| Bans               | 0          | No risk                |
+| Bans               | 0          | Skipped (no history)   |
 | Velocity           | normal     | No risk                |
 | Content Duplicates | none       | Low risk (unique)      |
 | URL Spam           | no urls    | Low risk               |
@@ -180,7 +180,7 @@ content: "Has anyone figured out how to run a subplebbit on a VPS? I've been her
 | ------------------ | ------- | ----------------------- |
 | Account Age        | 90 days | Low risk (established)  |
 | Karma              | +5      | Low risk (positive)     |
-| Bans               | 0       | No risk                 |
+| Bans               | 0       | Low risk (clean record) |
 | Velocity           | normal  | No risk                 |
 | Content Duplicates | none    | Low risk (unique)       |
 | URL Spam           | no urls | Low risk                |
@@ -305,7 +305,7 @@ content: "Check out my thoughts on the future of social platforms..."
 | ------------------ | -------- | --------------------- |
 | Account Age        | <1 day   | High risk (very new)  |
 | Karma              | no data  | Unknown (neutral)     |
-| Bans               | 0        | No risk               |
+| Bans               | 0        | Skipped (no history)  |
 | Velocity           | normal   | No risk               |
 | Content Duplicates | none     | Low risk (unique)     |
 | URL Spam           | 1 unique | Low risk (single URL) |
@@ -552,7 +552,7 @@ content: "This is duplicate spam content that appears multiple times."
 | ------------------ | -------- | ------------------------ |
 | Account Age        | 30 days  | Low-moderate risk        |
 | Karma              | 0        | Neutral                  |
-| Bans               | 0        | No risk                  |
+| Bans               | 0        | Low risk (clean record)  |
 | Velocity           | elevated | Moderate risk            |
 | Content Duplicates | 5+       | High risk (spam pattern) |
 | URL Spam           | no urls  | Low risk                 |
@@ -675,7 +675,7 @@ content: "Automated content generation test message..."
 | ------------------ | -------- | ------------------------- |
 | Account Age        | <1 day   | High risk (very new)      |
 | Karma              | no data  | Unknown (neutral)         |
-| Bans               | 0        | No risk                   |
+| Bans               | 0        | Skipped (no history)      |
 | Velocity           | bot_like | Very high risk (bot-like) |
 | Content Duplicates | none     | Low risk (unique)         |
 | URL Spam           | no urls  | Low risk                  |
@@ -922,7 +922,7 @@ content: "Hi all, I'm a developer interested in decentralized platforms. Verifie
 | ------------------ | -------------- | ----------------------- |
 | Account Age        | no history     | High risk (no history)  |
 | Karma              | no data        | Unknown (neutral)       |
-| Bans               | 0              | No risk                 |
+| Bans               | 0              | Skipped (no history)    |
 | Velocity           | normal         | No risk                 |
 | Content Duplicates | none           | Low risk (unique)       |
 | URL Spam           | no urls        | Low risk                |
@@ -1047,7 +1047,7 @@ commentCid: "QmTargetComment123..."
 | ------------------ | -------- | ------------------------- |
 | Account Age        | 7 days   | Moderate risk             |
 | Karma              | 0        | Neutral                   |
-| Bans               | 0        | No risk                   |
+| Bans               | 0        | Low risk (clean record)   |
 | Velocity           | bot_like | Very high risk (bot-like) |
 | Content Duplicates | none     | Low risk (unique)         |
 | URL Spam           | no urls  | Low risk                  |
@@ -1166,16 +1166,16 @@ parentCid: "QmParentComment..."
 
 **Author Profile:**
 
-| Attribute          | Value     | Risk Implication       |
-| ------------------ | --------- | ---------------------- |
-| Account Age        | 365+ days | Low risk (established) |
-| Karma              | +3        | Low risk (positive)    |
-| Bans               | 0         | No risk                |
-| Velocity           | normal    | No risk                |
-| Content Duplicates | none      | Low risk (unique)      |
-| URL Spam           | no urls   | Low risk               |
-| ModQueue Rejection | 0%        | Low risk               |
-| Removal Rate       | 0%        | Low risk               |
+| Attribute          | Value     | Risk Implication        |
+| ------------------ | --------- | ----------------------- |
+| Account Age        | 365+ days | Low risk (established)  |
+| Karma              | +3        | Low risk (positive)     |
+| Bans               | 0         | Low risk (clean record) |
+| Velocity           | normal    | No risk                 |
+| Content Duplicates | none      | Low risk (unique)       |
+| URL Spam           | no urls   | Low risk                |
+| ModQueue Rejection | 0%        | Low risk                |
+| Removal Rate       | 0%        | Low risk                |
 
 ### Results by Configuration
 
@@ -1289,16 +1289,16 @@ content: "Half of my submissions keep getting rejected, not sure why..."
 
 **Author Profile:**
 
-| Attribute          | Value   | Risk Implication  |
-| ------------------ | ------- | ----------------- |
-| Account Age        | 30 days | Low-moderate risk |
-| Karma              | 0       | Neutral           |
-| Bans               | 0       | No risk           |
-| Velocity           | normal  | No risk           |
-| Content Duplicates | none    | Low risk (unique) |
-| URL Spam           | no urls | Low risk          |
-| ModQueue Rejection | 50%     | Moderate risk     |
-| Removal Rate       | 0%      | Low risk          |
+| Attribute          | Value   | Risk Implication        |
+| ------------------ | ------- | ----------------------- |
+| Account Age        | 30 days | Low-moderate risk       |
+| Karma              | 0       | Neutral                 |
+| Bans               | 0       | Low risk (clean record) |
+| Velocity           | normal  | No risk                 |
+| Content Duplicates | none    | Low risk (unique)       |
+| URL Spam           | no urls | Low risk                |
+| ModQueue Rejection | 50%     | Moderate risk           |
+| Removal Rate       | 0%      | Low risk                |
 
 ### Results by Configuration
 
@@ -1412,16 +1412,16 @@ content: "Mods keep removing my content but I'm not sure what rules I'm breaking
 
 **Author Profile:**
 
-| Attribute          | Value   | Risk Implication       |
-| ------------------ | ------- | ---------------------- |
-| Account Age        | 90 days | Low risk (established) |
-| Karma              | 0       | Neutral                |
-| Bans               | 0       | No risk                |
-| Velocity           | normal  | No risk                |
-| Content Duplicates | none    | Low risk (unique)      |
-| URL Spam           | no urls | Low risk               |
-| ModQueue Rejection | No data | Unknown (neutral)      |
-| Removal Rate       | 60%     | High risk              |
+| Attribute          | Value   | Risk Implication        |
+| ------------------ | ------- | ----------------------- |
+| Account Age        | 90 days | Low risk (established)  |
+| Karma              | 0       | Neutral                 |
+| Bans               | 0       | Low risk (clean record) |
+| Velocity           | normal  | No risk                 |
+| Content Duplicates | none    | Low risk (unique)       |
+| URL Spam           | no urls | Low risk                |
+| ModQueue Rejection | No data | Unknown (neutral)       |
+| Removal Rate       | 60%     | High risk               |
 
 ### Results by Configuration
 
@@ -1539,7 +1539,7 @@ content: "Decided not to link my social accounts, is that okay?"
 | ------------------ | ------------------ | ---------------------- |
 | Account Age        | no history         | High risk (no history) |
 | Karma              | no data            | Unknown (neutral)      |
-| Bans               | 0                  | No risk                |
+| Bans               | 0                  | Skipped (no history)   |
 | Velocity           | normal             | No risk                |
 | Content Duplicates | none               | Low risk (unique)      |
 | URL Spam           | no urls            | Low risk               |
@@ -1659,16 +1659,16 @@ content: "This is duplicate spam content that appears multiple times."
 
 **Author Profile:**
 
-| Attribute          | Value   | Risk Implication  |
-| ------------------ | ------- | ----------------- |
-| Account Age        | 7 days  | Moderate risk     |
-| Karma              | 0       | Neutral           |
-| Bans               | 0       | No risk           |
-| Velocity           | normal  | No risk           |
-| Content Duplicates | 3       | Moderate risk     |
-| URL Spam           | no urls | Low risk          |
-| ModQueue Rejection | No data | Unknown (neutral) |
-| Removal Rate       | No data | Unknown (neutral) |
+| Attribute          | Value   | Risk Implication        |
+| ------------------ | ------- | ----------------------- |
+| Account Age        | 7 days  | Moderate risk           |
+| Karma              | 0       | Neutral                 |
+| Bans               | 0       | Low risk (clean record) |
+| Velocity           | normal  | No risk                 |
+| Content Duplicates | 3       | Moderate risk           |
+| URL Spam           | no urls | Low risk                |
+| ModQueue Rejection | No data | Unknown (neutral)       |
+| Removal Rate       | No data | Unknown (neutral)       |
 
 ### Results by Configuration
 
@@ -1786,7 +1786,7 @@ content: "After over a year on the platform, I've compiled everything I've learn
 | ------------------ | -------------- | ----------------------- |
 | Account Age        | 365+ days      | Low risk (established)  |
 | Karma              | +5             | Low risk (positive)     |
-| Bans               | 0              | No risk                 |
+| Bans               | 0              | Low risk (clean record) |
 | Velocity           | normal         | No risk                 |
 | Content Duplicates | none           | Low risk (unique)       |
 | URL Spam           | no urls        | Low risk                |

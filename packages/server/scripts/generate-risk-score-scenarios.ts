@@ -1209,7 +1209,13 @@ function generateExamplePublicationBlock(scenario: ScenarioConfig): string[] {
     return lines;
 }
 
-function generateAuthorProfileTable(scenario: ScenarioConfig): string[] {
+function generateAuthorProfileTable(scenario: ScenarioConfig, sampleResult?: ScenarioResult): string[] {
+    // Helper to check if a factor was skipped in the sample result
+    const isFactorSkipped = (factorName: string): boolean => {
+        if (!sampleResult) return false;
+        const factor = sampleResult.factors.find((f) => f.name === factorName);
+        return factor ? factor.weight === 0 : false;
+    };
     const lines: string[] = [];
 
     lines.push("**Author Profile:**");
@@ -1244,7 +1250,13 @@ function generateAuthorProfileTable(scenario: ScenarioConfig): string[] {
     lines.push(`| Karma | ${karmaDisplay} | ${karmaRisk} |`);
 
     // Bans
-    const banRisk = scenario.banCount === 0 ? "No risk" : scenario.banCount === 1 ? "Moderate risk" : "High risk";
+    const banRisk = isFactorSkipped("networkBanHistory")
+        ? "Skipped (no history)"
+        : scenario.banCount === 0
+          ? "Low risk (clean record)"
+          : scenario.banCount === 1
+            ? "Moderate risk"
+            : "High risk";
     lines.push(`| Bans | ${scenario.banCount} | ${banRisk} |`);
 
     // Velocity
@@ -1468,9 +1480,6 @@ function generateMarkdown(): string {
         // Add example publication
         lines.push(...generateExamplePublicationBlock(scenario));
 
-        // Add author profile table
-        lines.push(...generateAuthorProfileTable(scenario));
-
         // Store results for all configurations
         const scenarioResults: Array<{
             pubType: PublicationType;
@@ -1490,6 +1499,14 @@ function generateMarkdown(): string {
                 }
             }
         }
+
+        // Get a sample result for the author profile table (use base config: no IP, OAuth disabled)
+        const sampleResult = scenarioResults.find(
+            (r) => r.pubType === scenario.publicationType && r.ipType === "disabled" && r.oauthConfig === "disabled"
+        );
+
+        // Add author profile table (with sample result to detect skipped factors)
+        lines.push(...generateAuthorProfileTable(scenario, sampleResult?.result));
 
         // Generate results grouped by publication type
         lines.push("### Results by Configuration");
