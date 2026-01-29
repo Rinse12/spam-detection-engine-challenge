@@ -42,40 +42,40 @@ export async function verifyPublicationSignature({
     let publicationVerificationResult: { valid: boolean; reason?: string };
 
     if (challengeRequest.comment) {
-        publicationVerificationResult = await verifyCommentPubsubMessage(
-            challengeRequest.comment,
+        publicationVerificationResult = await verifyCommentPubsubMessage({
+            comment: challengeRequest.comment,
             resolveAuthorAddresses,
             clientsManager,
             overrideAuthorAddressIfInvalid
-        );
+        });
     } else if (challengeRequest.vote) {
-        publicationVerificationResult = await verifyVote(
-            challengeRequest.vote,
+        publicationVerificationResult = await verifyVote({
+            vote: challengeRequest.vote,
             resolveAuthorAddresses,
             clientsManager,
             overrideAuthorAddressIfInvalid
-        );
+        });
     } else if (challengeRequest.commentEdit) {
-        publicationVerificationResult = await verifyCommentEdit(
-            challengeRequest.commentEdit,
+        publicationVerificationResult = await verifyCommentEdit({
+            edit: challengeRequest.commentEdit,
             resolveAuthorAddresses,
             clientsManager,
             overrideAuthorAddressIfInvalid
-        );
+        });
     } else if (challengeRequest.commentModeration) {
-        publicationVerificationResult = await verifyCommentModeration(
-            challengeRequest.commentModeration,
+        publicationVerificationResult = await verifyCommentModeration({
+            moderation: challengeRequest.commentModeration,
             resolveAuthorAddresses,
             clientsManager,
             overrideAuthorAddressIfInvalid
-        );
+        });
     } else if (challengeRequest.subplebbitEdit) {
-        publicationVerificationResult = await verifySubplebbitEdit(
-            challengeRequest.subplebbitEdit,
+        publicationVerificationResult = await verifySubplebbitEdit({
+            subplebbitEdit: challengeRequest.subplebbitEdit,
             resolveAuthorAddresses,
             clientsManager,
             overrideAuthorAddressIfInvalid
-        );
+        });
     } else {
         return { valid: false, reason: "Unknown publication type" };
     }
