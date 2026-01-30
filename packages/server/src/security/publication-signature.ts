@@ -24,6 +24,17 @@ function getPublicationFromChallengeRequest(challengeRequest: DecryptedChallenge
 }
 
 /**
+ * Strip author.subplebbit before signature verification.
+ * The subplebbit adds author.subplebbit to the challenge request AFTER the author signs
+ * the publication. Since author is a signed property, the extra field would cause
+ * verification to fail because the CBOR bytes differ from what was originally signed.
+ */
+function stripSubplebbitAuthorForVerification<T extends { author: { subplebbit?: unknown } }>(publication: T): T {
+    const { subplebbit: _, ...authorWithoutSubplebbit } = publication.author;
+    return { ...publication, author: authorWithoutSubplebbit } as T;
+}
+
+/**
  * Verify a publication's signature using plebbit-js verify functions.
  * Also verifies author.wallets and author.avatar signatures if present.
  */
@@ -39,39 +50,41 @@ export async function verifyPublicationSignature({
     const overrideAuthorAddressIfInvalid = false;
 
     // First verify the main publication signature
+    // Strip author.subplebbit before verification since it's added by the subplebbit
+    // after the author signs the publication
     let publicationVerificationResult: { valid: boolean; reason?: string };
 
     if (challengeRequest.comment) {
         publicationVerificationResult = await verifyCommentPubsubMessage({
-            comment: challengeRequest.comment,
+            comment: stripSubplebbitAuthorForVerification(challengeRequest.comment),
             resolveAuthorAddresses,
             clientsManager,
             overrideAuthorAddressIfInvalid
         });
     } else if (challengeRequest.vote) {
         publicationVerificationResult = await verifyVote({
-            vote: challengeRequest.vote,
+            vote: stripSubplebbitAuthorForVerification(challengeRequest.vote),
             resolveAuthorAddresses,
             clientsManager,
             overrideAuthorAddressIfInvalid
         });
     } else if (challengeRequest.commentEdit) {
         publicationVerificationResult = await verifyCommentEdit({
-            edit: challengeRequest.commentEdit,
+            edit: stripSubplebbitAuthorForVerification(challengeRequest.commentEdit),
             resolveAuthorAddresses,
             clientsManager,
             overrideAuthorAddressIfInvalid
         });
     } else if (challengeRequest.commentModeration) {
         publicationVerificationResult = await verifyCommentModeration({
-            moderation: challengeRequest.commentModeration,
+            moderation: stripSubplebbitAuthorForVerification(challengeRequest.commentModeration),
             resolveAuthorAddresses,
             clientsManager,
             overrideAuthorAddressIfInvalid
         });
     } else if (challengeRequest.subplebbitEdit) {
         publicationVerificationResult = await verifySubplebbitEdit({
-            subplebbitEdit: challengeRequest.subplebbitEdit,
+            subplebbitEdit: stripSubplebbitAuthorForVerification(challengeRequest.subplebbitEdit),
             resolveAuthorAddresses,
             clientsManager,
             overrideAuthorAddressIfInvalid

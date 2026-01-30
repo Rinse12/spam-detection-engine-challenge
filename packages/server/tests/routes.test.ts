@@ -30,6 +30,33 @@ const CommentSignedPropertyNames = [
     "postCid"
 ];
 
+const VoteSignedPropertyNames = ["timestamp", "subplebbitAddress", "author", "protocolVersion", "commentCid", "vote"];
+
+const CommentEditSignedPropertyNames = [
+    "timestamp",
+    "flair",
+    "subplebbitAddress",
+    "author",
+    "protocolVersion",
+    "commentCid",
+    "content",
+    "deleted",
+    "spoiler",
+    "nsfw",
+    "reason"
+];
+
+const CommentModerationSignedPropertyNames = [
+    "timestamp",
+    "subplebbitAddress",
+    "author",
+    "protocolVersion",
+    "commentCid",
+    "commentModeration"
+];
+
+const SubplebbitEditSignedPropertyNames = ["timestamp", "subplebbitAddress", "author", "protocolVersion", "subplebbitEdit"];
+
 // Helper to create a properly signed publication signature (JSON format for publications)
 const signPublication = async (
     publication: Record<string, unknown>,
@@ -159,26 +186,20 @@ const createEvaluatePayload = async ({
     signer?: typeof testSigner;
     publicationSigner?: typeof authorSigner;
 } = {}) => {
-    const author: Record<string, unknown> = {
+    // Build author WITHOUT subplebbit for signing (matches production flow)
+    const authorForSigning: Record<string, unknown> = {
         // Use derived plebbit address (B58 peer ID) that matches the publication signer
         address: authorPlebbitAddress,
         ...authorOverrides
     };
 
-    if (!omitSubplebbitAuthor) {
-        author.subplebbit = {
-            ...baseSubplebbitAuthor,
-            ...subplebbitOverrides
-        };
-    }
-
     if (omitAuthorAddress) {
-        delete author.address;
+        delete authorForSigning.address;
     }
 
-    // Build comment without signature first
+    // Build comment without signature first (no author.subplebbit)
     const commentWithoutSignature: Record<string, unknown> = {
-        author,
+        author: authorForSigning,
         subplebbitAddress: "test-sub.eth",
         timestamp: baseTimestamp,
         protocolVersion: "1",
@@ -198,8 +219,19 @@ const createEvaluatePayload = async ({
         publicationSignature = await signPublication(commentWithoutSignature, publicationSigner, CommentSignedPropertyNames);
     }
 
+    // After signing, add author.subplebbit (matches production flow where
+    // the subplebbit adds this field after the author signs)
+    let finalAuthor: Record<string, unknown> = { ...authorForSigning };
+    if (!omitSubplebbitAuthor) {
+        finalAuthor.subplebbit = {
+            ...baseSubplebbitAuthor,
+            ...subplebbitOverrides
+        };
+    }
+
     const comment = {
         ...commentWithoutSignature,
+        author: finalAuthor,
         signature: publicationSignature
     };
 
@@ -313,6 +345,7 @@ describe("API Routes", () => {
             // First get the established author's score (100 days old with positive karma)
             // (Note: Both use same signer/address - we're testing subplebbit data differences)
             const establishedRequest = await createEvaluatePayload({
+                commentOverrides: { content: "Established author content" },
                 subplebbitOverrides: {
                     firstCommentTimestamp: baseTimestamp - 100 * 86400, // 100 days ago
                     postScore: 50,
@@ -324,6 +357,7 @@ describe("API Routes", () => {
 
             // Then get the new author's score (very new user with minimal history)
             const newAuthorRequest = await createEvaluatePayload({
+                commentOverrides: { content: "New author content" },
                 subplebbitOverrides: {
                     firstCommentTimestamp: baseTimestamp - 60, // Just 1 minute ago (very new)
                     postScore: -5, // Negative karma
@@ -442,11 +476,10 @@ describe("API Routes", () => {
             // author A but signed by author B
             const victimAddress = authorPlebbitAddress; // The victim's address
 
-            // Build comment claiming to be from victim
+            // Build comment claiming to be from victim (without subplebbit for signing)
             const commentWithoutSig = {
                 author: {
-                    address: victimAddress, // Claiming to be the victim
-                    subplebbit: baseSubplebbitAuthor
+                    address: victimAddress // Claiming to be the victim
                 },
                 subplebbitAddress: "test-sub.eth",
                 timestamp: baseTimestamp,
@@ -461,8 +494,10 @@ describe("API Routes", () => {
                 CommentSignedPropertyNames
             );
 
+            // Add author.subplebbit after signing (matches production flow)
             const comment = {
                 ...commentWithoutSig,
+                author: { ...commentWithoutSig.author, subplebbit: baseSubplebbitAuthor },
                 signature: attackerSignature
             };
 
@@ -573,13 +608,12 @@ describe("API Routes", () => {
             // The challengeRequest includes extra fields like type, encrypted, challengeRequestId, etc.
             // that are not part of DecryptedChallengeRequestSchema but ARE signed
 
-            // Build comment without signature first
+            // Build comment without signature first (no author.subplebbit for signing)
             // Note: author.address must match the publication signer's public key
             const commentWithoutSig = {
                 title: "Test Post",
                 author: {
-                    address: authorPlebbitAddress,
-                    subplebbit: baseSubplebbitAuthor
+                    address: authorPlebbitAddress
                 },
                 content: "This is a test comment to see the challenge response.",
                 timestamp: baseTimestamp,
@@ -590,8 +624,10 @@ describe("API Routes", () => {
             // Sign the comment properly
             const commentSignature = await signPublication(commentWithoutSig, authorSigner, CommentSignedPropertyNames);
 
+            // Add author.subplebbit after signing (matches production flow)
             const comment = {
                 ...commentWithoutSig,
+                author: { ...commentWithoutSig.author, subplebbit: baseSubplebbitAuthor },
                 signature: commentSignature
             };
 
@@ -644,6 +680,146 @@ describe("API Routes", () => {
             const body = response.json();
             expect(body.riskScore).toBeDefined();
             expect(body.sessionId).toBeDefined();
+        });
+    });
+
+    describe("Publication signature with author.subplebbit added after signing", () => {
+        // Regression tests: In production, the subplebbit adds author.subplebbit to the
+        // challenge request AFTER the author signs the publication. Since author is a signed
+        // property, the modified author object should still verify correctly.
+
+        const validCid = "QmYwAPJzv5CZsnAzt8auVZRn9p6nxfZmZ75W6rS4ju4Khu";
+
+        const buildAndSignPayload = async ({
+            publicationWithoutSig,
+            signedPropertyNames,
+            publicationType
+        }: {
+            publicationWithoutSig: Record<string, unknown>;
+            signedPropertyNames: string[];
+            publicationType: "comment" | "vote" | "commentEdit" | "commentModeration" | "subplebbitEdit";
+        }) => {
+            // 1. Sign the publication WITHOUT author.subplebbit
+            const pubSignature = await signPublication(publicationWithoutSig, authorSigner, signedPropertyNames);
+            const signedPublication = { ...publicationWithoutSig, signature: pubSignature };
+
+            // 2. Add author.subplebbit AFTER signing (matches production flow)
+            const authorWithSubplebbit = {
+                ...(signedPublication.author as Record<string, unknown>),
+                subplebbit: baseSubplebbitAuthor
+            };
+            const publicationWithSubplebbitAuthor = { ...signedPublication, author: authorWithSubplebbit };
+
+            // 3. Wrap in challenge request
+            const challengeRequest = { [publicationType]: publicationWithSubplebbitAuthor };
+            const timestamp = Math.floor(Date.now() / 1000);
+            const propsToSign = { challengeRequest, timestamp };
+            const requestSignature = await createRequestSignature(propsToSign, testSigner);
+
+            return { ...propsToSign, signature: requestSignature };
+        };
+
+        it("should accept Comment signed without author.subplebbit", async () => {
+            const payload = await buildAndSignPayload({
+                publicationWithoutSig: {
+                    author: { address: authorPlebbitAddress },
+                    subplebbitAddress: "test-sub.eth",
+                    timestamp: baseTimestamp,
+                    protocolVersion: "1",
+                    content: "Hello world"
+                },
+                signedPropertyNames: CommentSignedPropertyNames,
+                publicationType: "comment"
+            });
+
+            const response = await injectCbor(server.fastify, "POST", "/api/v1/evaluate", payload);
+            if (response.statusCode !== 200) {
+                console.log("Comment response:", response.json());
+            }
+            expect(response.statusCode).toBe(200);
+        });
+
+        it("should accept Vote signed without author.subplebbit", async () => {
+            const payload = await buildAndSignPayload({
+                publicationWithoutSig: {
+                    author: { address: authorPlebbitAddress },
+                    subplebbitAddress: "test-sub.eth",
+                    timestamp: baseTimestamp,
+                    protocolVersion: "1",
+                    commentCid: validCid,
+                    vote: 1
+                },
+                signedPropertyNames: VoteSignedPropertyNames,
+                publicationType: "vote"
+            });
+
+            const response = await injectCbor(server.fastify, "POST", "/api/v1/evaluate", payload);
+            if (response.statusCode !== 200) {
+                console.log("Vote response:", response.json());
+            }
+            expect(response.statusCode).toBe(200);
+        });
+
+        it("should accept CommentEdit signed without author.subplebbit", async () => {
+            const payload = await buildAndSignPayload({
+                publicationWithoutSig: {
+                    author: { address: authorPlebbitAddress },
+                    subplebbitAddress: "test-sub.eth",
+                    timestamp: baseTimestamp,
+                    protocolVersion: "1",
+                    commentCid: validCid,
+                    content: "Edited content"
+                },
+                signedPropertyNames: CommentEditSignedPropertyNames,
+                publicationType: "commentEdit"
+            });
+
+            const response = await injectCbor(server.fastify, "POST", "/api/v1/evaluate", payload);
+            if (response.statusCode !== 200) {
+                console.log("CommentEdit response:", response.json());
+            }
+            expect(response.statusCode).toBe(200);
+        });
+
+        it("should accept CommentModeration signed without author.subplebbit", async () => {
+            const payload = await buildAndSignPayload({
+                publicationWithoutSig: {
+                    author: { address: authorPlebbitAddress },
+                    subplebbitAddress: "test-sub.eth",
+                    timestamp: baseTimestamp,
+                    protocolVersion: "1",
+                    commentCid: validCid,
+                    commentModeration: { removed: true }
+                },
+                signedPropertyNames: CommentModerationSignedPropertyNames,
+                publicationType: "commentModeration"
+            });
+
+            const response = await injectCbor(server.fastify, "POST", "/api/v1/evaluate", payload);
+            if (response.statusCode !== 200) {
+                console.log("CommentModeration response:", response.json());
+            }
+            expect(response.statusCode).toBe(200);
+        });
+
+        it("should accept SubplebbitEdit signed without author.subplebbit", async () => {
+            const payload = await buildAndSignPayload({
+                publicationWithoutSig: {
+                    author: { address: authorPlebbitAddress },
+                    subplebbitAddress: "test-sub.eth",
+                    timestamp: baseTimestamp,
+                    protocolVersion: "1",
+                    subplebbitEdit: { title: "New title" }
+                },
+                signedPropertyNames: SubplebbitEditSignedPropertyNames,
+                publicationType: "subplebbitEdit"
+            });
+
+            const response = await injectCbor(server.fastify, "POST", "/api/v1/evaluate", payload);
+            if (response.statusCode !== 200) {
+                console.log("SubplebbitEdit response:", response.json());
+            }
+            expect(response.statusCode).toBe(200);
         });
     });
 

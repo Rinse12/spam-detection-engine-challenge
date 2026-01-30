@@ -119,20 +119,14 @@ const createEvaluatePayload = async ({
     subplebbitOverrides?: Record<string, unknown>;
     omitSubplebbitAuthor?: boolean;
 } = {}) => {
-    const author: Record<string, unknown> = {
+    // Build author WITHOUT subplebbit for signing (matches production flow)
+    const authorForSigning: Record<string, unknown> = {
         address: authorPlebbitAddress,
         ...authorOverrides
     };
 
-    if (!omitSubplebbitAuthor) {
-        author.subplebbit = {
-            ...baseSubplebbitAuthor,
-            ...subplebbitOverrides
-        };
-    }
-
     const commentWithoutSignature: Record<string, unknown> = {
-        author,
+        author: authorForSigning,
         subplebbitAddress: "test-sub.eth",
         timestamp: baseTimestamp,
         protocolVersion: "1",
@@ -142,8 +136,19 @@ const createEvaluatePayload = async ({
 
     const publicationSignature = await signPublication(commentWithoutSignature, authorSigner, CommentSignedPropertyNames);
 
+    // After signing, add author.subplebbit (matches production flow where
+    // the subplebbit adds this field after the author signs)
+    let finalAuthor: Record<string, unknown> = { ...authorForSigning };
+    if (!omitSubplebbitAuthor) {
+        finalAuthor.subplebbit = {
+            ...baseSubplebbitAuthor,
+            ...subplebbitOverrides
+        };
+    }
+
     const comment = {
         ...commentWithoutSignature,
+        author: finalAuthor,
         signature: publicationSignature
     };
 
