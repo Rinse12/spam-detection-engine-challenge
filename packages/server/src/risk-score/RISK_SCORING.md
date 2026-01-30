@@ -526,37 +526,84 @@ Quadratic formula: `score = max(0, 1 - 0.75c + 0.15c²)` where `c` = combined cr
 
 **Rationale**: OAuth verification provides a trust signal. Users who have verified with reputable providers are less likely to be spam bots or bad actors. The diminishing returns prevent gaming via identity sharing or mass verification.
 
+### 11. Wallet Activity (Weight: 6% with/without IP)
+
+Evaluates whether the author has a verified wallet with on-chain transaction history. Uses `eth_getTransactionCount` (nonce) as a proxy for wallet age and activity. A wallet with many outgoing transactions is almost certainly older and more active.
+
+**Behavior:**
+
+- **No wallet or nonce=0**: Factor is **skipped** (weight redistributed)
+- **Wallet with transactions**: Score based on nonce tier (lower = more trust)
+
+**Data Source:**
+
+- Standard RPC `eth_getTransactionCount` call — works on any EVM node
+- For ENS/domain wallet addresses, the name is first resolved to a hex address via the ETH chain provider
+- Nonce is fetched on each wallet's declared chain (via `plebbit.chainProviders[chainTicker]`)
+- Wallets whose chain has no configured RPC provider are skipped
+- RPC failures are handled gracefully (wallet treated as nonce=0)
+
+**Nonce-Based Scoring:**
+
+| Nonce (outgoing tx count) | Risk Score | Description                          |
+| ------------------------- | ---------- | ------------------------------------ |
+| 0 (or no wallet)          | (skipped)  | Factor skipped, weight redistributed |
+| 1–10                      | 0.35       | Some activity, modest trust          |
+| 11–50                     | 0.25       | Moderate activity                    |
+| 51–200                    | 0.15       | Strong activity                      |
+| 200+                      | 0.10       | Very strong activity                 |
+
+**Strict 1-to-1 Wallet-Author Enforcement:**
+
+Each wallet can only be associated with **one** author public key. This prevents an attacker from creating one active wallet and reusing it across many sybil accounts.
+
+| Wallet State                        | Behavior                   |
+| ----------------------------------- | -------------------------- |
+| Used only by current author         | Counts normally            |
+| Used by any other author public key | Ignored entirely           |
+| All wallets discarded               | Factor skipped (weight: 0) |
+
+The enforcement queries all publication tables (`comments`, `votes`, `commentEdits`, `commentModerations`) for any record with a different `publicKey` that has the same wallet address.
+
+**Best Wallet Wins:**
+
+If an author has multiple valid wallets (across different chains), the one with the highest nonce is used for scoring.
+
+**Rationale**: Wallets with on-chain transaction history demonstrate real blockchain usage. The economic cost of creating active wallets (gas fees for real transactions) makes this a meaningful trust signal. The strict 1-to-1 mapping prevents wallet-sharing sybil attacks.
+
 ## Weight Distribution
 
 Weights are redistributed based on whether IP information is available:
 
-| Factor                     | Without IP | With IP |
-| -------------------------- | ---------- | ------- |
-| Comment Content/Title Risk | 14%        | 10%     |
-| Comment URL/Link Risk      | 12%        | 10%     |
-| Velocity Risk              | 10%        | 8%      |
-| Account Age                | 14%        | 10%     |
-| Karma Score                | 12%        | 8%      |
-| IP Risk                    | 0%         | 20%     |
-| Network Ban History        | 10%        | 8%      |
-| ModQueue Rejection Rate    | 6%         | 4%      |
-| Network Removal Rate       | 8%         | 8%      |
-| Social Verification        | 8%         | 8%      |
-| **Total**                  | **94%**    | **94%** |
+| Factor                     | Without IP | With IP  |
+| -------------------------- | ---------- | -------- |
+| Comment Content/Title Risk | 14%        | 10%      |
+| Comment URL/Link Risk      | 12%        | 10%      |
+| Velocity Risk              | 10%        | 8%       |
+| Account Age                | 14%        | 10%      |
+| Karma Score                | 12%        | 8%       |
+| IP Risk                    | 0%         | 20%      |
+| Network Ban History        | 10%        | 8%       |
+| ModQueue Rejection Rate    | 6%         | 4%       |
+| Network Removal Rate       | 8%         | 8%       |
+| Social Verification        | 8%         | 8%       |
+| Wallet Activity            | 6%         | 6%       |
+| **Total**                  | **100%**   | **100%** |
 
-**Note**: Total weights sum to 94%. Active factors receive proportionally redistributed weights that sum to 100% (see Weight Redistribution below).
+**Note**: Total weights sum to 100% when all factors are active. When factors are skipped (weight=0), active factors receive proportionally redistributed weights that still sum to 100% (see Weight Redistribution below).
 
 ## Weight Redistribution
 
 Some factors may be **skipped** (return `weight: 0`) when their required data is unavailable or when they don't apply to the publication type:
 
-| Factor              | Conditions for Skipping                                         |
-| ------------------- | --------------------------------------------------------------- |
-| Velocity            | Publication is `subplebbitEdit`                                 |
-| IP Risk             | No IP intelligence data available (user hasn't accessed iframe) |
-| Content/Title Risk  | Publication is not a comment (vote, edit, moderation)           |
-| URL/Link Risk       | Publication is not a comment (vote, edit, moderation)           |
-| Social Verification | OAuth is completely disabled (no enabled providers)             |
+| Factor              | Conditions for Skipping                                            |
+| ------------------- | ------------------------------------------------------------------ |
+| Velocity            | Publication is `subplebbitEdit`                                    |
+| IP Risk             | No IP intelligence data available (user hasn't accessed iframe)    |
+| Content/Title Risk  | Publication is not a comment (vote, edit, moderation)              |
+| URL/Link Risk       | Publication is not a comment (vote, edit, moderation)              |
+| Social Verification | OAuth is completely disabled (no enabled providers)                |
+| Wallet Activity     | No wallets, no transaction data, nonce=0, or all wallets discarded |
 
 When a factor is skipped, its weight is **proportionally redistributed** to the remaining active factors. This ensures:
 
@@ -572,9 +619,9 @@ For each active factor:
 effectiveWeight = originalWeight / Σ(activeWeights)
 ```
 
-### Example: Vote Publication (Multiple Factors Skipped, OAuth Enabled)
+### Example: Vote Publication (Multiple Factors Skipped, OAuth Enabled, No Wallet)
 
-For vote publications, Content Risk and URL Risk are skipped:
+For vote publications, Content Risk and URL Risk are skipped. Wallet Activity is also skipped (no wallet data).
 
 | Factor              | Original Weight | Effective Weight |
 | ------------------- | --------------- | ---------------- |
@@ -587,7 +634,8 @@ For vote publications, Content Risk and URL Risk are skipped:
 | ModQueue Rejection  | 6%              | 8.8%             |
 | Removal Rate        | 8%              | 11.8%            |
 | Social Verification | 8%              | 11.8%            |
-| **Total**           | 94%             | **100%**         |
+| Wallet Activity     | 6%              | **0% (skipped)** |
+| **Total**           | 100%            | **100%**         |
 
 Active total: 10% + 14% + 12% + 10% + 6% + 8% + 8% = 68%
 
@@ -658,7 +706,7 @@ The system gracefully degrades based on available providers:
 
 _Note: Update these examples whenever risk scoring logic changes._
 
-These examples show how the risk score is calculated for different scenarios. All examples assume no IP information is available (using the "Without IP" weight configuration) and OAuth is enabled with Google and GitHub providers.
+These examples show how the risk score is calculated for different scenarios. All examples assume no IP information is available (using the "Without IP" weight configuration) and OAuth is enabled with Google and GitHub providers. Wallet Activity is skipped in examples where the author has no verified wallet (most examples). See Example 8 for a wallet-active scenario.
 
 ### Example 1: New User Sharing a Link (First Post, No OAuth)
 
@@ -681,6 +729,7 @@ comment.content: "Check out my thoughts..."
 | ModQueue Rejection  | 0.5 (no data)              | 6%              | 7.0%             | 0.035    |
 | Removal Rate        | 0.5 (no data)              | 8%              | 9.3%             | 0.047    |
 | Social Verification | 1.0 (no OAuth, high risk)  | 8%              | 9.3%             | 0.093    |
+| Wallet Activity     | (skipped, no wallet)       | 6%              | 0%               | 0        |
 
 **Final Score: ~0.49** → Moderate risk, triggers CAPTCHA challenge
 
@@ -705,6 +754,7 @@ comment.content: "Has anyone figured out how to run a subplebbit on a VPS?"
 | ModQueue Rejection  | 0.1 (0-10% rejected)         | 6%              | 6.4%             | 0.006    |
 | Removal Rate        | 0.1 (0-5% removed)           | 8%              | 8.5%             | 0.009    |
 | Social Verification | 0.4 (Google verified)        | 8%              | 8.5%             | 0.034    |
+| Wallet Activity     | (skipped, no wallet)         | 6%              | 0%               | 0        |
 
 **Final Score: ~0.17** → Low risk, auto-accepted
 
@@ -729,6 +779,7 @@ comment.content: "Click here for FREE money!!!"
 | ModQueue Rejection  | 0.5 (no data)                                                             | 6%              | 7.0%             | 0.035    |
 | Removal Rate        | 0.5 (no data)                                                             | 8%              | 9.3%             | 0.047    |
 | Social Verification | 1.0 (no OAuth, high risk)                                                 | 8%              | 9.3%             | 0.093    |
+| Wallet Activity     | (skipped, no wallet)                                                      | 6%              | 0%               | 0        |
 
 **Final Score: ~0.65** → Moderate-high risk, CAPTCHA required
 
@@ -755,6 +806,7 @@ comment.content: "Get in early on this opportunity!"
 | ModQueue Rejection  | 0.5 (no data)                                              | 6%              | 7.0%             | 0.035    |
 | Removal Rate        | 0.5 (no data)                                              | 8%              | 9.3%             | 0.047    |
 | Social Verification | 1.0 (no OAuth, high risk)                                  | 8%              | 9.3%             | 0.093    |
+| Wallet Activity     | (skipped, no wallet)                                       | 6%              | 0%               | 0        |
 
 **Final Score: ~0.67** → Moderate-high risk, CAPTCHA required
 
@@ -781,6 +833,7 @@ Same author has posted 5 similar URLs (`spam.com/promo/deal?ref=user1`, etc.) wi
 | ModQueue Rejection  | 0.5 (no data)                                                | 6%              | 6.4%             | 0.032    |
 | Removal Rate        | 0.5 (no data)                                                | 8%              | 8.5%             | 0.043    |
 | Social Verification | 1.0 (no OAuth, high risk)                                    | 8%              | 8.5%             | 0.085    |
+| Wallet Activity     | (skipped, no wallet)                                         | 6%              | 0%               | 0        |
 
 **Final Score: ~0.64** → Moderate-high risk, CAPTCHA required
 
@@ -805,6 +858,7 @@ comment.content: "CLICK HERE NOW!!! DON'T MISS OUT!!!"
 | ModQueue Rejection  | 0.9 (70%+ rejected)                                                | 6%              | 6.4%             | 0.058    |
 | Removal Rate        | 0.9 (50%+ removed)                                                 | 8%              | 8.5%             | 0.077    |
 | Social Verification | 1.0 (no OAuth, high risk)                                          | 8%              | 8.5%             | 0.085    |
+| Wallet Activity     | (skipped, no wallet)                                               | 6%              | 0%               | 0        |
 
 **Final Score: ~0.70** → High risk, close to auto-reject threshold
 
@@ -829,21 +883,51 @@ comment.content: "Here's my perspective..."
 | ModQueue Rejection  | 0.5 (no data)                          | 6%              | 6.4%             | 0.032    |
 | Removal Rate        | 0.5 (no data)                          | 8%              | 8.5%             | 0.043    |
 | Social Verification | 0.15 (Google+GitHub, credibility ~1.7) | 8%              | 8.5%             | 0.013    |
+| Wallet Activity     | (skipped, no wallet)                   | 6%              | 0%               | 0        |
 
 **Final Score: ~0.38** → Moderate risk, but lower than unverified new user
 
+### Example 8: New User with Active Wallet (100+ tx, Google Verified)
+
+A brand new user posting for the first time, but they have a verified ETH wallet with 150 transactions. Also verified via Google OAuth.
+
+```
+comment.link: null
+comment.title: "Been using crypto for years, just found plebbit"
+comment.content: "Excited to finally have a decentralized alternative to Reddit..."
+author.wallets.eth.address: "0x742d...Cb61" (150 outgoing transactions)
+```
+
+| Factor              | Score                          | Original Weight | Effective Weight | Weighted |
+| ------------------- | ------------------------------ | --------------- | ---------------- | -------- |
+| Account Age         | 1.0 (no history)               | 14%             | 14.9%            | 0.149    |
+| Karma               | 0.6 (no data)                  | 12%             | 12.8%            | 0.077    |
+| Content Risk        | 0.2 (base, unique content)     | 14%             | 14.9%            | 0.030    |
+| URL Risk            | 0.2 (no URLs - positive)       | 12%             | 12.8%            | 0.026    |
+| Velocity            | 0.1 (1 post/hr, normal)        | 10%             | 10.6%            | 0.011    |
+| Ban History         | (skipped, no history)          | 10%             | 0%               | 0        |
+| ModQueue Rejection  | 0.5 (no data)                  | 6%              | 6.4%             | 0.032    |
+| Removal Rate        | 0.5 (no data)                  | 8%              | 8.5%             | 0.043    |
+| Social Verification | 0.4 (Google verified)          | 8%              | 8.5%             | 0.034    |
+| Wallet Activity     | 0.15 (150 tx, strong activity) | 6%              | 6.4%             | 0.010    |
+
+**Final Score: ~0.41** → Moderate risk, CAPTCHA + OAuth tier
+
+Compared to Example 1 (new user, no wallet, no OAuth, ~0.49), the wallet + OAuth verification reduces the score meaningfully.
+
 ### Summary Table
 
-| Scenario                                 | Final Score | Tier              | Action          |
-| ---------------------------------------- | ----------- | ----------------- | --------------- |
-| Established user, Google verified        | ~0.17       | auto_accept       | Auto-accepted   |
-| New user with Google+GitHub verified     | ~0.38       | captcha_only      | CAPTCHA only    |
-| New user, first post with link, no OAuth | ~0.45       | captcha_and_oauth | CAPTCHA + OAuth |
-| Affiliate link spammer, no OAuth         | ~0.59       | captcha_and_oauth | CAPTCHA + OAuth |
-| Coordinated campaign, no OAuth           | ~0.61       | captcha_and_oauth | CAPTCHA + OAuth |
-| URL variation spam, no OAuth             | ~0.64       | captcha_and_oauth | CAPTCHA + OAuth |
-| Repeat offender, no OAuth                | ~0.70       | captcha_and_oauth | CAPTCHA + OAuth |
-| Severe repeat offender, no OAuth         | ~0.85+      | auto_reject       | Auto-rejected   |
+| Scenario                                  | Final Score | Tier              | Action          |
+| ----------------------------------------- | ----------- | ----------------- | --------------- |
+| Established user, Google verified         | ~0.17       | auto_accept       | Auto-accepted   |
+| New user with Google+GitHub verified      | ~0.38       | captcha_only      | CAPTCHA only    |
+| New user, active wallet + Google verified | ~0.41       | captcha_and_oauth | CAPTCHA + OAuth |
+| New user, first post with link, no OAuth  | ~0.49       | captcha_and_oauth | CAPTCHA + OAuth |
+| Affiliate link spammer, no OAuth          | ~0.65       | captcha_and_oauth | CAPTCHA + OAuth |
+| Coordinated campaign, no OAuth            | ~0.67       | captcha_and_oauth | CAPTCHA + OAuth |
+| URL variation spam, no OAuth              | ~0.64       | captcha_and_oauth | CAPTCHA + OAuth |
+| Repeat offender, no OAuth                 | ~0.70       | captcha_and_oauth | CAPTCHA + OAuth |
+| Severe repeat offender, no OAuth          | ~0.85+      | auto_reject       | Auto-rejected   |
 
 ## Limitations
 

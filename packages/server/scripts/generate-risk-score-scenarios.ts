@@ -46,6 +46,10 @@ interface ScenarioConfig {
     contentDuplicates: "none" | "3" | "5+";
     urlSpam: "no_urls" | "1_unique" | "5+_same";
     hasOAuthVerification?: string[]; // Provider names, empty means unverified
+    /** Wallet nonce (transaction count). undefined = no wallet, 0 = wallet with no tx */
+    walletNonce?: number;
+    /** Wallet address to use when walletNonce is set */
+    walletAddress?: string;
     exampleContent?: ExampleContent;
 }
 
@@ -86,7 +90,8 @@ const FACTOR_DISPLAY_NAMES: Record<string, string> = {
     networkBanHistory: "Ban History",
     modqueueRejectionRate: "ModQueue Rejection",
     networkRemovalRate: "Removal Rate",
-    socialVerification: "Social Verification"
+    socialVerification: "Social Verification",
+    walletVerification: "Wallet Activity"
 };
 
 const TIER_DISPLAY_NAMES: Record<ChallengeTier, string> = {
@@ -230,6 +235,15 @@ function getSocialVerificationScoreDescription(oauthConfig: OAuthConfig, scenari
     }
 }
 
+function getWalletActivityScoreDescription(scenario: ScenarioConfig): string {
+    if (scenario.walletNonce === undefined) return "no wallet";
+    if (scenario.walletNonce === 0) return "0 tx (skipped)";
+    if (scenario.walletNonce <= 10) return `${scenario.walletNonce} tx (some activity)`;
+    if (scenario.walletNonce <= 50) return `${scenario.walletNonce} tx (moderate)`;
+    if (scenario.walletNonce <= 200) return `${scenario.walletNonce} tx (strong)`;
+    return `${scenario.walletNonce} tx (very strong)`;
+}
+
 function getFactorScoreDescription(
     factorName: string,
     score: number,
@@ -258,6 +272,8 @@ function getFactorScoreDescription(
             return getIpRiskScoreDescription(ipType);
         case "socialVerification":
             return getSocialVerificationScoreDescription(oauthConfig, scenario);
+        case "walletVerification":
+            return getWalletActivityScoreDescription(scenario);
         default:
             return "";
     }
@@ -287,7 +303,7 @@ const SCENARIOS: ScenarioConfig[] = [
     },
     {
         name: "Established Trusted User",
-        description: "A well-established user with 90+ days history, positive karma, and Google verification.",
+        description: "A well-established user with 90+ days history, positive karma, Google verification, and an active wallet (250+ tx).",
         publicationType: "post",
         accountAge: "90_days",
         karma: "+5",
@@ -298,6 +314,7 @@ const SCENARIOS: ScenarioConfig[] = [
         contentDuplicates: "none",
         urlSpam: "no_urls",
         hasOAuthVerification: ["google"],
+        walletNonce: 250,
         exampleContent: {
             title: "Question about plebbit development",
             content: "Has anyone figured out how to run a subplebbit on a VPS? I've been here a while and still learning..."
@@ -512,7 +529,7 @@ const SCENARIOS: ScenarioConfig[] = [
     },
     {
         name: "Perfect User",
-        description: "An ideal user with 365+ days history, +5 karma, dual OAuth, and clean record.",
+        description: "An ideal user with 365+ days history, +5 karma, dual OAuth, active wallet (500+ tx), and clean record.",
         publicationType: "post",
         accountAge: "365+_days",
         karma: "+5",
@@ -523,9 +540,46 @@ const SCENARIOS: ScenarioConfig[] = [
         contentDuplicates: "none",
         urlSpam: "no_urls",
         hasOAuthVerification: ["google", "github"],
+        walletNonce: 500,
         exampleContent: {
             title: "Comprehensive guide to running your own subplebbit",
             content: "After over a year on the platform, I've compiled everything I've learned..."
+        }
+    },
+    {
+        name: "New User, Active Wallet",
+        description: "A brand new user with no history but a verified wallet with 150 transactions.",
+        publicationType: "post",
+        accountAge: "no_history",
+        karma: "no_data",
+        velocity: "normal",
+        banCount: 0,
+        modqueueRejection: "no_data",
+        removalRate: "no_data",
+        contentDuplicates: "none",
+        urlSpam: "no_urls",
+        walletNonce: 150,
+        exampleContent: {
+            title: "Been using crypto for years, just found plebbit",
+            content: "Excited to finally have a decentralized alternative to Reddit..."
+        }
+    },
+    {
+        name: "New User, Low-Activity Wallet",
+        description: "A new user with a wallet that has very few transactions (5 tx).",
+        publicationType: "post",
+        accountAge: "no_history",
+        karma: "no_data",
+        velocity: "normal",
+        banCount: 0,
+        modqueueRejection: "no_data",
+        removalRate: "no_data",
+        contentDuplicates: "none",
+        urlSpam: "no_urls",
+        walletNonce: 5,
+        exampleContent: {
+            title: "Just getting started with crypto and plebbit",
+            content: "New to both but excited to learn..."
         }
     }
 ];
@@ -1029,6 +1083,18 @@ function createMockChallengeRequest(
         };
     }
 
+    // Add wallet data if scenario has wallet nonce
+    if (scenario.walletNonce !== undefined) {
+        const walletAddress = scenario.walletAddress || "0x742d35Cc6634C0532925a3b844Bc9e7595f6Cb61";
+        author.wallets = {
+            eth: {
+                address: walletAddress,
+                timestamp: now - 86400,
+                signature: { signature: "mock-wallet-sig", type: "eip191" }
+            }
+        };
+    }
+
     const signature = {
         publicKey: authorPublicKey,
         signature: "mock-signature",
@@ -1106,12 +1172,20 @@ function runScenario(scenario: ScenarioConfig, ipType: IpType, oauthConfig: OAut
             enabledOAuthProviders = ["google", "github"];
         }
 
+        // Build wallet transaction counts if scenario has wallet data
+        let walletTransactionCounts: Record<string, number> | undefined;
+        if (scenario.walletNonce !== undefined) {
+            const walletAddress = scenario.walletAddress || "0x742d35Cc6634C0532925a3b844Bc9e7595f6Cb61";
+            walletTransactionCounts = { [walletAddress.toLowerCase()]: scenario.walletNonce };
+        }
+
         // Calculate risk score
         const options: CalculateRiskScoreOptions = {
             challengeRequest,
             db,
             ipIntelligence,
             enabledOAuthProviders,
+            walletTransactionCounts,
             now
         };
 
@@ -1318,6 +1392,22 @@ function generateAuthorProfileTable(scenario: ScenarioConfig, sampleResult?: Sce
         const oauthDisplay = scenario.hasOAuthVerification.length > 0 ? scenario.hasOAuthVerification.join(", ") : "None (but enabled)";
         const oauthRisk = scenario.hasOAuthVerification.length > 0 ? "Reduced risk (verified)" : "High risk (unverified)";
         lines.push(`| OAuth Verification | ${oauthDisplay} | ${oauthRisk} |`);
+    }
+
+    // Wallet Activity (if applicable)
+    if (scenario.walletNonce !== undefined) {
+        const walletDisplay = `${scenario.walletNonce} transactions`;
+        const walletRisk =
+            scenario.walletNonce === 0
+                ? "Skipped (no transactions)"
+                : scenario.walletNonce <= 10
+                  ? "Some activity (modest trust)"
+                  : scenario.walletNonce <= 50
+                    ? "Moderate activity"
+                    : scenario.walletNonce <= 200
+                      ? "Strong activity"
+                      : "Very strong activity";
+        lines.push(`| Wallet Activity | ${walletDisplay} | ${walletRisk} |`);
     }
 
     lines.push("");

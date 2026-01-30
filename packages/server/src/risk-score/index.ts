@@ -14,6 +14,7 @@ import {
     calculateModqueueRejectionRate,
     calculateNetworkRemovalRate,
     calculateSocialVerification,
+    calculateWalletActivity,
     type IpIntelligence
 } from "./factors/index.js";
 
@@ -36,6 +37,8 @@ export interface CalculateRiskScoreOptions {
     now?: number;
     /** List of enabled OAuth providers (e.g., ["google", "github"]). Empty array disables social verification factor. */
     enabledOAuthProviders?: string[];
+    /** Pre-fetched wallet transaction counts (nonces) mapping wallet address (lowercased) to nonce */
+    walletTransactionCounts?: Record<string, number>;
 }
 
 /**
@@ -50,6 +53,8 @@ export interface CalculateRiskScoreOptions {
  * - Network Ban History: How many subs the author has been banned from
  * - ModQueue Rejection Rate: What percentage of modQueue submissions get rejected
  * - Network Removal Rate: What percentage of comments get removed across all subs
+ * - Social Verification: OAuth identity verification
+ * - Wallet Activity: On-chain transaction history for verified wallets
  *
  * When IP information is available, weights are redistributed to include
  * IP risk analysis. Without IP info, the other factors receive higher weights.
@@ -57,7 +62,7 @@ export interface CalculateRiskScoreOptions {
  * @returns RiskScoreResult with the final score, factor breakdown, and explanation
  */
 export function calculateRiskScore(options: CalculateRiskScoreOptions): RiskScoreResult {
-    const { challengeRequest, db, ipIntelligence } = options;
+    const { challengeRequest, db, ipIntelligence, walletTransactionCounts } = options;
     const now = options.now ?? Math.floor(Date.now() / 1000);
     const hasIpInfo = ipIntelligence !== undefined;
     const enabledOAuthProviders = options.enabledOAuthProviders ?? [];
@@ -88,7 +93,8 @@ export function calculateRiskScore(options: CalculateRiskScoreOptions): RiskScor
         calculateNetworkBanHistory(ctx, weights.networkBanHistory),
         calculateModqueueRejectionRate(ctx, weights.modqueueRejectionRate),
         calculateNetworkRemovalRate(ctx, weights.networkRemovalRate),
-        calculateSocialVerification(ctx, weights.socialVerification, enabledOAuthProviders)
+        calculateSocialVerification(ctx, weights.socialVerification, enabledOAuthProviders),
+        calculateWalletActivity({ ctx, weight: weights.walletVerification, walletTransactionCounts })
     ];
 
     // Calculate total active weight for redistribution

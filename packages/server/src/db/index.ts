@@ -794,6 +794,42 @@ export class SpamDetectionDatabase {
     }
 
     // ============================================
+    // Wallet-Author Exclusivity Methods
+    // ============================================
+
+    /**
+     * Check if a wallet address is used by any author with a different public key.
+     * Enforces strict 1-to-1 mapping between wallets and author public keys.
+     * Uses EXISTS + LIMIT 1 for efficiency — stops as soon as one match is found.
+     *
+     * @param walletAddress - The wallet address to check (case-insensitive)
+     * @param authorPublicKey - The current author's public key to exclude
+     * @returns true if any publication exists with a different publicKey using this wallet
+     */
+    isWalletUsedByOtherAuthor({ walletAddress, authorPublicKey }: { walletAddress: string; authorPublicKey: string }): boolean {
+        const normalizedWallet = walletAddress.toLowerCase();
+
+        const walletCondition = `EXISTS (
+            SELECT 1 FROM json_each(json_extract(author, '$.wallets'))
+            WHERE LOWER(json_extract(value, '$.address')) = @wallet
+        )`;
+
+        const otherAuthorCondition = `json_extract(signature, '$.publicKey') != @authorPublicKey`;
+
+        const tables = ["comments", "votes", "commentEdits", "commentModerations"] as const;
+
+        for (const table of tables) {
+            const result = this.db
+                .prepare(`SELECT 1 FROM ${table} WHERE ${walletCondition} AND ${otherAuthorCondition} LIMIT 1`)
+                .get({ wallet: normalizedWallet, authorPublicKey });
+
+            if (result) return true;
+        }
+
+        return false;
+    }
+
+    // ============================================
     // Karma Query Methods (by public key)
     // ============================================
 

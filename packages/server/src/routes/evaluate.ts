@@ -11,6 +11,7 @@ import { verifyPublicationSignature } from "../security/publication-signature.js
 import { resolveSubplebbitPublicKey } from "../subplebbit-resolver.js";
 import { calculateRiskScore } from "../risk-score/index.js";
 import { getAuthorFromChallengeRequest } from "../risk-score/utils.js";
+import { fetchWalletTransactionCounts } from "../security/author-field-signature.js";
 import { determineChallengeTier, type ChallengeTierConfig } from "../risk-score/challenge-tier.js";
 import { IndexerQueries } from "../indexer/db/queries.js";
 import type { Indexer } from "../indexer/index.js";
@@ -150,6 +151,15 @@ export function registerEvaluateRoute(fastify: FastifyInstance, options: Evaluat
                 });
             }
 
+            // Fetch wallet transaction counts (nonces) for risk scoring
+            const author = getAuthorFromChallengeRequest(typedChallengeRequest);
+            const walletTransactionCounts = await fetchWalletTransactionCounts({
+                wallets: author.wallets as
+                    | Record<string, { address: string; timestamp: number; signature: { signature: string; type: string } }>
+                    | undefined,
+                plebbit
+            });
+
             // Check for duplicate publication (replay attack prevention)
             const signatureValue = (publication.signature as { signature: string }).signature;
             if (db.publicationSignatureExists(signatureValue)) {
@@ -161,7 +171,8 @@ export function registerEvaluateRoute(fastify: FastifyInstance, options: Evaluat
             // Calculate risk score using the risk-score module
             const riskScoreResult = calculateRiskScore({
                 challengeRequest: challengeRequest as DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor,
-                db
+                db,
+                walletTransactionCounts
             });
 
             // Determine challenge tier based on risk score
@@ -224,7 +235,6 @@ export function registerEvaluateRoute(fastify: FastifyInstance, options: Evaluat
             // Note: subplebbitEdit is not stored as it's not relevant for velocity tracking
 
             // Queue author's previousCommentCid for background crawling (if indexer is enabled)
-            const author = getAuthorFromChallengeRequest(typedChallengeRequest);
             if (author.previousCommentCid && indexer) {
                 indexer.queuePreviousCidCrawl(author.previousCommentCid);
             }

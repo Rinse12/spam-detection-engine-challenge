@@ -67,6 +67,8 @@ export interface WeightConfig {
     networkRemovalRate: number;
     /** Social verification via OAuth (trust signal when verified) */
     socialVerification: number;
+    /** Wallet activity verification via on-chain transaction count */
+    walletVerification: number;
 }
 
 /**
@@ -83,7 +85,8 @@ export const WEIGHTS_NO_IP: WeightConfig = {
     networkBanHistory: 0.1,
     modqueueRejectionRate: 0.06,
     networkRemovalRate: 0.08,
-    socialVerification: 0.08
+    socialVerification: 0.08,
+    walletVerification: 0.06
 };
 
 /**
@@ -100,5 +103,6 @@ export const WEIGHTS_WITH_IP: WeightConfig = {
     networkBanHistory: 0.08,
     modqueueRejectionRate: 0.04,
     networkRemovalRate: 0.08,
-    socialVerification: 0.08
+    socialVerification: 0.08,
+    walletVerification: 0.06
 };

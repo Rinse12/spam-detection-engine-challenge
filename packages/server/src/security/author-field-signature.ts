@@ -145,6 +145,84 @@ export async function verifyAuthorWallets({
 }
 
 /**
+ * Fetch on-chain transaction counts (nonces) for wallets.
+ * Uses eth_getTransactionCount RPC call as a proxy for wallet age + activity.
+ *
+ * - For domain wallet addresses (ENS), resolves them to hex addresses first using
+ *   the ETH chain provider, then queries the nonce on the wallet's declared chain
+ * - Skips wallets whose chain has no configured provider
+ * - Gracefully handles RPC errors per wallet (returns nonce=0 on failure)
+ *
+ * @returns Record mapping wallet address (lowercased) to nonce count
+ */
+export async function fetchWalletTransactionCounts({
+    wallets,
+    plebbit
+}: {
+    wallets: Record<string, WalletData> | undefined;
+    plebbit: PlebbitInstance;
+}): Promise<Record<string, number>> {
+    const result: Record<string, number> = {};
+
+    if (!wallets || Object.keys(wallets).length === 0) {
+        return result;
+    }
+
+    const promises: Array<Promise<void>> = [];
+
+    for (const [chainTicker, wallet] of Object.entries(wallets)) {
+        if (!wallet?.address) continue;
+
+        // Check if chain provider is available
+        const chainProvider = plebbit.chainProviders[chainTicker as ChainTicker];
+        if (!chainProvider || !chainProvider.urls || chainProvider.urls.length === 0) continue;
+
+        promises.push(
+            (async () => {
+                try {
+                    let hexAddress: `0x${string}`;
+
+                    if (isStringDomain(wallet.address)) {
+                        // Resolve ENS/domain address to hex using the ETH chain provider
+                        const ethProvider = plebbit.chainProviders["eth" as ChainTicker];
+                        if (!ethProvider || !ethProvider.urls || ethProvider.urls.length === 0) {
+                            // No ETH provider to resolve domain — skip this wallet
+                            return;
+                        }
+                        const ethClient = plebbit._domainResolver._createViemClientIfNeeded("eth" as ChainTicker, ethProvider.urls[0]);
+                        const resolved = await ethClient.getEnsAddress({ name: wallet.address });
+                        if (!resolved) {
+                            // ENS name doesn't resolve to an address
+                            return;
+                        }
+                        hexAddress = resolved;
+                    } else {
+                        hexAddress = wallet.address as `0x${string}`;
+                    }
+
+                    const viemClient = plebbit._domainResolver._createViemClientIfNeeded(chainTicker as ChainTicker, chainProvider.urls[0]);
+                    const nonce = await viemClient.getTransactionCount({
+                        address: hexAddress
+                    });
+                    // Key by original wallet address (lowercased) for lookup
+                    result[wallet.address.toLowerCase()] = Number(nonce);
+                } catch (error) {
+                    // Graceful fallback — log warning and return 0 for this wallet
+                    console.warn(
+                        `Failed to fetch transaction count for wallet ${wallet.address} on chain ${chainTicker}: ${error instanceof Error ? error.message : String(error)}`
+                    );
+                    result[wallet.address.toLowerCase()] = 0;
+                }
+            })()
+        );
+    }
+
+    await Promise.all(promises);
+
+    return result;
+}
+
+/**
  * Verify avatar (NFT) signature.
  * Verifies that the signature was created by the current NFT owner.
  */

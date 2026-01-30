@@ -6,3 +6,4 @@ export { calculateKarma } from "./karma.js";
 export { calculateVelocity } from "./velocity.js";
 export { calculateNetworkBanHistory, calculateModqueueRejectionRate, calculateNetworkRemovalRate } from "./network-risk.js";
 export { calculateSocialVerification } from "./social-verification.js";
+export { calculateWalletActivity } from "./wallet-activity.js";
