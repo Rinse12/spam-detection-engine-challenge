@@ -40,6 +40,8 @@ export interface ServerConfig {
     captchaOnlyThreshold?: number;
     /** Risk score threshold for auto-reject. Default: 0.8 */
     autoRejectThreshold?: number;
+    /** Allow non-domain (IPNS) subplebbits. Useful for local testing. Default: false */
+    allowNonDomainSubplebbits?: boolean;
 }
 
 export interface SpamDetectionServer {
@@ -69,7 +71,8 @@ export async function createServer(config: ServerConfig): Promise<SpamDetectionS
         oauth,
         autoAcceptThreshold,
         captchaOnlyThreshold,
-        autoRejectThreshold
+        autoRejectThreshold,
+        allowNonDomainSubplebbits
     } = config;
 
     // Build challenge tier config from provided thresholds
@@ -150,7 +153,8 @@ export async function createServer(config: ServerConfig): Promise<SpamDetectionS
         ipInfoToken,
         indexer,
         oauthProvidersResult,
-        challengeTierConfig: Object.keys(challengeTierConfig).length > 0 ? challengeTierConfig : undefined
+        challengeTierConfig: Object.keys(challengeTierConfig).length > 0 ? challengeTierConfig : undefined,
+        allowNonDomainSubplebbits
     });
 
     initPlebbitInstance();
@@ -277,7 +281,8 @@ if (isMainModule) {
         ipInfoToken: process.env.IPINFO_TOKEN,
         logging: process.env.LOG_LEVEL !== "silent",
         plebbitRpcUrl: process.env.PLEBBIT_RPC_URL,
-        oauth: Object.keys(oauth).length > 0 ? oauth : undefined
+        oauth: Object.keys(oauth).length > 0 ? oauth : undefined,
+        allowNonDomainSubplebbits: process.env.ALLOW_NON_DOMAIN_SUBPLEBBITS === "true"
     })
         .then((server) => {
             // Graceful shutdown

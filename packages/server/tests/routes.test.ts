@@ -971,6 +971,69 @@ describe("API Routes", () => {
     });
 });
 
+describe("allowNonDomainSubplebbits config", () => {
+    let server: SpamDetectionServer;
+
+    afterEach(async () => {
+        await server.stop();
+        resetPlebbitLoaderForTest();
+    });
+
+    it("should accept IPNS-addressed subplebbit when allowNonDomainSubplebbits is true", async () => {
+        const getSubplebbit = vi.fn().mockResolvedValue({ signature: { publicKey: testSigner.publicKey } });
+        setPlebbitLoaderForTest(async () => ({
+            getSubplebbit,
+            destroy: vi.fn().mockResolvedValue(undefined)
+        }));
+        server = await createServer({
+            port: 0,
+            logging: false,
+            databasePath: ":memory:",
+            baseUrl: "http://localhost:3000",
+            turnstileSiteKey: TURNSTILE_TEST_SITE_KEY,
+            allowNonDomainSubplebbits: true
+        });
+        await server.fastify.ready();
+
+        const payload = await createEvaluatePayload({
+            commentOverrides: { subplebbitAddress: "12D3KooWIPNSSubplebbit" }
+        });
+
+        const response = await injectCbor(server.fastify, "POST", "/api/v1/evaluate", payload);
+
+        expect(response.statusCode).toBe(200);
+        const body = response.json();
+        expect(body.riskScore).toBeDefined();
+        expect(body.sessionId).toBeDefined();
+    });
+
+    it("should reject IPNS-addressed subplebbit by default (allowNonDomainSubplebbits not set)", async () => {
+        const getSubplebbit = vi.fn().mockResolvedValue({ signature: { publicKey: testSigner.publicKey } });
+        setPlebbitLoaderForTest(async () => ({
+            getSubplebbit,
+            destroy: vi.fn().mockResolvedValue(undefined)
+        }));
+        server = await createServer({
+            port: 0,
+            logging: false,
+            databasePath: ":memory:",
+            baseUrl: "http://localhost:3000",
+            turnstileSiteKey: TURNSTILE_TEST_SITE_KEY
+        });
+        await server.fastify.ready();
+
+        const payload = await createEvaluatePayload({
+            commentOverrides: { subplebbitAddress: "12D3KooWIPNSSubplebbit" }
+        });
+
+        const response = await injectCbor(server.fastify, "POST", "/api/v1/evaluate", payload);
+
+        expect(response.statusCode).toBe(400);
+        const body = response.json();
+        expect(body.error).toContain("Only domain-addressed subplebbits are supported");
+    });
+});
+
 // Cloudflare Turnstile additional test keys
 const TURNSTILE_TEST_SECRET_KEY = "1x0000000000000000000000000000000AA"; // Always passes validation
 const TURNSTILE_FAIL_SECRET_KEY = "2x0000000000000000000000000000000AA"; // Always fails validation

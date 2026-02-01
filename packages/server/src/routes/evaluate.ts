@@ -29,13 +29,23 @@ export interface EvaluateRouteOptions {
     hasOAuthProviders?: boolean;
     /** Whether Turnstile is configured */
     hasTurnstile?: boolean;
+    /** Allow non-domain (IPNS) subplebbits. Default: false */
+    allowNonDomainSubplebbits?: boolean;
 }
 
 /**
  * Register the /api/v1/evaluate route.
  */
 export function registerEvaluateRoute(fastify: FastifyInstance, options: EvaluateRouteOptions): void {
-    const { db, baseUrl, indexer, challengeTierConfig, hasOAuthProviders = false, hasTurnstile = false } = options;
+    const {
+        db,
+        baseUrl,
+        indexer,
+        challengeTierConfig,
+        hasOAuthProviders = false,
+        hasTurnstile = false,
+        allowNonDomainSubplebbits = false
+    } = options;
 
     fastify.post(
         "/api/v1/evaluate",
@@ -109,9 +119,9 @@ export function registerEvaluateRoute(fastify: FastifyInstance, options: Evaluat
             // Convert Uint8Array publicKey to base64 string for comparisons and storage
             const subplebbitPublicKeyFromRequestBody = uint8ArrayToString(signature.publicKey, "base64");
 
-            // Only accept domain-addressed subplebbits
+            // Only accept domain-addressed subplebbits (unless allowNonDomainSubplebbits is enabled)
             // IPNS addresses are free to create, making them vulnerable to sybil attacks
-            if (!subplebbitAddress.includes(".")) {
+            if (!allowNonDomainSubplebbits && !subplebbitAddress.includes(".")) {
                 const error = new Error("Only domain-addressed subplebbits are supported");
                 (error as { statusCode?: number }).statusCode = 400;
                 throw error;

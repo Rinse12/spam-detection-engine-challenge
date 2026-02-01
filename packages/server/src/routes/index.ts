@@ -21,13 +21,25 @@ export interface RouteOptions {
     oauthProvidersResult?: OAuthProvidersResult;
     /** Challenge tier configuration thresholds */
     challengeTierConfig?: Partial<ChallengeTierConfig>;
+    /** Allow non-domain (IPNS) subplebbits. Default: false */
+    allowNonDomainSubplebbits?: boolean;
 }
 
 /**
  * Register all API routes on the Fastify instance.
  */
 export function registerRoutes(fastify: FastifyInstance, options: RouteOptions): void {
-    const { db, baseUrl, turnstileSiteKey, turnstileSecretKey, ipInfoToken, indexer, oauthProvidersResult, challengeTierConfig } = options;
+    const {
+        db,
+        baseUrl,
+        turnstileSiteKey,
+        turnstileSecretKey,
+        ipInfoToken,
+        indexer,
+        oauthProvidersResult,
+        challengeTierConfig,
+        allowNonDomainSubplebbits
+    } = options;
 
     // Determine available challenge providers
     const hasOAuthProviders = oauthProvidersResult && getEnabledProviders(oauthProvidersResult).length > 0;
@@ -40,7 +52,8 @@ export function registerRoutes(fastify: FastifyInstance, options: RouteOptions):
         indexer,
         challengeTierConfig,
         hasOAuthProviders,
-        hasTurnstile
+        hasTurnstile,
+        allowNonDomainSubplebbits
     });
     registerVerifyRoute(fastify, { db });
     registerIframeRoute(fastify, { db, turnstileSiteKey, ipInfoToken, oauthProvidersResult, baseUrl });
