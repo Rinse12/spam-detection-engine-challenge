@@ -429,14 +429,14 @@ The indexer tracks `subplebbit.modQueue.pendingApproval` entries and detects res
 - Checking if a full `CommentUpdate` can be fetched (accepted)
 - If neither, the submission was rejected
 
-| Rejection Rate | Risk Score | Description                   |
-| -------------- | ---------- | ----------------------------- |
-| No data        | 0.50       | Neutral (no modQueue history) |
-| 0-10%          | 0.10       | Consistently approved         |
-| 10-30%         | 0.30       | Mostly approved               |
-| 30-50%         | 0.50       | Mixed history                 |
-| 50-70%         | 0.70       | Frequently rejected           |
-| 70%+           | 0.90       | Usually rejected (high risk)  |
+| Rejection Rate | Risk Score | Description                           |
+| -------------- | ---------- | ------------------------------------- |
+| No data        | —          | Factor skipped (weight redistributed) |
+| 0-10%          | 0.10       | Consistently approved                 |
+| 10-30%         | 0.30       | Mostly approved                       |
+| 30-50%         | 0.50       | Mixed history                         |
+| 50-70%         | 0.70       | Frequently rejected                   |
+| 70%+           | 0.90       | Usually rejected (high risk)          |
 
 **Rationale**: Authors whose submissions are frequently rejected by moderators are more likely to be spamming.
 
@@ -450,14 +450,14 @@ This includes:
 - `CommentUpdate.approved = false` (disapproved)
 - `CommentUpdate` fetch failures (likely purged/banned)
 
-| Removal Rate | Risk Score | Description                  |
-| ------------ | ---------- | ---------------------------- |
-| No data      | 0.50       | Neutral (no indexed history) |
-| 0-5%         | 0.10       | Rarely removed               |
-| 5-15%        | 0.30       | Occasionally removed         |
-| 15-30%       | 0.50       | Moderate removal rate        |
-| 30-50%       | 0.70       | Frequently removed           |
-| 50%+         | 0.90       | Mostly removed (high risk)   |
+| Removal Rate | Risk Score | Description                           |
+| ------------ | ---------- | ------------------------------------- |
+| No data      | —          | Factor skipped (weight redistributed) |
+| 0-5%         | 0.10       | Rarely removed                        |
+| 5-15%        | 0.30       | Occasionally removed                  |
+| 15-30%       | 0.50       | Moderate removal rate                 |
+| 30-50%       | 0.70       | Frequently removed                    |
+| 50%+         | 0.90       | Mostly removed (high risk)            |
 
 **Rationale**: Authors whose content is frequently removed are likely posting inappropriate content.
 

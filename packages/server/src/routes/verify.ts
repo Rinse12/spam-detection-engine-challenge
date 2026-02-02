@@ -93,9 +93,17 @@ export function registerVerifyRoute(fastify: FastifyInstance, options: VerifyRou
             // These are expected business logic outcomes, not errors, so we return 200
             // to let the challenge package's verify() return {success: false} instead of throwing.
             if (session.status === "pending") {
+                let error: string;
+                if (session.challengeTier === "captcha_and_oauth") {
+                    error = session.captchaCompleted ? "OAuth not yet completed" : "CAPTCHA and OAuth not yet completed";
+                } else if (session.challengeTier === "captcha_only") {
+                    error = "CAPTCHA not yet completed";
+                } else {
+                    error = "Challenge not yet completed";
+                }
                 return {
                     success: false,
-                    error: "Challenge not yet completed"
+                    error
                 };
             }
 

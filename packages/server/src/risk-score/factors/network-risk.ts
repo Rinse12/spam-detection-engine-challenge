@@ -68,7 +68,7 @@ export function calculateNetworkBanHistory(ctx: RiskContext, weight: number): Ri
  * Authors whose submissions are frequently rejected are higher risk.
  *
  * Scoring based on rejection rate:
- * - No data: 0.5 (neutral)
+ * - No data: factor skipped (weight redistributed)
  * - 0-10% rejection: 0.1 (very low risk)
  * - 10-30% rejection: 0.3 (low risk)
  * - 30-50% rejection: 0.5 (moderate risk)
@@ -88,8 +88,12 @@ export function calculateModqueueRejectionRate(ctx: RiskContext, weight: number)
     let explanation: string;
 
     if (totalResolved === 0) {
-        score = 0.5;
-        explanation = "No modqueue data available";
+        return {
+            name: "modqueueRejectionRate",
+            score: 0,
+            weight: 0, // Skip - weight redistributed to other factors
+            explanation: "No modqueue data available"
+        };
     } else {
         const rejectionRate = stats.modqueueRejected / totalResolved;
 
@@ -124,7 +128,7 @@ export function calculateModqueueRejectionRate(ctx: RiskContext, weight: number)
  * Authors whose content is frequently removed by moderators are higher risk.
  *
  * Scoring based on removal rate:
- * - No data: 0.5 (neutral)
+ * - No data: factor skipped (weight redistributed)
  * - 0-5% removal: 0.1 (very low risk)
  * - 5-15% removal: 0.3 (low risk)
  * - 15-30% removal: 0.5 (moderate risk)
@@ -145,8 +149,12 @@ export function calculateNetworkRemovalRate(ctx: RiskContext, weight: number): R
     let explanation: string;
 
     if (totalComments === 0) {
-        score = 0.5;
-        explanation = "No indexed comments for this author";
+        return {
+            name: "networkRemovalRate",
+            score: 0,
+            weight: 0, // Skip - weight redistributed to other factors
+            explanation: "No indexed comments for this author"
+        };
     } else {
         const removalRate = removedCount / totalComments;
 
