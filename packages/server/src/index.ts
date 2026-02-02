@@ -5,6 +5,7 @@ import { registerRoutes } from "./routes/index.js";
 import { destroyPlebbitInstance, getPlebbitInstance, initPlebbitInstance, setPlebbitOptions } from "./subplebbit-resolver.js";
 import { Indexer, stopIndexer } from "./indexer/index.js";
 import { createOAuthProviders, type OAuthConfig } from "./oauth/providers.js";
+import { validateChallengeTierConfig, DEFAULT_CHALLENGE_TIER_CONFIG } from "./risk-score/challenge-tier.js";
 import type Plebbit from "@plebbit/plebbit-js";
 
 const DEFAULT_PLEBBIT_RPC_URL = "ws://localhost:9138/";
@@ -226,6 +227,31 @@ if (isMainModule) {
     // Default to data directory in project root if DATABASE_PATH not provided
     const databasePath = process.env.DATABASE_PATH ?? new URL("../../../data/spam_detection.db", import.meta.url).pathname;
 
+    // Parse optional float environment variables for challenge tier thresholds
+    const parseOptionalFloat = ({ envVar, name }: { envVar: string | undefined; name: string }): number | undefined => {
+        if (envVar === undefined || envVar === "") return undefined;
+        const value = parseFloat(envVar);
+        if (Number.isNaN(value)) {
+            throw new Error(`Invalid ${name}: '${envVar}' is not a number`);
+        }
+        return value;
+    };
+
+    const autoAcceptThreshold = parseOptionalFloat({ envVar: process.env.AUTO_ACCEPT_THRESHOLD, name: "AUTO_ACCEPT_THRESHOLD" });
+    const captchaOnlyThreshold = parseOptionalFloat({ envVar: process.env.CAPTCHA_ONLY_THRESHOLD, name: "CAPTCHA_ONLY_THRESHOLD" });
+    const autoRejectThreshold = parseOptionalFloat({ envVar: process.env.AUTO_REJECT_THRESHOLD, name: "AUTO_REJECT_THRESHOLD" });
+
+    // If any threshold was provided, validate the merged config at startup
+    if (autoAcceptThreshold !== undefined || captchaOnlyThreshold !== undefined || autoRejectThreshold !== undefined) {
+        const mergedConfig = {
+            ...DEFAULT_CHALLENGE_TIER_CONFIG,
+            ...(autoAcceptThreshold !== undefined && { autoAcceptThreshold }),
+            ...(captchaOnlyThreshold !== undefined && { captchaOnlyThreshold }),
+            ...(autoRejectThreshold !== undefined && { autoRejectThreshold })
+        };
+        validateChallengeTierConfig(mergedConfig);
+    }
+
     // Build OAuth config from environment variables
     const oauth: OAuthConfig = {};
     if (process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET) {
@@ -282,6 +308,9 @@ if (isMainModule) {
         logging: process.env.LOG_LEVEL !== "silent",
         plebbitRpcUrl: process.env.PLEBBIT_RPC_URL,
         oauth: Object.keys(oauth).length > 0 ? oauth : undefined,
+        autoAcceptThreshold,
+        captchaOnlyThreshold,
+        autoRejectThreshold,
         allowNonDomainSubplebbits: process.env.ALLOW_NON_DOMAIN_SUBPLEBBITS === "true"
     })
         .then((server) => {

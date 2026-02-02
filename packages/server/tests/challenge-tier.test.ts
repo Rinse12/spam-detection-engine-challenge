@@ -5,7 +5,7 @@ import { fromString as uint8ArrayFromString } from "uint8arrays/from-string";
 import { toString as uint8ArrayToString } from "uint8arrays/to-string";
 import { signBufferEd25519, getPublicKeyFromPrivateKey, getPlebbitAddressFromPublicKey } from "../src/plebbit-js-signer.js";
 import { resetPlebbitLoaderForTest, setPlebbitLoaderForTest } from "../src/subplebbit-resolver.js";
-import { determineChallengeTier, DEFAULT_CHALLENGE_TIER_CONFIG } from "../src/risk-score/challenge-tier.js";
+import { determineChallengeTier, validateChallengeTierConfig, DEFAULT_CHALLENGE_TIER_CONFIG } from "../src/risk-score/challenge-tier.js";
 
 // Cloudflare Turnstile test keys
 const TURNSTILE_TEST_SITE_KEY = "1x00000000000000000000AA";
@@ -218,6 +218,88 @@ describe("determineChallengeTier", () => {
         expect(determineChallengeTier(0.4)).toBe("captcha_and_oauth");
         // At exactly autoRejectThreshold, should be auto_reject
         expect(determineChallengeTier(0.8)).toBe("auto_reject");
+    });
+});
+
+describe("validateChallengeTierConfig", () => {
+    it("should pass for a valid config", () => {
+        expect(() =>
+            validateChallengeTierConfig({
+                autoAcceptThreshold: 0.2,
+                captchaOnlyThreshold: 0.4,
+                autoRejectThreshold: 0.8
+            })
+        ).not.toThrow();
+    });
+
+    it("should pass for the default config", () => {
+        expect(() => validateChallengeTierConfig(DEFAULT_CHALLENGE_TIER_CONFIG)).not.toThrow();
+    });
+
+    it("should throw when autoAcceptThreshold >= captchaOnlyThreshold", () => {
+        expect(() =>
+            validateChallengeTierConfig({
+                autoAcceptThreshold: 0.5,
+                captchaOnlyThreshold: 0.4,
+                autoRejectThreshold: 0.8
+            })
+        ).toThrow("autoAcceptThreshold must be less than captchaOnlyThreshold");
+    });
+
+    it("should throw when autoAcceptThreshold equals captchaOnlyThreshold", () => {
+        expect(() =>
+            validateChallengeTierConfig({
+                autoAcceptThreshold: 0.4,
+                captchaOnlyThreshold: 0.4,
+                autoRejectThreshold: 0.8
+            })
+        ).toThrow("autoAcceptThreshold must be less than captchaOnlyThreshold");
+    });
+
+    it("should throw when captchaOnlyThreshold >= autoRejectThreshold", () => {
+        expect(() =>
+            validateChallengeTierConfig({
+                autoAcceptThreshold: 0.2,
+                captchaOnlyThreshold: 0.9,
+                autoRejectThreshold: 0.8
+            })
+        ).toThrow("captchaOnlyThreshold must be less than autoRejectThreshold");
+    });
+
+    it("should throw when a threshold is NaN", () => {
+        expect(() =>
+            validateChallengeTierConfig({
+                autoAcceptThreshold: NaN,
+                captchaOnlyThreshold: 0.4,
+                autoRejectThreshold: 0.8
+            })
+        ).toThrow("autoAcceptThreshold must be a finite number");
+
+        expect(() =>
+            validateChallengeTierConfig({
+                autoAcceptThreshold: 0.2,
+                captchaOnlyThreshold: NaN,
+                autoRejectThreshold: 0.8
+            })
+        ).toThrow("captchaOnlyThreshold must be a finite number");
+
+        expect(() =>
+            validateChallengeTierConfig({
+                autoAcceptThreshold: 0.2,
+                captchaOnlyThreshold: 0.4,
+                autoRejectThreshold: NaN
+            })
+        ).toThrow("autoRejectThreshold must be a finite number");
+    });
+
+    it("should throw when a threshold is Infinity", () => {
+        expect(() =>
+            validateChallengeTierConfig({
+                autoAcceptThreshold: 0.2,
+                captchaOnlyThreshold: 0.4,
+                autoRejectThreshold: Infinity
+            })
+        ).toThrow("autoRejectThreshold must be a finite number");
     });
 });
 

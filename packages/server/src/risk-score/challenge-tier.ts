@@ -33,6 +33,33 @@ export const DEFAULT_CHALLENGE_TIER_CONFIG: ChallengeTierConfig = {
 };
 
 /**
+ * Validate that a challenge tier configuration has valid thresholds.
+ *
+ * Checks that each threshold is a finite number and that they are strictly ordered:
+ * autoAcceptThreshold < captchaOnlyThreshold < autoRejectThreshold
+ *
+ * @param config - The challenge tier configuration to validate
+ * @throws Error if any threshold is not a finite number or ordering is violated
+ */
+export function validateChallengeTierConfig(config: ChallengeTierConfig): void {
+    if (!Number.isFinite(config.autoAcceptThreshold)) {
+        throw new Error("autoAcceptThreshold must be a finite number");
+    }
+    if (!Number.isFinite(config.captchaOnlyThreshold)) {
+        throw new Error("captchaOnlyThreshold must be a finite number");
+    }
+    if (!Number.isFinite(config.autoRejectThreshold)) {
+        throw new Error("autoRejectThreshold must be a finite number");
+    }
+    if (config.autoAcceptThreshold >= config.captchaOnlyThreshold) {
+        throw new Error("autoAcceptThreshold must be less than captchaOnlyThreshold");
+    }
+    if (config.captchaOnlyThreshold >= config.autoRejectThreshold) {
+        throw new Error("captchaOnlyThreshold must be less than autoRejectThreshold");
+    }
+}
+
+/**
  * Determine the challenge tier based on risk score.
  *
  * @param riskScore - The calculated risk score (0.0 to 1.0)
@@ -45,13 +72,7 @@ export function determineChallengeTier(riskScore: number, config?: Partial<Chall
         ...config
     };
 
-    // Validate config
-    if (effectiveConfig.autoAcceptThreshold >= effectiveConfig.captchaOnlyThreshold) {
-        throw new Error("autoAcceptThreshold must be less than captchaOnlyThreshold");
-    }
-    if (effectiveConfig.captchaOnlyThreshold >= effectiveConfig.autoRejectThreshold) {
-        throw new Error("captchaOnlyThreshold must be less than autoRejectThreshold");
-    }
+    validateChallengeTierConfig(effectiveConfig);
 
     // Determine tier based on score
     if (riskScore < effectiveConfig.autoAcceptThreshold) {
