@@ -23,11 +23,15 @@ easy-community-spam-blocker/
 │   │   ├── src/
 │   │   │   ├── index.ts            # Entry point
 │   │   │   ├── routes/             # API endpoints
-│   │   │   ├── services/           # Risk scoring, rate limiting
+│   │   │   ├── risk-score/         # Risk scoring factors and calculation
 │   │   │   ├── challenges/         # CAPTCHA providers (Turnstile, etc.)
+│   │   │   ├── challenge-iframes/  # Generated HTML iframes for challenges
+│   │   │   ├── oauth/              # OAuth provider configuration (arctic)
+│   │   │   ├── ip-intel/           # IP intelligence (ipapi.is)
+│   │   │   ├── security/           # Signature verification
 │   │   │   ├── db/                 # better-sqlite3 (no ORM)
-│   │   │   └── crypto/             # JWT signing
-│   │   └── challenge-iframe/       # Static iframe HTML pages
+│   │   │   └── indexer/            # Background network indexer
+│   │   └── scripts/                # Scenario generation, etc.
 │   ├── challenge/                  # npm package for subplebbits
 │   │   └── src/
 │   │       └── index.ts            # ChallengeFileFactory
@@ -122,26 +126,36 @@ Called by the subplebbit's challenge code to verify that the user completed the 
 
 ### GET /api/v1/iframe/:sessionId
 
-Serves the iframe challenge page. The server supports multiple challenge providers:
+Serves the iframe challenge page. The iframe content is determined by the session's risk score and the server's score adjustment configuration.
 
-- **CAPTCHA providers**: Cloudflare Turnstile (default), hCaptcha, reCAPTCHA, Yandex SmartCaptcha
-- **OAuth providers**: GitHub, Google, Apple, Facebook (Sign-in challenges)
+- **CAPTCHA provider**: Cloudflare Turnstile
+- **OAuth providers** (optional): GitHub, Google, Twitter, Yandex, TikTok, Discord, Reddit
 
 > **Privacy note**: For OAuth providers, the server only verifies successful authentication - it does NOT share account identifiers (username, email) with the subplebbit. For IP-based intelligence, only the country code is shared, never the raw IP address.
 
+**Iframe selection logic:**
+
+The server decides which iframe to serve based on whether CAPTCHA alone will suffice:
+
+- If `riskScore × captchaScoreMultiplier < challengePassThreshold` → serve **CAPTCHA-only** iframe
+- If CAPTCHA won't suffice and OAuth is configured → serve **combined iframe** (CAPTCHA first, OAuth section revealed after CAPTCHA)
+- If no CAPTCHA configured but OAuth is → serve **OAuth-only** iframe
+
 When the user completes the challenge:
 
-1. The iframe page receives success from the challenge provider
-2. The iframe calls `POST /api/v1/challenge/complete` with the provider's response token
-3. The server validates the response with the provider and marks the session as `completed` in the database
-4. The iframe displays "Verification complete! You may close this window."
-5. The user clicks "done" in their plebbit client (the client provides this button outside the iframe)
-6. The client sends a `ChallengeAnswer` with an empty string to the subplebbit
-7. The subplebbit's challenge code calls `/api/v1/challenge/verify` to check if the session is completed
+1. The iframe shows CAPTCHA first; user solves it
+2. The iframe calls `POST /api/v1/challenge/complete` with the Turnstile response token
+3. The server validates with Turnstile, applies score adjustment, and responds with `{ passed: true/false }`
+4. If `passed: true` → iframe shows "Verification complete!"
+5. If `passed: false` → iframe reveals OAuth buttons ("Sign in with a social account to continue")
+6. User completes OAuth → server marks session as `completed`
+7. The user clicks "done" in their plebbit client (the client provides this button outside the iframe)
+8. The client sends a `ChallengeAnswer` with an empty string to the subplebbit
+9. The subplebbit's challenge code calls `/api/v1/challenge/verify` to check if the session is completed
 
 ### POST /api/v1/challenge/complete
 
-Called by the iframe after the user completes a challenge. Validates the challenge response with the provider and marks the session as completed.
+Called by the iframe after the user solves the CAPTCHA. Validates the Turnstile response, then applies score adjustment to decide whether the session passes or needs OAuth.
 
 **Request:**
 
@@ -149,7 +163,7 @@ Called by the iframe after the user completes a challenge. Validates the challen
 {
   sessionId: string;
   challengeResponse: string; // Token from the challenge provider
-  challengeType?: string;    // e.g., "turnstile", "hcaptcha", "github", etc.
+  challengeType?: string;    // e.g., "turnstile" (default)
 }
 ```
 
@@ -158,18 +172,62 @@ Called by the iframe after the user completes a challenge. Validates the challen
 ```typescript
 {
   success: boolean;
-  error?: string;  // Error message on failure
+  error?: string;           // Error message on failure
+  passed?: boolean;         // Whether the challenge is fully passed (session completed)
+  oauthSuggested?: boolean; // Whether OAuth is suggested to lower the score further
 }
 ```
+
+**Score adjustment logic:** After validating the CAPTCHA, the server computes `adjustedScore = riskScore × captchaScoreMultiplier`. If `adjustedScore < challengePassThreshold`, the session is marked `completed` and `passed: true` is returned. Otherwise, the CAPTCHA is marked complete but the session stays `pending`, and `passed: false, oauthSuggested: true` is returned.
+
+### OAuth Routes
+
+**GET /api/v1/oauth/:provider/start?sessionId=...** — Initiates the OAuth flow. Generates state, stores it in the database, and redirects the user to the OAuth provider's authorization page.
+
+**GET /api/v1/oauth/:provider/callback** — OAuth callback handler. Exchanges the authorization code for a token, retrieves the user identity, and marks the session as `completed` with the OAuth identity. OAuth is also allowed on already-completed sessions (adds trust for future evaluations without changing session status).
+
+**GET /api/v1/oauth/status/:sessionId** — Polling endpoint used by the iframe to check if OAuth was completed.
 
 ## Challenge Flow (Detailed)
 
 The challenge flow uses **server-side state tracking** - no tokens are passed from the iframe to the user's client. This matches the standard plebbit iframe challenge pattern (used by mintpass and others).
 
+CAPTCHA is always the primary challenge. After the user solves it, the server adjusts the risk score. If the adjusted score is below the pass threshold, the session completes immediately. If not, OAuth sign-in is presented as a way to further lower the score.
+
+```
+/evaluate → riskScore
+  │
+  ├─ < autoAcceptThreshold → auto_accept (pass immediately, no challenge)
+  ├─ ≥ autoRejectThreshold → auto_reject (fail immediately)
+  └─ between → create session (store riskScore), return challengeUrl
+        │
+        ▼
+  Iframe serves CAPTCHA (+ hidden OAuth section if score is high)
+        │
+        ▼
+  User solves CAPTCHA → POST /complete
+        │
+        ├─ adjustedScore = riskScore × captchaScoreMultiplier
+        │
+        ├─ adjustedScore < challengePassThreshold?
+        │     YES → mark "completed", return { passed: true }
+        │            Iframe shows "Verification complete!"
+        │            + optional OAuth for future trust
+        │
+        └─    NO  → mark captchaCompleted, return { passed: false, oauthSuggested: true }
+                     Iframe reveals OAuth buttons
+                     │
+                     ▼
+               User completes OAuth → callback marks session "completed"
+                     │
+                     ▼
+               /verify → success
+```
+
 ```
 ┌─────────────────┐       ┌──────────────────┐       ┌────────────────┐
-│   Plebbit       │       │ EasySpamBlocker  │       │   Turnstile    │
-│   Client        │       │     Server       │       │                │
+│   Plebbit       │       │ EasySpamBlocker  │       │   Turnstile /  │
+│   Client        │       │     Server       │       │   OAuth        │
 └────────┬────────┘       └────────┬─────────┘       └───────┬────────┘
          │                         │                          │
          │  1. ChallengeRequest    │                          │
@@ -191,47 +249,54 @@ The challenge flow uses **server-side state tracking** - no tokens are passed fr
          │  5. Client loads iframe │                          │
          │─────────────────────────────────────────────────────>
          │                         │                          │
-         │  6. User solves CAPTCHA │                          │
-         │                         │  (validates with         │
+         │  6. User solves CAPTCHA │  (validates with         │
          │                         │   Turnstile API)         │
          │                         │                          │
          │  7. Iframe calls        │                          │
          │     /complete           │                          │
          │     ───────────────────>│                          │
          │                         │                          │
-         │  8. Server marks        │                          │
-         │     session completed   │                          │
+         │  8. Server applies      │                          │
+         │     score adjustment    │                          │
          │                         │                          │
-         │  9. Iframe shows        │                          │
+         │  9a. If passed: true    │                          │
+         │      → session done     │                          │
+         │  9b. If passed: false   │                          │
+         │      → show OAuth       │                          │
+         │      ───────────────────────────────────────────────>
+         │                         │                          │
+         │  10. (If OAuth needed)  │                          │
+         │      User signs in via  │                          │
+         │      OAuth provider     │                          │
+         │      callback marks     │                          │
+         │      session completed  │                          │
+         │                         │                          │
+         │  11. Iframe shows       │                          │
          │     "click done"        │                          │
          │<─────────────────────────                          │
          │                         │                          │
-         │  10. User clicks "done" │                          │
+         │  12. User clicks "done" │                          │
          │      button in client   │                          │
          │      (outside iframe)   │                          │
          │                         │                          │
-         │  11. Client sends       │                          │
+         │  13. Client sends       │                          │
          │      ChallengeAnswer    │                          │
          │      with empty string  │                          │
          │─────────────────────────>                          │
          │                         │                          │
-         │  12. Sub's verify("")   │                          │
+         │  14. Sub's verify("")   │                          │
          │      calls /verify      │                          │
          │      with sessionId     │                          │
          │                         │                          │
-         │  13. Server checks      │                          │
-         │      session.status     │                          │
-         │      === "completed"    │                          │
-         │                         │                          │
-         │  14. success: true +    │                          │
+         │  15. success: true +    │                          │
          │      IP intelligence    │                          │
          │<─────────────────────────                          │
          │                         │                          │
-         │  15. Sub applies        │                          │
+         │  16. Sub applies        │                          │
          │      post-challenge     │                          │
          │      filters            │                          │
          │                         │                          │
-         │  16. Publication        │                          │
+         │  17. Publication        │                          │
          │      accepted/rejected  │                          │
          └─────────────────────────┘                          │
 ```
@@ -260,11 +325,25 @@ For detailed documentation on the indexer architecture and implementation, see:
 
 **[Indexer Documentation](packages/server/src/indexer/README.md)**
 
-**Thresholds (configurable per sub):**
+**Tier Thresholds (configurable per sub via challenge options):**
 
-- `riskScore < autoAcceptThreshold` → Auto-accept
-- `autoAcceptThreshold <= riskScore < autoRejectThreshold` → Challenge
+- `riskScore < autoAcceptThreshold` → Auto-accept (no challenge)
+- `autoAcceptThreshold <= riskScore < autoRejectThreshold` → Challenge required
 - `riskScore >= autoRejectThreshold` → Auto-reject
+
+**Score Adjustment (configurable on server):**
+
+After the user solves the CAPTCHA, the server adjusts the risk score to determine whether CAPTCHA alone is sufficient or OAuth is also needed:
+
+| Stage                 | Formula                                               | Default           | Pass if                  |
+| --------------------- | ----------------------------------------------------- | ----------------- | ------------------------ |
+| After CAPTCHA         | score × captchaScoreMultiplier                        | score × 0.7       | < challengePassThreshold |
+| After CAPTCHA + OAuth | score × captchaScoreMultiplier × oauthScoreMultiplier | score × 0.7 × 0.5 | < challengePassThreshold |
+
+With default values (multiplier 0.7, threshold 0.4):
+
+- CAPTCHA alone sufficient when raw score < ~0.57
+- CAPTCHA + OAuth sufficient when raw score < ~1.14 (all non-auto-rejected pass)
 
 ## Challenge Verification
 
@@ -272,13 +351,15 @@ Challenge completion is tracked **server-side** in the database - no tokens are 
 
 When a user completes the iframe challenge:
 
-1. The iframe calls `POST /api/v1/challenge/complete` with the CAPTCHA provider's response
-2. The server validates the response with the provider (e.g., Turnstile API)
-3. If valid, the server updates the session status to `completed` in the database
-4. The user clicks "done" in their plebbit client
-5. The client sends a `ChallengeAnswer` with an empty string to the subplebbit
-6. The sub's challenge code calls `/api/v1/challenge/verify` with the `sessionId`
-7. The server checks `session.status === "completed"` and returns success + IP intelligence
+1. The iframe shows a CAPTCHA; user solves it
+2. The iframe calls `POST /api/v1/challenge/complete` with the Turnstile response token
+3. The server validates with Turnstile, then applies score adjustment (`riskScore × captchaScoreMultiplier`)
+4. If the adjusted score is below `challengePassThreshold` → session marked `completed`
+5. If not → CAPTCHA marked complete, iframe reveals OAuth buttons; user signs in via OAuth → session marked `completed`
+6. The user clicks "done" in their plebbit client
+7. The client sends a `ChallengeAnswer` with an empty string to the subplebbit
+8. The sub's challenge code calls `/api/v1/challenge/verify` with the `sessionId`
+9. The server checks `session.status === "completed"` and returns success + IP intelligence
 
 **Session expiry:** 1 hour from creation
 
@@ -286,7 +367,7 @@ When a user completes the iframe challenge:
 
 **Tables:**
 
-Author columns store the full `author` object from each publication (for example, `DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor.comment.author`). `riskScore` is computed on the fly and is not stored in the database.
+Author columns store the full `author` object from each publication (for example, `DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor.comment.author`).
 
 ### `comments`
 
@@ -360,7 +441,7 @@ Stores comment moderation publications.
 
 ### `challengeSessions`
 
-Tracks challenge sessions. Sessions are kept permanently for historical analysis.
+Tracks challenge sessions. Sessions are kept permanently for historical analysis. Internal timestamps (completedAt, expiresAt, receivedChallengeRequestAt, authorAccessedIframeAt) are in milliseconds.
 
 - `sessionId` TEXT PRIMARY KEY -- UUID v4
 - `subplebbitPublicKey` TEXT
@@ -369,6 +450,10 @@ Tracks challenge sessions. Sessions are kept permanently for historical analysis
 - `expiresAt` INTEGER NOT NULL
 - `receivedChallengeRequestAt` INTEGER NOT NULL
 - `authorAccessedIframeAt` INTEGER -- when did the author access the iframe?
+- `oauthIdentity` TEXT -- format: "provider:userId" (e.g., "github:12345678")
+- `challengeTier` TEXT -- 'captcha_only' or 'captcha_and_oauth' (determined by score thresholds)
+- `captchaCompleted` INTEGER DEFAULT 0 -- 1 if CAPTCHA portion completed
+- `riskScore` REAL -- the risk score at evaluation time (used for score adjustment after CAPTCHA/OAuth)
 
 ### `ipRecords`
 
@@ -382,6 +467,17 @@ Stores raw IP addresses associated with authors (captured via iframe). One recor
 - `isDatacenter` INTEGER (BOOLEAN 0/1)
 - `countryCode` TEXT -- ISO 3166-1 alpha-2 country code
 - `timestamp` INTEGER NOT NULL -- when did we query the ip provider
+
+### `oauthStates`
+
+Ephemeral table for CSRF protection during OAuth flow. Internal timestamps (createdAt, expiresAt) are in milliseconds.
+
+- `state` TEXT PRIMARY KEY
+- `sessionId` TEXT NOT NULL (foreign key to challengeSessions)
+- `provider` TEXT NOT NULL -- 'github', 'google', 'twitter', etc.
+- `codeVerifier` TEXT -- PKCE code verifier (required for google, twitter)
+- `createdAt` INTEGER NOT NULL
+- `expiresAt` INTEGER NOT NULL
 
 ## Challenge Code (npm package)
 
@@ -437,17 +533,57 @@ field from its internal database of author history, so new authors won't have it
 
 These settings are configured on the HTTP server, not in the challenge package:
 
-- `databasePath`: Path to the SQLite database file (required). Use `:memory:` for in-memory. Env: `DATABASE_PATH` (required for CLI entrypoint)
-- `keyPath`: Path to store the server's Ed25519 JWT signing keypair. Auto-generates if not exists. Env: `JWT_KEY_PATH`
-- `turnstileSiteKey`: Cloudflare Turnstile site key. Env: `TURNSTILE_SITE_KEY`
-- `turnstileSecretKey`: Cloudflare Turnstile secret key. Env: `TURNSTILE_SECRET_KEY`
-- `ipapiKey`: ipapi.is API key for IP intelligence lookups (optional — works without key). Env: `IPAPI_KEY`
+**Required:**
+
+- `DATABASE_PATH`: Path to the SQLite database file. Use `:memory:` for in-memory.
+
+**Challenge providers:**
+
+- `TURNSTILE_SITE_KEY`: Cloudflare Turnstile site key
+- `TURNSTILE_SECRET_KEY`: Cloudflare Turnstile secret key
+- `BASE_URL`: Base URL for OAuth callbacks (e.g., `https://easycommunityspamblocker.com`)
+
+**IP Intelligence:**
+
+- `IPAPI_KEY`: ipapi.is API key for IP intelligence lookups (optional — works without key)
+
+**Challenge tier thresholds:**
+
+- `AUTO_ACCEPT_THRESHOLD`: Auto-accept below this score (default: 0.2)
+- `CAPTCHA_ONLY_THRESHOLD`: Scores between autoAccept and this get captcha_only tier (default: 0.4)
+- `AUTO_REJECT_THRESHOLD`: Auto-reject at or above this score (default: 0.8)
+
+**Score adjustment (CAPTCHA-first model):**
+
+- `CAPTCHA_SCORE_MULTIPLIER`: Multiplier applied after CAPTCHA, in (0, 1] (default: 0.7)
+- `OAUTH_SCORE_MULTIPLIER`: Additional multiplier after OAuth, in (0, 1] (default: 0.5)
+- `CHALLENGE_PASS_THRESHOLD`: Adjusted score must be below this, in (0, 1) (default: 0.4)
+
+**OAuth providers** (each requires both CLIENT_ID and CLIENT_SECRET):
+
+- `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET`
+- `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`
+- `TWITTER_CLIENT_ID` / `TWITTER_CLIENT_SECRET`
+- `YANDEX_CLIENT_ID` / `YANDEX_CLIENT_SECRET`
+- `TIKTOK_CLIENT_ID` / `TIKTOK_CLIENT_SECRET`
+- `DISCORD_CLIENT_ID` / `DISCORD_CLIENT_SECRET`
+- `REDDIT_CLIENT_ID` / `REDDIT_CLIENT_SECRET`
+
+**Other:**
+
+- `PORT`: Server port (default: 3000)
+- `HOST`: Server host (default: 0.0.0.0)
+- `LOG_LEVEL`: Set to `silent` to disable logging
+- `PLEBBIT_RPC_URL`: Plebbit RPC URL for subplebbit resolution
+- `ALLOW_NON_DOMAIN_SUBPLEBBITS`: Set to `true` to allow non-domain subplebbit addresses
 
 ## Key Design Decisions
 
 - **Database:** SQLite with better-sqlite3, no ORM
 - **Content Analysis:** Server-side setting, enabled by default
 - **Primary Challenge Provider:** Cloudflare Turnstile (free, privacy-friendly)
+- **Challenge Model:** CAPTCHA-first with score-based OAuth gating (CAPTCHA always required; OAuth only if score remains too high after adjustment)
+- **OAuth Library:** Arctic (lightweight, supports many providers)
 - **Error Handling:** Always throw on server errors (no silent failures)
 - **IP Storage:** Raw IPs stored (not hashed) for accurate analysis
 - **IP Intelligence:** ipapi.is (external HTTP API, best-effort, works without API key)
@@ -457,7 +593,8 @@ These settings are configured on the HTTP server, not in the challenge package:
 
 - Raw IPs are stored for spam detection purposes
 - Content analysis is performed on the server
-- IP intelligence lookups are sent to IPinfo when enabled
+- IP intelligence lookups are sent to ipapi.is when enabled
+- OAuth identity (provider:userId) is stored server-side but never shared with subplebbits
 - All data is visible to the server operator
 - Open source for auditability
 - Explanation field shows reasoning for scores
@@ -477,15 +614,18 @@ These settings are configured on the HTTP server, not in the challenge package:
     - Fastify setup with routes
     - better-sqlite3 database
     - Import plebbit-js schemas for validation
-    - Risk scoring service
-    - JWT token signing (Ed25519)
+    - Risk scoring with weighted factors
+    - Ed25519 request signature verification
     - Turnstile integration
-    - Iframe HTML pages
+    - OAuth providers (arctic)
+    - Challenge iframe generation (CAPTCHA-first with score-based OAuth gating)
+    - IP intelligence (ipapi.is)
+    - Background network indexer
 4. **Build challenge package**:
     - ChallengeFileFactory implementation
     - HTTP client for server communication
 5. **Testing**: Unit tests, integration tests with plebbit-js
-6. **Documentation**: README, API docs
+6. **Documentation**: README, API docs, risk score scenarios
 
 ## Verification Plan
 

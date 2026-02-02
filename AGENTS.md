@@ -1,5 +1,5 @@
 - All packages require Node.js v22+
-- If you update the code and it differs than our spec at README.md, ask me if we need to update the spec to follow the implementation
+- If you update the code and it differs from our spec at README.md, update README.md to match the implementation when you do a git commit
 
 - Make sure to run npm run build after you're done coding and make sure it passes. Run it for all packages
 
