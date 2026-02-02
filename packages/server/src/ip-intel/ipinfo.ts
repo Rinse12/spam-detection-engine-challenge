@@ -40,13 +40,13 @@ export async function fetchIpInfo(params: { ipAddress: string; token: string; ti
             return null;
         }
 
-        const privacy = data.privacy ?? {};
+        const privacy = data.privacy;
         return {
             countryCode: typeof data.country === "string" ? data.country.toUpperCase() : undefined,
-            isVpn: privacy.vpn === true,
-            isProxy: privacy.proxy === true,
-            isTor: privacy.tor === true,
-            isDatacenter: privacy.hosting === true
+            isVpn: privacy !== undefined ? privacy.vpn === true : undefined,
+            isProxy: privacy !== undefined ? privacy.proxy === true : undefined,
+            isTor: privacy !== undefined ? privacy.tor === true : undefined,
+            isDatacenter: privacy !== undefined ? privacy.hosting === true : undefined
         };
     } catch {
         return null;

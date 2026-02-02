@@ -64,6 +64,46 @@ describe("IP intelligence", () => {
         expect(url).toContain("token=test-token");
     });
 
+    it("stores null flags when ipinfo response lacks privacy field", async () => {
+        db.insertChallengeSession({
+            sessionId: "challenge-no-privacy",
+            subplebbitPublicKey,
+            expiresAt: Math.floor(Date.now() / 1000) + 3600
+        });
+
+        const now = Math.floor(Date.now() / 1000);
+        db.insertIpRecord({
+            sessionId: "challenge-no-privacy",
+            ipAddress: "3.3.3.3",
+            timestamp: now
+        });
+
+        const fetchMock = vi.fn().mockResolvedValue(
+            new Response(
+                JSON.stringify({
+                    country: "US"
+                    // no privacy field — token lacks Privacy Detection add-on
+                }),
+                { status: 200, headers: { "content-type": "application/json" } }
+            )
+        );
+        globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+        await refreshIpIntelIfNeeded({
+            db,
+            sessionId: "challenge-no-privacy",
+            token: "test-token"
+        });
+
+        const record = db.getIpRecordBySessionId("challenge-no-privacy");
+        expect(record?.countryCode).toBe("US");
+        // All privacy flags should be null (unknown), not 0 (false)
+        expect(record?.isVpn).toBeNull();
+        expect(record?.isProxy).toBeNull();
+        expect(record?.isTor).toBeNull();
+        expect(record?.isDatacenter).toBeNull();
+    });
+
     it("skips lookup when intel data already exists", async () => {
         // First create a challenge session
         db.insertChallengeSession({
