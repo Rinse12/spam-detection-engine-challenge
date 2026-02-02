@@ -1,4 +1,4 @@
-import * as countries from "i18n-iso-countries";
+import countries from "i18n-iso-countries";
 import { z } from "zod";
 
 const ISO_COUNTRY_CODE_REGEX = /^[A-Z]{2}$/;

@@ -122,7 +122,8 @@ const postCbor = async (url: string, body: unknown): Promise<unknown> => {
         method: "POST",
         headers: {
             "content-type": "application/cbor",
-            accept: "application/json"
+            accept: "application/json",
+            "ngrok-skip-browser-warning": "true"
         },
         body: Buffer.from(encoded)
     });
