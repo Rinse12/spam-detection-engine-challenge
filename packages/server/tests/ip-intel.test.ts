@@ -18,7 +18,7 @@ describe("IP intelligence", () => {
         vi.restoreAllMocks();
     });
 
-    it("stores ipinfo results and updates timestamp", async () => {
+    it("stores ipapi.is results and updates timestamp", async () => {
         // First create a challenge session
         db.insertChallengeSession({
             sessionId: "challenge",
@@ -37,8 +37,11 @@ describe("IP intelligence", () => {
         const fetchMock = vi.fn().mockResolvedValue(
             new Response(
                 JSON.stringify({
-                    country: "DE",
-                    privacy: { vpn: true, proxy: false, tor: true, hosting: false }
+                    location: { country_code: "DE" },
+                    is_vpn: true,
+                    is_proxy: false,
+                    is_tor: true,
+                    is_datacenter: false
                 }),
                 { status: 200, headers: { "content-type": "application/json" } }
             )
@@ -48,7 +51,7 @@ describe("IP intelligence", () => {
         await refreshIpIntelIfNeeded({
             db,
             sessionId: "challenge",
-            token: "test-token"
+            apiKey: "test-key"
         });
 
         const record = db.getIpRecordBySessionId("challenge");
@@ -60,11 +63,57 @@ describe("IP intelligence", () => {
 
         expect(fetchMock).toHaveBeenCalledTimes(1);
         const url = String(fetchMock.mock.calls[0]?.[0]);
-        expect(url).toContain("https://ipinfo.io/1.1.1.1/json");
-        expect(url).toContain("token=test-token");
+        expect(url).toContain("https://api.ipapi.is");
+        expect(url).toContain("q=1.1.1.1");
+        expect(url).toContain("key=test-key");
     });
 
-    it("stores null flags when ipinfo response lacks privacy field", async () => {
+    it("works without an API key", async () => {
+        db.insertChallengeSession({
+            sessionId: "challenge-no-key",
+            subplebbitPublicKey,
+            expiresAt: Math.floor(Date.now() / 1000) + 3600
+        });
+
+        const now = Math.floor(Date.now() / 1000);
+        db.insertIpRecord({
+            sessionId: "challenge-no-key",
+            ipAddress: "8.8.8.8",
+            timestamp: now
+        });
+
+        const fetchMock = vi.fn().mockResolvedValue(
+            new Response(
+                JSON.stringify({
+                    location: { country_code: "US" },
+                    is_vpn: false,
+                    is_proxy: false,
+                    is_tor: false,
+                    is_datacenter: true
+                }),
+                { status: 200, headers: { "content-type": "application/json" } }
+            )
+        );
+        globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+        await refreshIpIntelIfNeeded({
+            db,
+            sessionId: "challenge-no-key"
+        });
+
+        const record = db.getIpRecordBySessionId("challenge-no-key");
+        expect(record?.countryCode).toBe("US");
+        expect(record?.isVpn).toBe(0);
+        expect(record?.isDatacenter).toBe(1);
+
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        const url = String(fetchMock.mock.calls[0]?.[0]);
+        expect(url).toContain("https://api.ipapi.is");
+        expect(url).toContain("q=8.8.8.8");
+        expect(url).not.toContain("key=");
+    });
+
+    it("stores null flags when ipapi.is response lacks detection fields", async () => {
         db.insertChallengeSession({
             sessionId: "challenge-no-privacy",
             subplebbitPublicKey,
@@ -81,8 +130,8 @@ describe("IP intelligence", () => {
         const fetchMock = vi.fn().mockResolvedValue(
             new Response(
                 JSON.stringify({
-                    country: "US"
-                    // no privacy field — token lacks Privacy Detection add-on
+                    location: { country_code: "US" }
+                    // no is_vpn, is_tor, etc.
                 }),
                 { status: 200, headers: { "content-type": "application/json" } }
             )
@@ -91,8 +140,7 @@ describe("IP intelligence", () => {
 
         await refreshIpIntelIfNeeded({
             db,
-            sessionId: "challenge-no-privacy",
-            token: "test-token"
+            sessionId: "challenge-no-privacy"
         });
 
         const record = db.getIpRecordBySessionId("challenge-no-privacy");
@@ -127,7 +175,7 @@ describe("IP intelligence", () => {
         await refreshIpIntelIfNeeded({
             db,
             sessionId: "challenge2",
-            token: "test-token"
+            apiKey: "test-key"
         });
 
         // Should not call fetch because intel data already exists

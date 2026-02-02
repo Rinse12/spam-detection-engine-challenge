@@ -23,8 +23,8 @@ export interface ServerConfig {
     turnstileSiteKey?: string;
     /** Cloudflare Turnstile secret key */
     turnstileSecretKey?: string;
-    /** IPinfo token for IP intelligence lookups */
-    ipInfoToken?: string;
+    /** ipapi.is API key for IP intelligence lookups (optional — works without key) */
+    ipapiKey?: string;
     /** Enable request logging. Default: true */
     logging?: boolean;
     /** Enable indexer. Default: true */
@@ -64,7 +64,7 @@ export async function createServer(config: ServerConfig): Promise<SpamDetectionS
         databasePath,
         turnstileSiteKey,
         turnstileSecretKey,
-        ipInfoToken,
+        ipapiKey,
         logging = true,
         enableIndexer = true,
         plebbitOptions: userPlebbitOptions,
@@ -151,7 +151,7 @@ export async function createServer(config: ServerConfig): Promise<SpamDetectionS
         baseUrl,
         turnstileSiteKey,
         turnstileSecretKey,
-        ipInfoToken,
+        ipapiKey,
         indexer,
         oauthProvidersResult,
         challengeTierConfig: Object.keys(challengeTierConfig).length > 0 ? challengeTierConfig : undefined,
@@ -304,7 +304,7 @@ if (isMainModule) {
         databasePath,
         turnstileSiteKey: process.env.TURNSTILE_SITE_KEY,
         turnstileSecretKey: process.env.TURNSTILE_SECRET_KEY,
-        ipInfoToken: process.env.IPINFO_TOKEN,
+        ipapiKey: process.env.IPAPI_KEY,
         logging: process.env.LOG_LEVEL !== "silent",
         plebbitRpcUrl: process.env.PLEBBIT_RPC_URL,
         oauth: Object.keys(oauth).length > 0 ? oauth : undefined,

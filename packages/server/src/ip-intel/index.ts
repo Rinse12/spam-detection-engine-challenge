@@ -1,19 +1,15 @@
 import type { SpamDetectionDatabase } from "../db/index.js";
-import { fetchIpInfo, type IpInfoResult } from "./ipinfo.js";
+import { fetchIpApi, type IpApiResult } from "./ipapi.js";
 
 const DEFAULT_TIMEOUT_MS = 3000;
 
 export async function refreshIpIntelIfNeeded(params: {
     db: SpamDetectionDatabase;
     sessionId: string;
-    token?: string;
+    apiKey?: string;
     timeoutMs?: number;
-}): Promise<IpInfoResult | null> {
-    const { db, sessionId, token, timeoutMs = DEFAULT_TIMEOUT_MS } = params;
-
-    if (!token) {
-        return null;
-    }
+}): Promise<IpApiResult | null> {
+    const { db, sessionId, apiKey, timeoutMs = DEFAULT_TIMEOUT_MS } = params;
 
     const record = db.getIpRecordBySessionId(sessionId);
     if (!record) {
@@ -25,7 +21,7 @@ export async function refreshIpIntelIfNeeded(params: {
         return null;
     }
 
-    const intel = await fetchIpInfo({ ipAddress: record.ipAddress, token, timeoutMs });
+    const intel = await fetchIpApi({ ipAddress: record.ipAddress, apiKey, timeoutMs });
     if (!intel) {
         return null;
     }

@@ -15,7 +15,7 @@ export interface RouteOptions {
     baseUrl: string;
     turnstileSiteKey?: string;
     turnstileSecretKey?: string;
-    ipInfoToken?: string;
+    ipapiKey?: string;
     indexer?: Indexer | null;
     /** OAuth providers result (if configured) */
     oauthProvidersResult?: OAuthProvidersResult;
@@ -34,7 +34,7 @@ export function registerRoutes(fastify: FastifyInstance, options: RouteOptions):
         baseUrl,
         turnstileSiteKey,
         turnstileSecretKey,
-        ipInfoToken,
+        ipapiKey,
         indexer,
         oauthProvidersResult,
         challengeTierConfig,
@@ -56,7 +56,7 @@ export function registerRoutes(fastify: FastifyInstance, options: RouteOptions):
         allowNonDomainSubplebbits
     });
     registerVerifyRoute(fastify, { db });
-    registerIframeRoute(fastify, { db, turnstileSiteKey, ipInfoToken, oauthProvidersResult, baseUrl });
+    registerIframeRoute(fastify, { db, turnstileSiteKey, ipapiKey, oauthProvidersResult, baseUrl });
     registerCompleteRoute(fastify, { db, turnstileSecretKey });
 
     // Register OAuth routes if any providers are configured

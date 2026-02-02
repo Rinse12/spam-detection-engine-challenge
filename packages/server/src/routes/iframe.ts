@@ -9,7 +9,7 @@ import { generateChallengeIframe, type ChallengeType, type OAuthProvider } from 
 export interface IframeRouteOptions {
     db: SpamDetectionDatabase;
     turnstileSiteKey?: string;
-    ipInfoToken?: string;
+    ipapiKey?: string;
     /** OAuth providers result (if configured) */
     oauthProvidersResult?: OAuthProvidersResult;
     /** Base URL for OAuth callbacks */
@@ -20,7 +20,7 @@ export interface IframeRouteOptions {
  * Register the /api/v1/iframe/:sessionId route.
  */
 export function registerIframeRoute(fastify: FastifyInstance, options: IframeRouteOptions): void {
-    const { db, turnstileSiteKey, ipInfoToken, oauthProvidersResult, baseUrl } = options;
+    const { db, turnstileSiteKey, ipapiKey, oauthProvidersResult, baseUrl } = options;
 
     // Determine which challenge types are available based on configuration
     const enabledOAuthProviders = oauthProvidersResult ? getEnabledProviders(oauthProvidersResult) : [];
@@ -92,15 +92,13 @@ export function registerIframeRoute(fastify: FastifyInstance, options: IframeRou
                     timestamp: nowMs
                 });
 
-                if (ipInfoToken) {
-                    void refreshIpIntelIfNeeded({
-                        db,
-                        sessionId,
-                        token: ipInfoToken
-                    }).catch((error) => {
-                        request.log.warn({ err: error }, "Failed to refresh IP intelligence");
-                    });
-                }
+                void refreshIpIntelIfNeeded({
+                    db,
+                    sessionId,
+                    apiKey: ipapiKey
+                }).catch((error) => {
+                    request.log.warn({ err: error }, "Failed to refresh IP intelligence");
+                });
             }
 
             // Determine which iframe to serve based on session's challenge tier

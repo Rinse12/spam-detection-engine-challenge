@@ -441,7 +441,7 @@ These settings are configured on the HTTP server, not in the challenge package:
 - `keyPath`: Path to store the server's Ed25519 JWT signing keypair. Auto-generates if not exists. Env: `JWT_KEY_PATH`
 - `turnstileSiteKey`: Cloudflare Turnstile site key. Env: `TURNSTILE_SITE_KEY`
 - `turnstileSecretKey`: Cloudflare Turnstile secret key. Env: `TURNSTILE_SECRET_KEY`
-- `ipInfoToken`: IPinfo token for IP intelligence lookups. Env: `IPINFO_TOKEN`
+- `ipapiKey`: ipapi.is API key for IP intelligence lookups (optional — works without key). Env: `IPAPI_KEY`
 
 ## Key Design Decisions
 
@@ -450,7 +450,7 @@ These settings are configured on the HTTP server, not in the challenge package:
 - **Primary Challenge Provider:** Cloudflare Turnstile (free, privacy-friendly)
 - **Error Handling:** Always throw on server errors (no silent failures)
 - **IP Storage:** Raw IPs stored (not hashed) for accurate analysis
-- **IP Intelligence:** IPinfo (external HTTP API, best-effort)
+- **IP Intelligence:** ipapi.is (external HTTP API, best-effort, works without API key)
 - **Ephemeral Sessions:** Challenge sessions auto-purge after 1 hour
 
 ## Privacy Considerations
