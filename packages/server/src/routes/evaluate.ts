@@ -190,6 +190,7 @@ export function registerEvaluateRoute(fastify: FastifyInstance, options: Evaluat
 
             request.log.info(
                 {
+                    sessionId,
                     riskScore: riskScoreResult.score.toFixed(2),
                     challengeTier,
                     factors: riskScoreResult.factors
