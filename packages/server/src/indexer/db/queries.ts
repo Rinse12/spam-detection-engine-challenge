@@ -359,16 +359,19 @@ export class IndexerQueries {
      * Used for risk scoring based on indexed data.
      */
     getAuthorNetworkStats(authorPublicKey: string): AuthorNetworkStats {
-        // Count bans across subs
+        const nowSeconds = Math.floor(Date.now() / 1000);
+
+        // Count active bans across subs (only where banExpiresAt >= current time)
         const banResult = this.db
             .prepare(
                 `SELECT COUNT(DISTINCT i.subplebbitAddress) as banCount
                  FROM indexed_comments_update u
                  JOIN indexed_comments_ipfs i ON u.cid = i.cid
                  WHERE json_extract(i.signature, '$.publicKey') = ?
-                   AND json_extract(u.author, '$.subplebbit.banExpiresAt') IS NOT NULL`
+                   AND json_extract(u.author, '$.subplebbit.banExpiresAt') IS NOT NULL
+                   AND json_extract(u.author, '$.subplebbit.banExpiresAt') >= ?`
             )
-            .get(authorPublicKey) as { banCount: number };
+            .get(authorPublicKey, nowSeconds) as { banCount: number };
 
         // Count removals
         const removalResult = this.db
@@ -426,6 +429,15 @@ export class IndexerQueries {
             )
             .get(authorPublicKey) as { total: number };
 
+        // Count distinct subplebbits the author has posted to
+        const distinctSubsResult = this.db
+            .prepare(
+                `SELECT COUNT(DISTINCT subplebbitAddress) as distinctSubs
+                 FROM indexed_comments_ipfs
+                 WHERE json_extract(signature, '$.publicKey') = ?`
+            )
+            .get(authorPublicKey) as { distinctSubs: number };
+
         return {
             banCount: banResult.banCount,
             removalCount: removalResult.removalCount,
@@ -433,7 +445,8 @@ export class IndexerQueries {
             unfetchableCount: unfetchableResult.unfetchableCount,
             modqueueRejected: modqueueResult.rejected,
             modqueueAccepted: modqueueResult.accepted,
-            totalIndexedComments: totalResult.total
+            totalIndexedComments: totalResult.total,
+            distinctSubplebbitsPostedTo: distinctSubsResult.distinctSubs
         };
     }
 

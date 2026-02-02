@@ -9,14 +9,16 @@ import { getAuthorPublicKeyFromChallengeRequest } from "../utils.js";
 import { IndexerQueries } from "../../indexer/db/queries.js";
 
 /**
- * Calculate risk based on network-wide ban history.
- * Authors banned from multiple subplebbits are higher risk.
+ * Calculate risk based on network-wide ban history scaled by community breadth.
  *
- * Scoring:
- * - 0 bans: 0.0 (no risk)
- * - 1 ban: 0.4 (moderate risk)
- * - 2 bans: 0.6 (elevated risk)
- * - 3+ bans: 0.85 (high risk)
+ * Two additive components, capped at 1.0:
+ *
+ * 1. Ban severity — sqrt(activeBans / distinctSubs) amplifies even small ban ratios.
+ *    If all subs are banned, severity = 1.0.
+ * 2. Limited-community trust penalty — starts at 0.4 for 0 clean subs, drops to 0
+ *    around 15 clean subs via: max(0, 0.4 - 0.1 * log2(1 + cleanSubs))
+ *
+ * score = min(1.0, banSeverity + trustPenalty)
  */
 export function calculateNetworkBanHistory(ctx: RiskContext, weight: number): RiskFactor {
     const authorPublicKey = getAuthorPublicKeyFromChallengeRequest(ctx.challengeRequest);
@@ -36,28 +38,38 @@ export function calculateNetworkBanHistory(ctx: RiskContext, weight: number): Ri
         };
     }
 
-    const banCount = stats.banCount;
+    const activeBans = stats.banCount;
+    const distinctSubs = stats.distinctSubplebbitsPostedTo;
+    const cleanSubs = Math.max(0, distinctSubs - activeBans);
 
-    let score: number;
-    let explanation: string;
-
-    if (banCount === 0) {
-        score = 0.0;
-        explanation = "No bans across indexed subplebbits (has posting history)";
-    } else if (banCount === 1) {
-        score = 0.4;
-        explanation = `Banned in 1 indexed subplebbit`;
-    } else if (banCount === 2) {
-        score = 0.6;
-        explanation = `Banned in 2 indexed subplebbits`;
+    // Component 1: Ban severity
+    let banSeverity: number;
+    if (activeBans === 0) {
+        banSeverity = 0;
+    } else if (activeBans >= distinctSubs) {
+        banSeverity = 1.0;
     } else {
-        score = 0.85;
-        explanation = `Banned in ${banCount} indexed subplebbits (high risk)`;
+        banSeverity = Math.sqrt(activeBans / distinctSubs);
+    }
+
+    // Component 2: Limited-community trust penalty (diminishing returns)
+    const trustPenalty = Math.max(0, 0.4 - 0.1 * Math.log2(1 + cleanSubs));
+
+    const score = Math.min(1.0, banSeverity + trustPenalty);
+
+    // Round to 2 decimal places for cleaner output
+    const roundedScore = Math.round(score * 100) / 100;
+
+    let explanation: string;
+    if (activeBans === 0) {
+        explanation = `No active bans across ${distinctSubs} indexed subplebbit${distinctSubs !== 1 ? "s" : ""}`;
+    } else {
+        explanation = `Banned in ${activeBans}/${distinctSubs} indexed subplebbit${distinctSubs !== 1 ? "s" : ""} (severity=${banSeverity.toFixed(2)}, trustPenalty=${trustPenalty.toFixed(2)})`;
     }
 
     return {
         name: "networkBanHistory",
-        score,
+        score: roundedScore,
         weight,
         explanation
     };

@@ -169,7 +169,7 @@ export type ModQueueCommentUpdateInsertParams = Pick<ModQueueCommentUpdate, "cid
  * Author stats calculated from indexed data.
  */
 export interface AuthorNetworkStats {
-    /** Number of unique subs where author has been banned */
+    /** Number of unique subs where author has an active ban (banExpiresAt >= now) */
     banCount: number;
     /** Number of comments that have been removed by mods */
     removalCount: number;
@@ -183,6 +183,8 @@ export interface AuthorNetworkStats {
     modqueueAccepted: number;
     /** Total number of indexed comments by this author */
     totalIndexedComments: number;
+    /** Number of distinct subplebbits the author has posted to */
+    distinctSubplebbitsPostedTo: number;
 }
 
 /**

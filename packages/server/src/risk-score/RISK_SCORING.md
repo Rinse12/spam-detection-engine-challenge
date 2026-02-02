@@ -401,7 +401,7 @@ When available (after iframe access), evaluates the author's IP address characte
 
 ### 7. Network Ban History (Weight: 10% without IP, 8% with IP)
 
-Evaluates the author's ban history across all indexed subplebbits. Authors banned from multiple communities are higher risk.
+Evaluates the author's ban history across all indexed subplebbits, scaled by community breadth. Only **active** bans are counted (where `banExpiresAt >= current_time`); expired bans are ignored.
 
 This factor uses data collected by the indexer, which:
 
@@ -409,15 +409,56 @@ This factor uses data collected by the indexer, which:
 - Tracks `CommentUpdate.author.subplebbit.banExpiresAt` to detect bans
 - Aggregates ban data across all indexed subplebbits
 
-| Condition             | Risk Score | Description                             |
-| --------------------- | ---------- | --------------------------------------- |
-| No posting history    | (skipped)  | Factor skipped, weight redistributed    |
-| 0 bans (with history) | 0.00       | Clean record across indexed subplebbits |
-| 1 ban                 | 0.40       | Banned from one sub                     |
-| 2 bans                | 0.60       | Banned from multiple subs               |
-| 3+ bans               | 0.85       | Serial ban evasion (high risk)          |
+**Formula** — two additive components, capped at 1.0:
 
-**Rationale**: Authors banned from multiple subplebbits have a pattern of problematic behavior. "No bans" is only a positive signal if the user has actually participated somewhere - for users with no posting history, this factor is skipped entirely.
+```
+cleanSubs = distinctSubs - activeBans
+
+// Component 1: Ban severity (square root amplifies even small ban ratios)
+banSeverity = activeBans >= distinctSubs ? 1.0
+            : activeBans === 0            ? 0
+            : sqrt(activeBans / distinctSubs)
+
+// Component 2: Limited-community trust penalty (diminishing returns)
+// Starts at 0.4 for 0 clean subs, drops to 0 around 15 clean subs
+trustPenalty = max(0, 0.4 - 0.1 * log2(1 + cleanSubs))
+
+score = min(1.0, banSeverity + trustPenalty)
+```
+
+**No posting history**: Factor is skipped (weight redistributed).
+
+**Clean records (no active bans):**
+
+| Subs | Bans | Clean | banSev | trustPen | Score | Meaning                         |
+| ---- | ---- | ----- | ------ | -------- | ----- | ------------------------------- |
+| 1    | 0    | 1     | 0      | 0.30     | 0.30  | 1 clean sub — weak trust signal |
+| 3    | 0    | 3     | 0      | 0.20     | 0.20  | Some cross-sub presence         |
+| 7    | 0    | 7     | 0      | 0.10     | 0.10  | Decent clean record             |
+| 15   | 0    | 15    | 0      | 0.00     | 0.00  | Strong clean record             |
+| 20   | 0    | 20    | 0      | 0.00     | 0.00  | Very strong clean record        |
+
+**Mixed records (clean + active bans):**
+
+| Subs | Bans | Clean | banSev | trustPen | Score | Meaning                  |
+| ---- | ---- | ----- | ------ | -------- | ----- | ------------------------ |
+| 20   | 1    | 19    | 0.22   | 0.00     | 0.22  | 1 ban in 20 — minor slip |
+| 20   | 5    | 15    | 0.50   | 0.00     | 0.50  | 5 bans in 20             |
+| 20   | 10   | 10    | 0.71   | 0.05     | 0.76  | Half banned              |
+| 20   | 15   | 5     | 0.87   | 0.14     | 1.00  | Mostly banned (capped)   |
+| 20   | 20   | 0     | 1.00   | —        | 1.00  | All banned               |
+| 10   | 1    | 9     | 0.32   | 0.07     | 0.38  | 1 ban in 10              |
+| 10   | 3    | 7     | 0.55   | 0.10     | 0.65  | 3 bans in 10             |
+| 10   | 5    | 5     | 0.71   | 0.14     | 0.85  | Half banned              |
+| 10   | 10   | 0     | 1.00   | —        | 1.00  | All banned               |
+| 5    | 1    | 4     | 0.45   | 0.17     | 0.62  | 1 ban in 5               |
+| 5    | 2    | 3     | 0.63   | 0.20     | 0.83  | 2 bans in 5              |
+| 5    | 3    | 2     | 0.77   | 0.24     | 1.00  | 3 bans in 5 (capped)     |
+| 3    | 1    | 2     | 0.58   | 0.24     | 0.82  | 1 ban in 3               |
+| 3    | 2    | 1     | 0.82   | 0.30     | 1.00  | 2 bans in 3 (capped)     |
+| 1    | 1    | 0     | 1.00   | —        | 1.00  | Banned from only sub     |
+
+**Rationale**: The formula captures two signals: (1) ban severity scales with the square root of the ban ratio, so even 1 ban in 20 subs produces a non-trivial score, and (2) authors with more clean community presence get a diminishing trust bonus, reaching full trust around 15 clean subplebbits. Expired bans are ignored since the author has served their time. "No bans" is only a positive signal if the user has actually participated somewhere — for users with no posting history, this factor is skipped entirely.
 
 ### 8. ModQueue Rejection Rate (Weight: 6% without IP, 4% with IP)
 

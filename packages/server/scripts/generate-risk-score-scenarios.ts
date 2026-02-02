@@ -41,6 +41,9 @@ interface ScenarioConfig {
     karma: "no_data" | "-5" | "0" | "+3" | "+5";
     velocity: "normal" | "elevated" | "suspicious" | "bot_like";
     banCount: 0 | 1 | 3;
+    /** Total distinct subs the author has posted to (including banned ones).
+     *  When undefined, defaults to the count of subs seeded by other factors. */
+    distinctSubs?: number;
     modqueueRejection: "no_data" | "0%" | "50%" | "80%";
     removalRate: "no_data" | "0%" | "30%" | "60%";
     contentDuplicates: "none" | "3" | "5+";
@@ -166,9 +169,10 @@ function getVelocityScoreDescription(scenario: ScenarioConfig): string {
 }
 
 function getBanHistoryScoreDescription(scenario: ScenarioConfig): string {
-    if (scenario.banCount === 0) return "no bans";
-    if (scenario.banCount === 1) return "1 ban";
-    return `${scenario.banCount} bans`;
+    if (scenario.banCount === 0) return "no active bans";
+    const subsInfo = scenario.distinctSubs ? ` in ${scenario.distinctSubs} subs` : "";
+    if (scenario.banCount === 1) return `1 active ban${subsInfo}`;
+    return `${scenario.banCount} active bans${subsInfo}`;
 }
 
 function getModqueueScoreDescription(scenario: ScenarioConfig): string {
@@ -340,12 +344,13 @@ const SCENARIOS: ScenarioConfig[] = [
     },
     {
         name: "Repeat Link Spammer",
-        description: "A user with negative karma, 1 ban, posting the same link repeatedly.",
+        description: "A user with negative karma, 1 active ban out of 5 subs, posting the same link repeatedly.",
         publicationType: "post",
         accountAge: "7_days",
         karma: "-5",
         velocity: "elevated",
         banCount: 1,
+        distinctSubs: 5,
         modqueueRejection: "50%",
         removalRate: "30%",
         contentDuplicates: "none",
@@ -392,12 +397,13 @@ const SCENARIOS: ScenarioConfig[] = [
     },
     {
         name: "Serial Offender",
-        description: "A known bad actor with 3+ bans, negative karma, and moderate spam history.",
+        description: "A known bad actor with 3 active bans out of 5 subs, negative karma, and moderate spam history.",
         publicationType: "post",
         accountAge: "90_days",
         karma: "-5",
         velocity: "elevated",
         banCount: 3,
+        distinctSubs: 5,
         modqueueRejection: "80%",
         removalRate: "60%",
         contentDuplicates: "3",
@@ -836,6 +842,54 @@ function seedDatabase(
             `
                 )
                 .run(cid, JSON.stringify({ subplebbit: { banExpiresAt: now + 86400 * 365 } }), now - 86400, nowMs - 86400000);
+        }
+    }
+
+    // Seed additional distinct subs if distinctSubs is specified and exceeds what's already been created
+    if (scenario.distinctSubs !== undefined) {
+        const db_raw = db.getDb();
+        // Count how many distinct subs already exist for this author in indexed_comments_ipfs
+        const existingCount = (
+            db_raw
+                .prepare(
+                    `SELECT COUNT(DISTINCT subplebbitAddress) as cnt FROM indexed_comments_ipfs
+                     WHERE json_extract(signature, '$.publicKey') = ?`
+                )
+                .get(authorPublicKey) as { cnt: number }
+        ).cnt;
+
+        const needed = scenario.distinctSubs - existingCount;
+        for (let i = 0; i < needed; i++) {
+            const subAddr = `extra-sub-${i}.eth`;
+            const cid = `QmExtra${generateUniqueId()}`;
+
+            db_raw
+                .prepare(
+                    `INSERT OR IGNORE INTO indexed_subplebbits (address, discoveredVia, discoveredAt, indexingEnabled)
+                     VALUES (?, 'manual', ?, 1)`
+                )
+                .run(subAddr, nowMs);
+
+            db_raw
+                .prepare(
+                    `INSERT INTO indexed_comments_ipfs (cid, subplebbitAddress, author, signature, timestamp, fetchedAt, protocolVersion)
+                     VALUES (?, ?, ?, ?, ?, ?, '1')`
+                )
+                .run(
+                    cid,
+                    subAddr,
+                    JSON.stringify({ address: "seed-author" }),
+                    JSON.stringify({ publicKey: authorPublicKey, signature: "dummy", type: "ed25519" }),
+                    now - 86400 * 30,
+                    nowMs - 86400000 * 30
+                );
+
+            db_raw
+                .prepare(
+                    `INSERT INTO indexed_comments_update (cid, updatedAt, fetchedAt)
+                     VALUES (?, ?, ?)`
+                )
+                .run(cid, now - 86400, nowMs - 86400000);
         }
     }
 
@@ -1324,6 +1378,7 @@ function generateAuthorProfileTable(scenario: ScenarioConfig, sampleResult?: Sce
     lines.push(`| Karma | ${karmaDisplay} | ${karmaRisk} |`);
 
     // Bans
+    const banDisplay = scenario.distinctSubs ? `${scenario.banCount}/${scenario.distinctSubs} subs` : `${scenario.banCount}`;
     const banRisk = isFactorSkipped("networkBanHistory")
         ? "Skipped (no history)"
         : scenario.banCount === 0
@@ -1331,7 +1386,7 @@ function generateAuthorProfileTable(scenario: ScenarioConfig, sampleResult?: Sce
           : scenario.banCount === 1
             ? "Moderate risk"
             : "High risk";
-    lines.push(`| Bans | ${scenario.banCount} | ${banRisk} |`);
+    lines.push(`| Active Bans | ${banDisplay} | ${banRisk} |`);
 
     // Velocity
     const velocityRisk =
