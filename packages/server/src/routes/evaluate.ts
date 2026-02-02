@@ -188,6 +188,18 @@ export function registerEvaluateRoute(fastify: FastifyInstance, options: Evaluat
             // Determine challenge tier based on risk score
             const challengeTier = determineChallengeTier(riskScoreResult.score, challengeTierConfig);
 
+            request.log.info(
+                {
+                    riskScore: riskScoreResult.score.toFixed(2),
+                    challengeTier,
+                    factors: riskScoreResult.factors
+                        .filter((f) => f.weight > 0)
+                        .map((f) => `${f.name}: ${(f.score * 100).toFixed(0)}%`)
+                        .join(", ")
+                },
+                `Evaluate: score=${riskScoreResult.score.toFixed(2)} tier=${challengeTier}`
+            );
+
             // Map challenge tier to database tier (auto_accept and auto_reject don't need sessions with tiers)
             let dbChallengeTier: ChallengeTierDb | undefined;
             if (challengeTier === "captcha_only") {

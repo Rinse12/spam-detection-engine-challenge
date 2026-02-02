@@ -65,7 +65,6 @@ export function registerVerifyRoute(fastify: FastifyInstance, options: VerifyRou
 
             // Check if challenge has expired (internal timestamps are in milliseconds)
             if (session.expiresAt < Date.now()) {
-                reply.status(410);
                 return {
                     success: false,
                     error: "Challenge session has expired"
@@ -91,8 +90,9 @@ export function registerVerifyRoute(fastify: FastifyInstance, options: VerifyRou
             }
 
             // Check challenge completion status (server-side tracking, no JWT needed)
+            // These are expected business logic outcomes, not errors, so we return 200
+            // to let the challenge package's verify() return {success: false} instead of throwing.
             if (session.status === "pending") {
-                reply.status(400);
                 return {
                     success: false,
                     error: "Challenge not yet completed"
@@ -100,7 +100,6 @@ export function registerVerifyRoute(fastify: FastifyInstance, options: VerifyRou
             }
 
             if (session.status === "failed") {
-                reply.status(400);
                 return {
                     success: false,
                     error: "Challenge failed"

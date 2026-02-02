@@ -183,6 +183,30 @@ describe("EasyCommunitySpamBlocker challenge package", () => {
         expect(verifyBody.token).toBeUndefined();
     });
 
+    it("returns failure when user submits without completing challenge", async () => {
+        const fetchMock = stubFetch(
+            createResponse(createEvaluateResponse({ riskScore: 0.5 })),
+            createResponse(createVerifyResponse({ success: false, error: "Challenge not yet completed" }))
+        );
+        const challengeFile = ChallengeFileFactory({} as SubplebbitChallengeSetting);
+
+        const result = await challengeFile.getChallenge({
+            challengeSettings: { options: {} } as SubplebbitChallengeSetting,
+            challengeRequestMessage: request,
+            challengeIndex: 0,
+            subplebbit
+        });
+
+        if (!("verify" in result)) {
+            throw new Error("Expected a challenge response");
+        }
+
+        // verify() must return {success: false, error} (not throw) for expected server failures
+        const verifyResult = await result.verify("");
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+        expect(verifyResult).toEqual({ success: false, error: "Challenge not yet completed" });
+    });
+
     it("surfaces verification failures from the server", async () => {
         const fetchMock = stubFetch(
             createResponse(createEvaluateResponse({ riskScore: 0.5 })),

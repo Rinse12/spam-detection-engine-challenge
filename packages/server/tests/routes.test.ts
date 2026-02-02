@@ -850,12 +850,12 @@ describe("API Routes", () => {
             expect(body.challengeType).toBe("turnstile");
         });
 
-        it("should return 400 when challenge is still pending", async () => {
+        it("should return 200 with success:false when challenge is still pending", async () => {
             // Session is created as "pending" by default
             const payload = await createVerifyPayload({ sessionId });
             const response = await injectCbor(server.fastify, "POST", "/api/v1/challenge/verify", payload);
 
-            expect(response.statusCode).toBe(400);
+            expect(response.statusCode).toBe(200);
             const body = response.json();
             expect(body.success).toBe(false);
             expect(body.error).toContain("not yet completed");
@@ -889,14 +889,14 @@ describe("API Routes", () => {
             expect(body.error).toContain("signature");
         });
 
-        it("should return 400 for failed challenge", async () => {
+        it("should return 200 with success:false for failed challenge", async () => {
             // Mark challenge as failed
             server.db.updateChallengeSessionStatus(sessionId, "failed", Math.floor(Date.now() / 1000));
 
             const payload = await createVerifyPayload({ sessionId });
             const response = await injectCbor(server.fastify, "POST", "/api/v1/challenge/verify", payload);
 
-            expect(response.statusCode).toBe(400);
+            expect(response.statusCode).toBe(200);
             const body = response.json();
             expect(body.success).toBe(false);
             expect(body.error).toContain("failed");
