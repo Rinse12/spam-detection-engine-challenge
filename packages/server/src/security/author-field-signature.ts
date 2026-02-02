@@ -1,7 +1,7 @@
 import { getPlebbitAddressFromPublicKey } from "@plebbit/plebbit-js/dist/node/signer/util.js";
 import { isStringDomain } from "@plebbit/plebbit-js/dist/node/util.js";
 import type Plebbit from "@plebbit/plebbit-js";
-import type { ChainTicker } from "@plebbit/plebbit-js/dist/node/types.js";
+import type { AuthorPubsubType, ChainTicker, Nft } from "@plebbit/plebbit-js/dist/node/types.js";
 
 type PlebbitInstance = Awaited<ReturnType<typeof Plebbit>>;
 
@@ -16,25 +16,7 @@ const nftAbi = [
     }
 ] as const;
 
-type WalletData = {
-    address: string;
-    timestamp: number;
-    signature: {
-        signature: string;
-        type: string;
-    };
-};
-
-type AvatarData = {
-    chainTicker: string;
-    address: string;
-    id: string;
-    timestamp: number;
-    signature: {
-        signature: string;
-        type: string;
-    };
-};
+type WalletData = NonNullable<AuthorPubsubType["wallets"]>[ChainTicker];
 
 type VerificationResult = { valid: true } | { valid: false; reason: string };
 
@@ -234,7 +216,7 @@ export async function verifyAuthorAvatarSignature({
     authorAddress,
     plebbit
 }: {
-    avatar: AvatarData | undefined;
+    avatar: Nft | undefined;
     authorAddress: string;
     plebbit: PlebbitInstance;
 }): Promise<VerificationResult> {
