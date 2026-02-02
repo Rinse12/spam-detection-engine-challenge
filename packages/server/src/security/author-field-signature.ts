@@ -58,7 +58,10 @@ export async function verifyAuthorWalletSignature({
     // Check if chain provider is available
     const chainProvider = plebbit.chainProviders[chainTicker as ChainTicker];
     if (!chainProvider) {
-        return { valid: false, reason: `No chain provider configured for chain '${chainTicker}'` };
+        console.warn(
+            `Received publication with wallet on chain '${chainTicker}' but no chain provider is configured — skipping wallet verification`
+        );
+        return { valid: true }; // Can't verify without chain provider, skip gracefully
     }
 
     // For domain wallet addresses (e.g., ENS), verify plebbit-author-address matches
@@ -242,7 +245,10 @@ export async function verifyAuthorAvatarSignature({
     // Check if chain provider is available for the NFT's chain
     const chainProvider = plebbit.chainProviders[avatar.chainTicker as ChainTicker];
     if (!chainProvider) {
-        return { valid: false, reason: `No chain provider configured for avatar chain '${avatar.chainTicker}'` };
+        console.warn(
+            `Received publication with avatar on chain '${avatar.chainTicker}' but no chain provider is configured — skipping avatar verification`
+        );
+        return { valid: true }; // Can't verify without chain provider, skip gracefully
     }
 
     const viemClient = plebbit._domainResolver._createViemClientIfNeeded(avatar.chainTicker as ChainTicker, chainProvider.urls[0]);

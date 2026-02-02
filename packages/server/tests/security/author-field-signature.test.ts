@@ -162,7 +162,7 @@ describe("verifyAuthorWalletSignature", () => {
     });
 
     describe("with missing chain provider", () => {
-        it("should return invalid if chain provider not configured", async () => {
+        it("should skip verification and return valid if chain provider not configured", async () => {
             const mockPlebbit = createMockPlebbit({
                 chainProviders: {} // No providers
             });
@@ -179,9 +179,30 @@ describe("verifyAuthorWalletSignature", () => {
                 plebbit: mockPlebbit
             });
 
-            expect(result.valid).toBe(false);
-            expect((result as { valid: false; reason: string }).reason).toContain("No chain provider configured");
-            expect((result as { valid: false; reason: string }).reason).toContain("polygon");
+            expect(result.valid).toBe(true);
+        });
+
+        it("should log a warning when chain provider is missing", async () => {
+            const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+            const mockPlebbit = createMockPlebbit({
+                chainProviders: {} // No providers
+            });
+
+            await verifyAuthorWalletSignature({
+                wallet: {
+                    address: "0x742d35Cc6634C0532925a3b844Bc9e7595f42d11",
+                    timestamp: 1234567890,
+                    signature: { signature: "0xsig", type: "eip-191" }
+                },
+                chainTicker: "polygon",
+                authorAddress: "12D3KooWTestAuthor",
+                publicationSignaturePublicKey: "testPublicKey",
+                plebbit: mockPlebbit
+            });
+
+            expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("wallet on chain 'polygon'"));
+            expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("no chain provider is configured"));
+            warnSpy.mockRestore();
         });
     });
 
@@ -383,7 +404,7 @@ describe("verifyAuthorAvatarSignature", () => {
         expect((result as { valid: false; reason: string }).reason).toContain("not the current NFT owner");
     });
 
-    it("should return invalid if chain provider is not configured for avatar chain", async () => {
+    it("should skip verification and return valid if chain provider is not configured for avatar chain", async () => {
         const mockPlebbit = createMockPlebbit({
             chainProviders: {} // No providers
         });
@@ -400,9 +421,30 @@ describe("verifyAuthorAvatarSignature", () => {
             plebbit: mockPlebbit
         });
 
-        expect(result.valid).toBe(false);
-        expect((result as { valid: false; reason: string }).reason).toContain("No chain provider configured");
-        expect((result as { valid: false; reason: string }).reason).toContain("polygon");
+        expect(result.valid).toBe(true);
+    });
+
+    it("should log a warning when avatar chain provider is missing", async () => {
+        const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+        const mockPlebbit = createMockPlebbit({
+            chainProviders: {} // No providers
+        });
+
+        await verifyAuthorAvatarSignature({
+            avatar: {
+                chainTicker: "polygon",
+                address: "0xNFTContract",
+                id: "789",
+                timestamp: 1234567890,
+                signature: { signature: "0xsig", type: "eip-191" }
+            },
+            authorAddress: "12D3KooWTestAuthor",
+            plebbit: mockPlebbit
+        });
+
+        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("avatar on chain 'polygon'"));
+        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("no chain provider is configured"));
+        warnSpy.mockRestore();
     });
 
     it("should return invalid if NFT contract call fails", async () => {
