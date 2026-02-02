@@ -431,6 +431,8 @@ field from its internal database of author history, so new authors won't have it
 
 **Error Handling:** If the server is unreachable, the challenge code throws an error (does not silently accept or reject). This ensures the sub owner is notified of issues.
 
+**Privacy of options:** The `options` object (including `serverUrl` and all threshold/filtering settings) is **not** exposed in the public `subplebbit.challenges` IPFS record. Plebbit-js strips `options` when computing the public `SubplebbitChallenge` from `SubplebbitChallengeSetting`, so only `type`, `description`, and `exclude` are published. This means the server URL, thresholds, and filtering rules remain private to the subplebbit operator.
+
 ### Server Configuration (separate from challenge)
 
 These settings are configured on the HTTP server, not in the challenge package:

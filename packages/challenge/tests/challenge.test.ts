@@ -1,11 +1,14 @@
 import type { SubplebbitChallengeSetting } from "@plebbit/plebbit-js/dist/node/subplebbit/types.js";
 import type { DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor } from "@plebbit/plebbit-js/dist/node/pubsub-messages/types.js";
 import type { LocalSubplebbit } from "@plebbit/plebbit-js/dist/node/runtime/node/subplebbit/local-subplebbit.js";
+import { createRequire } from "node:module";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { getPublicKeyFromPrivateKey } from "../src/plebbit-js-signer.js";
 import type { EvaluateResponse, VerifyResponse } from "@easy-community-spam-blocker/shared";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import ChallengeFileFactory from "../src/index.js";
 import * as cborg from "cborg";
+import path from "node:path";
 
 type MockResponseOptions = {
     ok?: boolean;
@@ -377,5 +380,40 @@ describe("EasyCommunitySpamBlocker challenge package", () => {
                 subplebbit
             })
         ).rejects.toThrow(/Invalid JSON response/i);
+    });
+
+    it("does not expose serverUrl or options in the public subplebbit challenge record", async () => {
+        const __dirname = path.dirname(fileURLToPath(import.meta.url));
+        const challengePath = path.resolve(__dirname, "../dist/index.js");
+
+        const require = createRequire(import.meta.url);
+        const plebbitJsDir = path.dirname(require.resolve("@plebbit/plebbit-js"));
+        const plebbitJsChallengesPath = path.join(plebbitJsDir, "runtime/node/subplebbit/challenges/index.js");
+        const { getSubplebbitChallengeFromSubplebbitChallengeSettings } = await import(pathToFileURL(plebbitJsChallengesPath).href);
+
+        const publicChallenge = await getSubplebbitChallengeFromSubplebbitChallengeSettings({
+            path: challengePath,
+            options: {
+                serverUrl: "https://secret-server.example.com/api/v1",
+                autoAcceptThreshold: "0.3",
+                autoRejectThreshold: "0.9",
+                countryBlacklist: "RU,CN"
+            }
+        });
+
+        // The public challenge should only contain these fields
+        expect(publicChallenge.type).toBe("url/iframe");
+        expect(publicChallenge.description).toMatch(/EasyCommunitySpamBlocker/i);
+
+        // options and serverUrl must NOT be in the public record
+        const serialized = JSON.stringify(publicChallenge);
+        expect(serialized).not.toContain("secret-server.example.com");
+        expect(serialized).not.toContain("serverUrl");
+        expect(serialized).not.toContain("autoAcceptThreshold");
+        expect(serialized).not.toContain("autoRejectThreshold");
+        expect(serialized).not.toContain("countryBlacklist");
+
+        // Verify the object does not have an "options" key
+        expect(publicChallenge).not.toHaveProperty("options");
     });
 });
