@@ -6,6 +6,11 @@ import { IframeParamsSchema, type IframeParams } from "./schemas.js";
 import { refreshIpIntelIfNeeded } from "../ip-intel/index.js";
 import { generateChallengeIframe, type ChallengeType, type OAuthProvider } from "../challenge-iframes/index.js";
 
+/** Default multiplier applied to riskScore after CAPTCHA (30% reduction) */
+const DEFAULT_CAPTCHA_SCORE_MULTIPLIER = 0.7;
+/** Default pass threshold — adjusted score must be below this to pass */
+const DEFAULT_CHALLENGE_PASS_THRESHOLD = 0.4;
+
 export interface IframeRouteOptions {
     db: SpamDetectionDatabase;
     turnstileSiteKey?: string;
@@ -14,6 +19,10 @@ export interface IframeRouteOptions {
     oauthProvidersResult?: OAuthProvidersResult;
     /** Base URL for OAuth callbacks */
     baseUrl?: string;
+    /** Multiplier applied to riskScore after CAPTCHA (0-1]. Default: 0.7 */
+    captchaScoreMultiplier?: number;
+    /** Adjusted score must be below this to pass. Default: 0.4 */
+    challengePassThreshold?: number;
 }
 
 /**
@@ -21,6 +30,8 @@ export interface IframeRouteOptions {
  */
 export function registerIframeRoute(fastify: FastifyInstance, options: IframeRouteOptions): void {
     const { db, turnstileSiteKey, ipapiKey, oauthProvidersResult, baseUrl } = options;
+    const captchaMultiplier = options.captchaScoreMultiplier ?? DEFAULT_CAPTCHA_SCORE_MULTIPLIER;
+    const passThreshold = options.challengePassThreshold ?? DEFAULT_CHALLENGE_PASS_THRESHOLD;
 
     // Determine which challenge types are available based on configuration
     const enabledOAuthProviders = oauthProvidersResult ? getEnabledProviders(oauthProvidersResult) : [];
@@ -101,72 +112,41 @@ export function registerIframeRoute(fastify: FastifyInstance, options: IframeRou
                 });
             }
 
-            // Determine which iframe to serve based on session's challenge tier
+            // Determine which iframe to serve based on score adjustment
+            // If riskScore * captchaMultiplier >= passThreshold, CAPTCHA alone won't suffice,
+            // so serve the combined iframe (with hidden OAuth section).
+            // Otherwise, serve turnstile-only iframe.
             let html: string;
-            const challengeTier = session.challengeTier;
 
-            if (challengeTier === "captcha_and_oauth" && hasTurnstile && hasOAuth && baseUrl) {
-                // For captcha_and_oauth tier, filter OAuth providers to exclude ones the author has already used
-                let availableProviders: OAuthProvider[] = enabledOAuthProviders;
+            const riskScore = session.riskScore;
+            const captchaWontSuffice = riskScore !== null && riskScore * captchaMultiplier >= passThreshold;
 
-                const authorPublicKey = db.getAuthorPublicKeyBySessionId(sessionId);
-                if (authorPublicKey) {
-                    const usedProviders = db.getAuthorOAuthProviders(authorPublicKey);
-                    availableProviders = enabledOAuthProviders.filter((provider) => !usedProviders.includes(provider));
-                }
-
-                // If all providers already used, downgrade to captcha-only
-                if (availableProviders.length === 0) {
-                    html = generateChallengeIframe("turnstile", {
-                        sessionId,
-                        siteKey: turnstileSiteKey
-                    });
-                } else {
-                    html = generateChallengeIframe("captcha_and_oauth", {
-                        sessionId,
-                        siteKey: turnstileSiteKey,
-                        enabledProviders: availableProviders,
-                        baseUrl,
-                        captchaCompleted: session.captchaCompleted === 1
-                    });
-                }
-            } else if (challengeTier === "captcha_only") {
-                // captcha_only tier: use Turnstile if available, otherwise OAuth as fallback
-                if (hasTurnstile) {
-                    html = generateChallengeIframe("turnstile", {
-                        sessionId,
-                        siteKey: turnstileSiteKey
-                    });
-                } else if (hasOAuth && baseUrl) {
-                    html = generateChallengeIframe("oauth", {
-                        sessionId,
-                        enabledProviders: enabledOAuthProviders,
-                        baseUrl
-                    });
-                } else {
-                    reply.status(500);
-                    reply.send("No challenge provider configured");
-                    return;
-                }
+            if (captchaWontSuffice && hasTurnstile && hasOAuth && baseUrl) {
+                // CAPTCHA won't be enough — serve combined iframe with OAuth section
+                html = generateChallengeIframe("captcha_and_oauth", {
+                    sessionId,
+                    siteKey: turnstileSiteKey,
+                    enabledProviders: enabledOAuthProviders,
+                    baseUrl,
+                    captchaCompleted: session.captchaCompleted === 1
+                });
+            } else if (hasTurnstile) {
+                // CAPTCHA alone will suffice, or no OAuth available — serve turnstile only
+                html = generateChallengeIframe("turnstile", {
+                    sessionId,
+                    siteKey: turnstileSiteKey
+                });
+            } else if (hasOAuth && baseUrl) {
+                // No Turnstile available, fall back to OAuth-only
+                html = generateChallengeIframe("oauth", {
+                    sessionId,
+                    enabledProviders: enabledOAuthProviders,
+                    baseUrl
+                });
             } else {
-                // Legacy sessions (null tier) or fallback: use existing logic
-                // Prefer OAuth if configured, fallback to Turnstile
-                if (hasOAuth && baseUrl) {
-                    html = generateChallengeIframe("oauth", {
-                        sessionId,
-                        enabledProviders: enabledOAuthProviders,
-                        baseUrl
-                    });
-                } else if (hasTurnstile) {
-                    html = generateChallengeIframe("turnstile", {
-                        sessionId,
-                        siteKey: turnstileSiteKey
-                    });
-                } else {
-                    reply.status(500);
-                    reply.send("No challenge provider configured");
-                    return;
-                }
+                reply.status(500);
+                reply.send("No challenge provider configured");
+                return;
             }
 
             reply.type("text/html");

@@ -3,18 +3,27 @@ import type { SpamDetectionDatabase } from "../db/index.js";
 import { CompleteRequestSchema, type CompleteRequest } from "./schemas.js";
 import { verifyTurnstileToken } from "../challenges/turnstile.js";
 
+/** Default multiplier applied to riskScore after CAPTCHA (30% reduction) */
+const DEFAULT_CAPTCHA_SCORE_MULTIPLIER = 0.7;
+/** Default pass threshold — adjusted score must be below this to pass */
+const DEFAULT_CHALLENGE_PASS_THRESHOLD = 0.4;
+
 export interface CompleteRouteOptions {
     db: SpamDetectionDatabase;
     turnstileSecretKey?: string;
+    /** Multiplier applied to riskScore after CAPTCHA (0-1]. Default: 0.7 */
+    captchaScoreMultiplier?: number;
+    /** Adjusted score must be below this to pass. Default: 0.4 */
+    challengePassThreshold?: number;
 }
 
 export interface CompleteResponse {
     success: boolean;
     error?: string;
-    /** Indicates CAPTCHA was completed but OAuth is still required (for captcha_and_oauth tier) */
-    captchaCompleted?: boolean;
-    /** Indicates OAuth is still required to complete the challenge */
-    oauthRequired?: boolean;
+    /** Whether the challenge is fully passed (session completed) */
+    passed?: boolean;
+    /** Whether OAuth is suggested to lower the score further */
+    oauthSuggested?: boolean;
 }
 
 /**
@@ -23,6 +32,8 @@ export interface CompleteResponse {
  */
 export function registerCompleteRoute(fastify: FastifyInstance, options: CompleteRouteOptions): void {
     const { db, turnstileSecretKey } = options;
+    const captchaMultiplier = options.captchaScoreMultiplier ?? DEFAULT_CAPTCHA_SCORE_MULTIPLIER;
+    const passThreshold = options.challengePassThreshold ?? DEFAULT_CHALLENGE_PASS_THRESHOLD;
 
     fastify.post(
         "/api/v1/challenge/complete",
@@ -98,28 +109,53 @@ export function registerCompleteRoute(fastify: FastifyInstance, options: Complet
                     // In development/testing, allow skipping Turnstile verification
                     request.log.warn("Turnstile secret key not configured, skipping verification");
                 }
-
-                // Handle partial completion for captcha_and_oauth tier
-                if (session.challengeTier === "captcha_and_oauth") {
-                    // Mark CAPTCHA as completed but don't complete the session
-                    // OAuth is still required
-                    db.updateChallengeSessionCaptchaCompleted(sessionId);
-                    return {
-                        success: true,
-                        captchaCompleted: true,
-                        oauthRequired: true
-                    };
-                }
             } else {
-                // TODO: Implement verification for other challenge types (hcaptcha, OAuth, etc.)
+                // TODO: Implement verification for other challenge types (hcaptcha, etc.)
                 request.log.warn({ challengeType: effectiveChallengeType }, "Challenge type not yet implemented, skipping verification");
             }
 
-            // Mark challenge as completed in database
+            // Score adjustment: apply CAPTCHA multiplier to determine if session passes
+            const riskScore = session.riskScore;
+            if (riskScore !== null) {
+                const adjustedScore = riskScore * captchaMultiplier;
+
+                if (adjustedScore < passThreshold) {
+                    // CAPTCHA alone is sufficient — mark session as completed
+                    db.updateChallengeSessionCaptchaCompleted(sessionId);
+                    db.updateChallengeSessionStatus(sessionId, "completed", nowMs);
+
+                    request.log.info(
+                        { sessionId, riskScore, adjustedScore, passThreshold },
+                        `CAPTCHA sufficient: ${riskScore.toFixed(2)} × ${captchaMultiplier} = ${adjustedScore.toFixed(2)} < ${passThreshold}`
+                    );
+
+                    return {
+                        success: true,
+                        passed: true
+                    };
+                } else {
+                    // CAPTCHA not sufficient — mark captcha as completed, session stays pending
+                    db.updateChallengeSessionCaptchaCompleted(sessionId);
+
+                    request.log.info(
+                        { sessionId, riskScore, adjustedScore, passThreshold },
+                        `CAPTCHA insufficient: ${riskScore.toFixed(2)} × ${captchaMultiplier} = ${adjustedScore.toFixed(2)} >= ${passThreshold}, OAuth needed`
+                    );
+
+                    return {
+                        success: true,
+                        passed: false,
+                        oauthSuggested: true
+                    };
+                }
+            }
+
+            // Fallback for sessions without riskScore (legacy or auto_accept/auto_reject that somehow reach here)
             db.updateChallengeSessionStatus(sessionId, "completed", nowMs);
 
             return {
-                success: true
+                success: true,
+                passed: true
             };
         }
     );

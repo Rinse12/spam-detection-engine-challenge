@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { calculateSocialVerification } from "../../src/risk-score/factors/social-verification.js";
+import { calculateRiskScore } from "../../src/risk-score/index.js";
 import { SpamDetectionDatabase } from "../../src/db/index.js";
 import { CombinedDataService } from "../../src/risk-score/combined-data-service.js";
 import type { RiskContext } from "../../src/risk-score/types.js";
@@ -413,5 +414,85 @@ describe("calculateSocialVerification", () => {
             const identities = db.getAuthorOAuthIdentities("editor-pk");
             expect(identities).toContain("github:editor");
         });
+    });
+});
+
+describe("calculateRiskScore integration — socialVerification factor", () => {
+    let db: SpamDetectionDatabase;
+
+    beforeEach(() => {
+        db = new SpamDetectionDatabase({ path: ":memory:" });
+    });
+
+    afterEach(() => {
+        db.close();
+    });
+
+    function insertOAuthSession(params: { sessionId: string; oauthIdentity: string; authorPublicKey: string }) {
+        const { sessionId, oauthIdentity, authorPublicKey } = params;
+
+        db.insertChallengeSession({
+            sessionId,
+            subplebbitPublicKey: "subpk",
+            expiresAt: Date.now() + 3600000
+        });
+
+        db.updateChallengeSessionStatus(sessionId, "completed", Date.now(), oauthIdentity);
+
+        db.insertComment({
+            sessionId,
+            publication: {
+                author: { address: "12D3KooWTestAddress" },
+                subplebbitAddress: "test-sub.eth",
+                timestamp: baseTimestamp,
+                protocolVersion: "1",
+                signature: { type: "ed25519", signature: "sig", publicKey: authorPublicKey, signedPropertyNames: ["author"] },
+                content: "Test content"
+            }
+        });
+    }
+
+    it("should include socialVerification with weight > 0 when enabledOAuthProviders is passed", () => {
+        insertOAuthSession({ sessionId: "s1", oauthIdentity: "github:999", authorPublicKey: "pk1" });
+
+        const result = calculateRiskScore({
+            challengeRequest: createMockChallengeRequest("pk1"),
+            db,
+            enabledOAuthProviders: ["github"]
+        });
+
+        const svFactor = result.factors.find((f) => f.name === "socialVerification");
+        expect(svFactor).toBeDefined();
+        expect(svFactor!.weight).toBeGreaterThan(0);
+        // GitHub credibility 1.0 → score ~0.40, so less than 1.0
+        expect(svFactor!.score).toBeLessThan(1.0);
+    });
+
+    it("should skip socialVerification (weight=0) when enabledOAuthProviders is empty", () => {
+        insertOAuthSession({ sessionId: "s1", oauthIdentity: "github:999", authorPublicKey: "pk1" });
+
+        const result = calculateRiskScore({
+            challengeRequest: createMockChallengeRequest("pk1"),
+            db,
+            enabledOAuthProviders: []
+        });
+
+        const svFactor = result.factors.find((f) => f.name === "socialVerification");
+        expect(svFactor).toBeDefined();
+        expect(svFactor!.weight).toBe(0);
+    });
+
+    it("should skip socialVerification (weight=0) when enabledOAuthProviders is omitted", () => {
+        insertOAuthSession({ sessionId: "s1", oauthIdentity: "github:999", authorPublicKey: "pk1" });
+
+        const result = calculateRiskScore({
+            challengeRequest: createMockChallengeRequest("pk1"),
+            db
+            // enabledOAuthProviders deliberately omitted — defaults to []
+        });
+
+        const svFactor = result.factors.find((f) => f.name === "socialVerification");
+        expect(svFactor).toBeDefined();
+        expect(svFactor!.weight).toBe(0);
     });
 });

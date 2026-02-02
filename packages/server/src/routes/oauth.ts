@@ -170,13 +170,13 @@ export function registerOAuthRoutes(fastify: FastifyInstance, options: OAuthRout
             return reply.status(400).send({ error: `Provider not configured: ${provider}` });
         }
 
-        // Validate session exists and is pending
+        // Validate session exists and is pending or completed (OAuth can be added to completed sessions for future trust)
         const session = db.getChallengeSessionBySessionId(sessionId);
         if (!session) {
             return reply.status(400).send({ error: "Invalid session" });
         }
-        if (session.status !== "pending") {
-            return reply.status(400).send({ error: "Session already completed or failed" });
+        if (session.status === "failed") {
+            return reply.status(400).send({ error: "Session failed" });
         }
         if (session.expiresAt < Date.now()) {
             return reply.status(410).send({ error: "Session expired" });
@@ -247,15 +247,15 @@ export function registerOAuthRoutes(fastify: FastifyInstance, options: OAuthRout
             return reply.type("text/html").send(generateErrorPage("State expired"));
         }
 
-        // Validate session still exists and is pending
+        // Validate session still exists and is not failed
         const session = db.getChallengeSessionBySessionId(oauthState.sessionId);
         if (!session) {
             db.deleteOAuthState(state);
             return reply.type("text/html").send(generateErrorPage("Session not found"));
         }
-        if (session.status !== "pending") {
+        if (session.status === "failed") {
             db.deleteOAuthState(state);
-            return reply.type("text/html").send(generateErrorPage("Session already completed"));
+            return reply.type("text/html").send(generateErrorPage("Session was rejected"));
         }
 
         // Exchange code for token and get user identity
@@ -269,9 +269,16 @@ export function registerOAuthRoutes(fastify: FastifyInstance, options: OAuthRout
             return reply.type("text/html").send(generateErrorPage(errorMessage));
         }
 
-        // Mark session as completed with OAuth identity (format: "provider:userId")
+        // Mark session with OAuth identity
         const oauthIdentity = `${userIdentity.provider}:${userIdentity.userId}`;
-        db.updateChallengeSessionStatus(oauthState.sessionId, "completed", Date.now(), oauthIdentity);
+
+        if (session.status === "completed") {
+            // Session already completed (CAPTCHA was sufficient) — just add OAuth identity for future trust
+            db.updateChallengeSessionStatus(oauthState.sessionId, "completed", session.completedAt ?? Date.now(), oauthIdentity);
+        } else {
+            // Session pending — OAuth completes the challenge
+            db.updateChallengeSessionStatus(oauthState.sessionId, "completed", Date.now(), oauthIdentity);
+        }
 
         // Clean up state
         db.deleteOAuthState(state);
@@ -293,6 +300,7 @@ export function registerOAuthRoutes(fastify: FastifyInstance, options: OAuthRout
 
         return {
             completed: session.status === "completed",
+            oauthCompleted: !!session.oauthIdentity,
             status: session.status
         };
     });

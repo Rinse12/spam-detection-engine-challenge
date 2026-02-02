@@ -43,6 +43,12 @@ export interface ServerConfig {
     autoRejectThreshold?: number;
     /** Allow non-domain (IPNS) subplebbits. Useful for local testing. Default: false */
     allowNonDomainSubplebbits?: boolean;
+    /** Multiplier applied to riskScore after CAPTCHA (0-1]. Default: 0.7 (30% reduction) */
+    captchaScoreMultiplier?: number;
+    /** Additional multiplier after OAuth (0-1]. Default: 0.5 (50% further reduction) */
+    oauthScoreMultiplier?: number;
+    /** Adjusted score must be below this to pass. Default: 0.4 */
+    challengePassThreshold?: number;
 }
 
 export interface SpamDetectionServer {
@@ -73,7 +79,10 @@ export async function createServer(config: ServerConfig): Promise<SpamDetectionS
         autoAcceptThreshold,
         captchaOnlyThreshold,
         autoRejectThreshold,
-        allowNonDomainSubplebbits
+        allowNonDomainSubplebbits,
+        captchaScoreMultiplier,
+        oauthScoreMultiplier,
+        challengePassThreshold
     } = config;
 
     // Build challenge tier config from provided thresholds
@@ -155,7 +164,10 @@ export async function createServer(config: ServerConfig): Promise<SpamDetectionS
         indexer,
         oauthProvidersResult,
         challengeTierConfig: Object.keys(challengeTierConfig).length > 0 ? challengeTierConfig : undefined,
-        allowNonDomainSubplebbits
+        allowNonDomainSubplebbits,
+        captchaScoreMultiplier,
+        oauthScoreMultiplier,
+        challengePassThreshold
     });
 
     initPlebbitInstance();
@@ -241,6 +253,30 @@ if (isMainModule) {
     const captchaOnlyThreshold = parseOptionalFloat({ envVar: process.env.CAPTCHA_ONLY_THRESHOLD, name: "CAPTCHA_ONLY_THRESHOLD" });
     const autoRejectThreshold = parseOptionalFloat({ envVar: process.env.AUTO_REJECT_THRESHOLD, name: "AUTO_REJECT_THRESHOLD" });
 
+    const captchaScoreMultiplier = parseOptionalFloat({
+        envVar: process.env.CAPTCHA_SCORE_MULTIPLIER,
+        name: "CAPTCHA_SCORE_MULTIPLIER"
+    });
+    const oauthScoreMultiplier = parseOptionalFloat({
+        envVar: process.env.OAUTH_SCORE_MULTIPLIER,
+        name: "OAUTH_SCORE_MULTIPLIER"
+    });
+    const challengePassThreshold = parseOptionalFloat({
+        envVar: process.env.CHALLENGE_PASS_THRESHOLD,
+        name: "CHALLENGE_PASS_THRESHOLD"
+    });
+
+    // Validate score adjustment config at startup
+    if (captchaScoreMultiplier !== undefined && (captchaScoreMultiplier <= 0 || captchaScoreMultiplier > 1)) {
+        throw new Error("CAPTCHA_SCORE_MULTIPLIER must be in (0, 1]");
+    }
+    if (oauthScoreMultiplier !== undefined && (oauthScoreMultiplier <= 0 || oauthScoreMultiplier > 1)) {
+        throw new Error("OAUTH_SCORE_MULTIPLIER must be in (0, 1]");
+    }
+    if (challengePassThreshold !== undefined && (challengePassThreshold <= 0 || challengePassThreshold >= 1)) {
+        throw new Error("CHALLENGE_PASS_THRESHOLD must be in (0, 1)");
+    }
+
     // If any threshold was provided, validate the merged config at startup
     if (autoAcceptThreshold !== undefined || captchaOnlyThreshold !== undefined || autoRejectThreshold !== undefined) {
         const mergedConfig = {
@@ -311,7 +347,10 @@ if (isMainModule) {
         autoAcceptThreshold,
         captchaOnlyThreshold,
         autoRejectThreshold,
-        allowNonDomainSubplebbits: process.env.ALLOW_NON_DOMAIN_SUBPLEBBITS === "true"
+        allowNonDomainSubplebbits: process.env.ALLOW_NON_DOMAIN_SUBPLEBBITS === "true",
+        captchaScoreMultiplier,
+        oauthScoreMultiplier,
+        challengePassThreshold
     })
         .then((server) => {
             // Graceful shutdown

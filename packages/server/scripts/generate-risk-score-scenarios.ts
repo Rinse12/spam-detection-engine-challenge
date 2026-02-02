@@ -13,6 +13,11 @@ import { fileURLToPath } from "url";
 import { SpamDetectionDatabase } from "../src/db/index.js";
 import { calculateRiskScore, type CalculateRiskScoreOptions } from "../src/risk-score/index.js";
 import { determineChallengeTier, type ChallengeTier } from "../src/risk-score/challenge-tier.js";
+
+// Score adjustment config: reads from env vars, falls back to same defaults as routes/complete.ts
+const CAPTCHA_SCORE_MULTIPLIER = process.env.CAPTCHA_SCORE_MULTIPLIER ? parseFloat(process.env.CAPTCHA_SCORE_MULTIPLIER) : 0.7;
+const OAUTH_SCORE_MULTIPLIER = process.env.OAUTH_SCORE_MULTIPLIER ? parseFloat(process.env.OAUTH_SCORE_MULTIPLIER) : 0.5;
+const CHALLENGE_PASS_THRESHOLD = process.env.CHALLENGE_PASS_THRESHOLD ? parseFloat(process.env.CHALLENGE_PASS_THRESHOLD) : 0.4;
 import type { IpIntelligence } from "../src/risk-score/factors/ip-risk.js";
 import type { DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor } from "@plebbit/plebbit-js/dist/node/pubsub-messages/types.js";
 
@@ -59,6 +64,14 @@ interface ScenarioConfig {
 interface ScenarioResult {
     riskScore: number;
     tier: ChallengeTier;
+    /** Score after CAPTCHA adjustment (riskScore × captchaMultiplier) */
+    afterCaptcha: number;
+    /** Score after CAPTCHA + OAuth adjustment (riskScore × captchaMultiplier × oauthMultiplier) */
+    afterCaptchaAndOAuth: number;
+    /** Whether CAPTCHA alone is sufficient (afterCaptcha < passThreshold) */
+    captchaSufficient: boolean;
+    /** Whether CAPTCHA + OAuth is sufficient (afterCaptchaAndOAuth < passThreshold) */
+    captchaAndOAuthSufficient: boolean;
     factors: Array<{
         name: string;
         score: number;
@@ -1246,6 +1259,12 @@ function runScenario(scenario: ScenarioConfig, ipType: IpType, oauthConfig: OAut
         const result = calculateRiskScore(options);
         const tier = determineChallengeTier(result.score);
 
+        // Compute adjusted scores
+        const afterCaptcha = result.score * CAPTCHA_SCORE_MULTIPLIER;
+        const afterCaptchaAndOAuth = afterCaptcha * OAUTH_SCORE_MULTIPLIER;
+        const captchaSufficient = afterCaptcha < CHALLENGE_PASS_THRESHOLD;
+        const captchaAndOAuthSufficient = afterCaptchaAndOAuth < CHALLENGE_PASS_THRESHOLD;
+
         // Build factor breakdown
         const factors = result.factors.map((f) => ({
             name: f.name,
@@ -1259,6 +1278,10 @@ function runScenario(scenario: ScenarioConfig, ipType: IpType, oauthConfig: OAut
         return {
             riskScore: result.score,
             tier,
+            afterCaptcha,
+            afterCaptchaAndOAuth,
+            captchaSufficient,
+            captchaAndOAuthSufficient,
             factors
         };
     } finally {
@@ -1470,6 +1493,14 @@ function generateAuthorProfileTable(scenario: ScenarioConfig, sampleResult?: Sce
     return lines;
 }
 
+function getAdjustedOutcome(result: ScenarioResult): string {
+    if (result.tier === "auto_accept") return "Auto-accepted";
+    if (result.tier === "auto_reject") return "Auto-rejected";
+    if (result.captchaSufficient) return "CAPTCHA passes";
+    if (result.captchaAndOAuthSufficient) return "Needs OAuth";
+    return "Auto-rejected*";
+}
+
 function generatePublicationTypeResults(
     pubType: PublicationType,
     results: Array<{
@@ -1486,18 +1517,35 @@ function generatePublicationTypeResults(
 
     lines.push(`#### ${pubTypeDisplay}`);
     lines.push("");
-    lines.push("| IP Type | OAuth Config | Score | Outcome | Top Factors |");
-    lines.push("|---------|--------------|-------|---------|-------------|");
+    const combinedMultiplier = CAPTCHA_SCORE_MULTIPLIER * OAUTH_SCORE_MULTIPLIER;
+    lines.push(
+        `| IP Type | OAuth Config | Raw Score | After CAPTCHA (×${CAPTCHA_SCORE_MULTIPLIER}) | After CAPTCHA+OAuth (×${combinedMultiplier}) | Outcome | Top Factors |`
+    );
+    lines.push("|---------|--------------|-----------|----------------------|-----------------------------|---------|-------------|");
 
     const pubTypeResults = results.filter((r) => r.pubType === pubType);
 
     for (const { ipType, oauthConfig, result } of pubTypeResults) {
         const ipDisplay = IP_TYPE_DISPLAY_NAMES[ipType];
         const oauthDisplay = OAUTH_CONFIG_DISPLAY_NAMES[oauthConfig];
-        const tierDisplay = TIER_DISPLAY_NAMES[result.tier];
+        const outcome = getAdjustedOutcome(result);
         const topFactors = getTopFactors(result.factors, scenario, ipType, oauthConfig, 2);
 
-        lines.push(`| ${ipDisplay} | ${oauthDisplay} | ${formatScore(result.riskScore)} | ${tierDisplay} | ${topFactors} |`);
+        // Show adjusted scores with pass/fail indicators
+        const captchaScore =
+            result.tier === "auto_accept" || result.tier === "auto_reject"
+                ? "—"
+                : `${formatScore(result.afterCaptcha)} ${result.captchaSufficient ? "✓" : "✗"}`;
+        const oauthScore =
+            result.tier === "auto_accept" || result.tier === "auto_reject"
+                ? "—"
+                : result.captchaSufficient
+                  ? "—"
+                  : `${formatScore(result.afterCaptchaAndOAuth)} ${result.captchaAndOAuthSufficient ? "✓" : "✗"}`;
+
+        lines.push(
+            `| ${ipDisplay} | ${oauthDisplay} | ${formatScore(result.riskScore)} | ${captchaScore} | ${oauthScore} | ${outcome} | ${topFactors} |`
+        );
     }
 
     lines.push("");
@@ -1541,7 +1589,7 @@ function generateFactorBreakdownTable(
     lines.push(`| **Total** | | | **100%** | **${formatScore(result.riskScore)}** |`);
     lines.push("");
 
-    // Add outcome explanation
+    // Add outcome explanation with adjusted scores
     const tierDisplay = TIER_DISPLAY_NAMES[result.tier];
     let outcomeExplanation = "";
 
@@ -1549,15 +1597,27 @@ function generateFactorBreakdownTable(
         case "auto_accept":
             outcomeExplanation = `Score ${formatScore(result.riskScore)} falls in the auto-accept tier (< 0.2), allowing the publication without any challenge.`;
             break;
-        case "captcha_only":
-            outcomeExplanation = `Score ${formatScore(result.riskScore)} falls in the CAPTCHA-only tier (0.2-0.4), requiring a CAPTCHA challenge before publishing.`;
-            break;
-        case "captcha_and_oauth":
-            outcomeExplanation = `Score ${formatScore(result.riskScore)} falls in the CAPTCHA + OAuth tier (0.4-0.8), requiring both CAPTCHA verification and OAuth sign-in.`;
-            break;
         case "auto_reject":
-            outcomeExplanation = `Score ${formatScore(result.riskScore)} falls in the auto-reject tier (> 0.8), automatically rejecting the publication.`;
+            outcomeExplanation = `Score ${formatScore(result.riskScore)} falls in the auto-reject tier (>= 0.8), automatically rejecting the publication.`;
             break;
+        default: {
+            // Show the score adjustment path
+            outcomeExplanation = `Raw score ${formatScore(result.riskScore)}.`;
+            outcomeExplanation += ` After CAPTCHA: ${formatScore(result.riskScore)} × ${CAPTCHA_SCORE_MULTIPLIER} = ${formatScore(result.afterCaptcha)}`;
+            if (result.captchaSufficient) {
+                outcomeExplanation += ` < ${CHALLENGE_PASS_THRESHOLD} — **CAPTCHA alone passes**.`;
+            } else {
+                outcomeExplanation += ` >= ${CHALLENGE_PASS_THRESHOLD} — CAPTCHA not sufficient.`;
+                const combinedMultiplier = CAPTCHA_SCORE_MULTIPLIER * OAUTH_SCORE_MULTIPLIER;
+                outcomeExplanation += ` After CAPTCHA+OAuth: ${formatScore(result.riskScore)} × ${combinedMultiplier} = ${formatScore(result.afterCaptchaAndOAuth)}`;
+                if (result.captchaAndOAuthSufficient) {
+                    outcomeExplanation += ` < ${CHALLENGE_PASS_THRESHOLD} — **CAPTCHA + OAuth passes**.`;
+                } else {
+                    outcomeExplanation += ` >= ${CHALLENGE_PASS_THRESHOLD} — still fails (effectively rejected).`;
+                }
+            }
+            break;
+        }
     }
 
     lines.push(`**Outcome:** ${tierDisplay} — ${outcomeExplanation}`);
@@ -1606,9 +1666,25 @@ function generateMarkdown(): string {
     lines.push("| Score Range | Tier | Action |");
     lines.push("|-------------|------|--------|");
     lines.push("| 0.0 - 0.2 | Auto-accepted | No challenge required |");
-    lines.push("| 0.2 - 0.4 | CAPTCHA only | CAPTCHA verification required |");
-    lines.push("| 0.4 - 0.8 | CAPTCHA + OAuth | Both CAPTCHA and OAuth sign-in required |");
+    lines.push("| 0.2 - 0.8 | Challenge | CAPTCHA always required; OAuth may be needed based on score adjustment |");
     lines.push("| 0.8 - 1.0 | Auto-rejected | Publication automatically rejected |");
+    lines.push("");
+    lines.push("## Score Adjustment Model");
+    lines.push("");
+    lines.push("After evaluation, CAPTCHA is always the first challenge. The score is then adjusted:");
+    lines.push("");
+    const combinedMul = CAPTCHA_SCORE_MULTIPLIER * OAUTH_SCORE_MULTIPLIER;
+    const crossover = CHALLENGE_PASS_THRESHOLD / CAPTCHA_SCORE_MULTIPLIER;
+    lines.push(`| Stage | Multiplier | Formula | Pass if |`);
+    lines.push(`|-------|------------|---------|---------|`);
+    lines.push(`| After CAPTCHA | ×${CAPTCHA_SCORE_MULTIPLIER} | score × ${CAPTCHA_SCORE_MULTIPLIER} | < ${CHALLENGE_PASS_THRESHOLD} |`);
+    lines.push(
+        `| After CAPTCHA + OAuth | ×${combinedMul} | score × ${CAPTCHA_SCORE_MULTIPLIER} × ${OAUTH_SCORE_MULTIPLIER} | < ${CHALLENGE_PASS_THRESHOLD} |`
+    );
+    lines.push("");
+    lines.push(`- **CAPTCHA alone sufficient** when raw score < ${formatScore(crossover)}`);
+    lines.push(`- **CAPTCHA + OAuth sufficient** when raw score < ${formatScore(CHALLENGE_PASS_THRESHOLD / combinedMul)}`);
+    lines.push(`- Scores ≥ 0.8 are auto-rejected regardless`);
     lines.push("");
     lines.push("---");
     lines.push("");
@@ -1679,17 +1755,21 @@ function generateMarkdown(): string {
     // Summary table
     lines.push("## Summary");
     lines.push("");
-    lines.push("Overview of risk score ranges and outcomes for each scenario:");
+    lines.push("Overview of risk score ranges and challenge outcomes for each scenario:");
     lines.push("");
-    lines.push("| # | Scenario | Min Score | Max Score | Possible Outcomes |");
-    lines.push("|---|----------|-----------|-----------|-------------------|");
+    lines.push("| # | Scenario | Score Range | CAPTCHA Passes? | CAPTCHA+OAuth Passes? | Possible Outcomes |");
+    lines.push("|---|----------|-------------|-----------------|----------------------|-------------------|");
 
     for (let scenarioIdx = 0; scenarioIdx < SCENARIOS.length; scenarioIdx++) {
         const scenario = SCENARIOS[scenarioIdx];
 
         let minScore = 1;
         let maxScore = 0;
-        const tiers = new Set<ChallengeTier>();
+        const outcomes = new Set<string>();
+        let anyCaptchaSufficient = false;
+        let allCaptchaSufficient = true;
+        let anyCaptchaOAuthSufficient = false;
+        let allCaptchaOAuthSufficient = true;
 
         for (const pubType of PUBLICATION_TYPES) {
             const modifiedScenario = { ...scenario, publicationType: pubType };
@@ -1698,15 +1778,24 @@ function generateMarkdown(): string {
                     const result = runScenario(modifiedScenario, ipType, oauthConfig);
                     minScore = Math.min(minScore, result.riskScore);
                     maxScore = Math.max(maxScore, result.riskScore);
-                    tiers.add(result.tier);
+                    outcomes.add(getAdjustedOutcome(result));
+
+                    if (result.tier !== "auto_accept" && result.tier !== "auto_reject") {
+                        if (result.captchaSufficient) anyCaptchaSufficient = true;
+                        else allCaptchaSufficient = false;
+                        if (result.captchaAndOAuthSufficient) anyCaptchaOAuthSufficient = true;
+                        else allCaptchaOAuthSufficient = false;
+                    }
                 }
             }
         }
 
-        const tierList = Array.from(tiers)
-            .map((t) => TIER_DISPLAY_NAMES[t])
-            .join(", ");
-        lines.push(`| ${scenarioIdx + 1} | ${scenario.name} | ${formatScore(minScore)} | ${formatScore(maxScore)} | ${tierList} |`);
+        const captchaStatus = allCaptchaSufficient ? "Always" : anyCaptchaSufficient ? "Sometimes" : "Never";
+        const oauthStatus = allCaptchaOAuthSufficient ? "Always" : anyCaptchaOAuthSufficient ? "Sometimes" : "Never";
+        const outcomeList = Array.from(outcomes).join(", ");
+        lines.push(
+            `| ${scenarioIdx + 1} | ${scenario.name} | ${formatScore(minScore)}–${formatScore(maxScore)} | ${captchaStatus} | ${oauthStatus} | ${outcomeList} |`
+        );
     }
 
     lines.push("");
@@ -1726,6 +1815,9 @@ async function main(): Promise<void> {
     console.log("Generating risk score scenarios...");
     console.log(
         `Processing ${SCENARIOS.length} scenarios x ${IP_TYPES.length * OAUTH_CONFIGS.length * PUBLICATION_TYPES.length} configurations each`
+    );
+    console.log(
+        `Score adjustment: CAPTCHA ×${CAPTCHA_SCORE_MULTIPLIER}, OAuth ×${OAUTH_SCORE_MULTIPLIER}, threshold ${CHALLENGE_PASS_THRESHOLD}`
     );
     console.log("");
 

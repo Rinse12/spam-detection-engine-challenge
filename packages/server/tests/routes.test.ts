@@ -861,12 +861,13 @@ describe("API Routes", () => {
             expect(body.error).toContain("not yet completed");
         });
 
-        it("should return specific pending error for captcha_only tier", async () => {
+        it("should return unified pending error for captcha_only tier", async () => {
             const captchaSession = server.db.insertChallengeSession({
                 sessionId: "captcha-only-pending",
                 subplebbitPublicKey: testSigner.publicKey,
                 expiresAt: Date.now() + 600_000,
-                challengeTier: "captcha_only"
+                challengeTier: "captcha_only",
+                riskScore: 0.3
             });
 
             const payload = await createVerifyPayload({ sessionId: captchaSession.sessionId });
@@ -875,15 +876,16 @@ describe("API Routes", () => {
             expect(response.statusCode).toBe(200);
             const body = response.json();
             expect(body.success).toBe(false);
-            expect(body.error).toBe("CAPTCHA not yet completed");
+            expect(body.error).toBe("Challenge not yet completed");
         });
 
-        it("should return specific pending error for captcha_and_oauth tier (neither completed)", async () => {
+        it("should return unified pending error for captcha_and_oauth tier", async () => {
             const combinedSession = server.db.insertChallengeSession({
                 sessionId: "combined-neither-pending",
                 subplebbitPublicKey: testSigner.publicKey,
                 expiresAt: Date.now() + 600_000,
-                challengeTier: "captcha_and_oauth"
+                challengeTier: "captcha_and_oauth",
+                riskScore: 0.6
             });
 
             const payload = await createVerifyPayload({ sessionId: combinedSession.sessionId });
@@ -892,15 +894,16 @@ describe("API Routes", () => {
             expect(response.statusCode).toBe(200);
             const body = response.json();
             expect(body.success).toBe(false);
-            expect(body.error).toBe("CAPTCHA and OAuth not yet completed");
+            expect(body.error).toBe("Challenge not yet completed");
         });
 
-        it("should return specific pending error for captcha_and_oauth tier (captcha done, OAuth pending)", async () => {
+        it("should return unified pending error even when captcha is done but OAuth pending", async () => {
             const combinedSession = server.db.insertChallengeSession({
                 sessionId: "combined-captcha-done",
                 subplebbitPublicKey: testSigner.publicKey,
                 expiresAt: Date.now() + 600_000,
-                challengeTier: "captcha_and_oauth"
+                challengeTier: "captcha_and_oauth",
+                riskScore: 0.6
             });
             server.db.updateChallengeSessionCaptchaCompleted(combinedSession.sessionId);
 
@@ -910,10 +913,10 @@ describe("API Routes", () => {
             expect(response.statusCode).toBe(200);
             const body = response.json();
             expect(body.success).toBe(false);
-            expect(body.error).toBe("OAuth not yet completed");
+            expect(body.error).toBe("Challenge not yet completed");
         });
 
-        it("should return generic pending error when challengeTier is null", async () => {
+        it("should return unified pending error when challengeTier is null", async () => {
             const noTierSession = server.db.insertChallengeSession({
                 sessionId: "no-tier-pending",
                 subplebbitPublicKey: testSigner.publicKey,

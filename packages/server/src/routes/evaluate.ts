@@ -25,8 +25,8 @@ export interface EvaluateRouteOptions {
     indexer?: Indexer | null;
     /** Challenge tier configuration thresholds */
     challengeTierConfig?: Partial<ChallengeTierConfig>;
-    /** Whether OAuth providers are available */
-    hasOAuthProviders?: boolean;
+    /** List of enabled OAuth providers (e.g., ["google", "github"]) */
+    enabledOAuthProviders?: string[];
     /** Whether Turnstile is configured */
     hasTurnstile?: boolean;
     /** Allow non-domain (IPNS) subplebbits. Default: false */
@@ -42,10 +42,12 @@ export function registerEvaluateRoute(fastify: FastifyInstance, options: Evaluat
         baseUrl,
         indexer,
         challengeTierConfig,
-        hasOAuthProviders = false,
+        enabledOAuthProviders = [],
         hasTurnstile = false,
         allowNonDomainSubplebbits = false
     } = options;
+
+    const hasOAuthProviders = enabledOAuthProviders.length > 0;
 
     fastify.post(
         "/api/v1/evaluate",
@@ -182,7 +184,8 @@ export function registerEvaluateRoute(fastify: FastifyInstance, options: Evaluat
             const riskScoreResult = calculateRiskScore({
                 challengeRequest: challengeRequest as DecryptedChallengeRequestMessageTypeWithSubplebbitAuthor,
                 db,
-                walletTransactionCounts
+                walletTransactionCounts,
+                enabledOAuthProviders
             });
 
             // Determine challenge tier based on risk score
@@ -202,35 +205,25 @@ export function registerEvaluateRoute(fastify: FastifyInstance, options: Evaluat
             );
 
             // Map challenge tier to database tier (auto_accept and auto_reject don't need sessions with tiers)
+            // The iframe route uses riskScore-based logic to decide what to show,
+            // but we still store challengeTier for logging and backwards compatibility.
             let dbChallengeTier: ChallengeTierDb | undefined;
-            if (challengeTier === "captcha_only") {
-                // If no Turnstile configured, can't do captcha_only - fall back to OAuth if available
+            if (challengeTier === "captcha_only" || challengeTier === "captcha_and_oauth") {
                 if (hasTurnstile) {
-                    dbChallengeTier = "captcha_only";
+                    // Score-based adjustment determines if OAuth is needed after CAPTCHA
+                    dbChallengeTier = challengeTier === "captcha_and_oauth" && hasOAuthProviders ? "captcha_and_oauth" : "captcha_only";
                 } else if (hasOAuthProviders) {
-                    // Fall back to OAuth-only (treated as captcha_only tier for simplicity)
-                    dbChallengeTier = "captcha_only";
-                }
-                // If neither available, session is created without tier (legacy behavior)
-            } else if (challengeTier === "captcha_and_oauth") {
-                // Need both CAPTCHA and OAuth
-                if (hasTurnstile && hasOAuthProviders) {
-                    dbChallengeTier = "captcha_and_oauth";
-                } else if (hasOAuthProviders) {
-                    // Downgrade to OAuth-only (captcha_only tier uses OAuth as fallback)
-                    dbChallengeTier = "captcha_only";
-                } else if (hasTurnstile) {
-                    // Downgrade to CAPTCHA-only
                     dbChallengeTier = "captcha_only";
                 }
             }
 
-            // Create challenge session in database
+            // Create challenge session in database (store riskScore for post-CAPTCHA adjustment)
             db.insertChallengeSession({
                 sessionId,
                 subplebbitPublicKey: subplebbitPublicKeyFromRequestBody,
                 expiresAt,
-                challengeTier: dbChallengeTier
+                challengeTier: dbChallengeTier,
+                riskScore: riskScoreResult.score
             });
 
             // Store publication in database for velocity tracking

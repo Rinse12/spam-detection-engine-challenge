@@ -261,7 +261,7 @@ export function generateCaptchaAndOAuthIframe(options: CaptchaAndOAuthIframeOpti
 <body>
     <div class="container">
         <h1>Complete verification</h1>
-        <p class="subtitle">Two steps to verify your identity</p>
+        <p class="subtitle">Verify your identity to continue</p>
 
         <!-- Step 1: CAPTCHA -->
         <div id="captcha-section" class="section ${captchaCompleted ? "hidden" : ""}">
@@ -277,15 +277,15 @@ export function generateCaptchaAndOAuthIframe(options: CaptchaAndOAuthIframeOpti
             ></div>
         </div>
 
-        <div id="divider" class="divider ${captchaCompleted ? "hidden" : ""}">
+        <div id="divider" class="divider hidden">
             <span>then</span>
         </div>
 
-        <!-- Step 2: OAuth -->
-        <div id="oauth-section" class="section">
+        <!-- Step 2: OAuth (hidden until CAPTCHA is completed and OAuth is needed) -->
+        <div id="oauth-section" class="section ${captchaCompleted ? "" : "hidden"}">
             <div class="section-title">
                 <span id="step2-number" class="step-number ${captchaCompleted ? "active" : ""}">2</span>
-                <span>Sign in with any account</span>
+                <span id="oauth-title">Sign in with any account</span>
             </div>
             <div id="buttons" class="oauth-buttons">
                 ${buttons}
@@ -304,6 +304,7 @@ export function generateCaptchaAndOAuthIframe(options: CaptchaAndOAuthIframeOpti
         const sessionId = ${JSON.stringify(sessionId)};
         const baseUrl = ${JSON.stringify(baseUrl)};
         let captchaCompleted = ${captchaCompleted};
+        let challengePassed = false;
         let pollInterval = null;
         let isCompleted = false;
 
@@ -314,15 +315,16 @@ export function generateCaptchaAndOAuthIframe(options: CaptchaAndOAuthIframeOpti
         }
 
         function enableOAuthButtons() {
+            document.getElementById('oauth-section').classList.remove('hidden');
             const buttons = document.querySelectorAll('.oauth-btn');
             buttons.forEach(btn => btn.disabled = false);
             document.getElementById('step2-number').classList.add('active');
         }
 
         function onTurnstileSuccess(turnstileToken) {
-            showStatus('CAPTCHA verified! Completing step 1...', 'loading');
+            showStatus('CAPTCHA verified! Processing...', 'loading');
 
-            // Call server to mark CAPTCHA as completed (but not session)
+            // Call server to mark CAPTCHA as completed — server decides if score passes
             fetch('/api/v1/challenge/complete', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -335,18 +337,24 @@ export function generateCaptchaAndOAuthIframe(options: CaptchaAndOAuthIframeOpti
             .then(function(response) { return response.json(); })
             .then(function(data) {
                 if (data.success) {
-                    if (data.oauthRequired) {
-                        // CAPTCHA done, now need OAuth
-                        captchaCompleted = true;
-                        document.getElementById('step1-number').classList.remove('active');
-                        document.getElementById('step1-number').classList.add('completed');
-                        document.getElementById('captcha-section').classList.add('hidden');
-                        document.getElementById('divider').classList.add('hidden');
-                        enableOAuthButtons();
-                        showStatus('Step 1 complete! Now sign in with any account below.', 'success');
-                    } else {
-                        // Session fully completed (shouldn't happen for captcha_and_oauth tier)
+                    captchaCompleted = true;
+                    document.getElementById('step1-number').classList.remove('active');
+                    document.getElementById('step1-number').classList.add('completed');
+                    document.getElementById('captcha-section').classList.add('hidden');
+                    document.getElementById('divider').classList.add('hidden');
+
+                    if (data.passed) {
+                        // Session completed — CAPTCHA was sufficient
+                        challengePassed = true;
                         showStatus('Verification complete! Click "done" in your plebbit client to continue.', 'success');
+                        // Show optional OAuth to build trust for future visits
+                        document.getElementById('oauth-title').textContent = 'Build trust for future visits (optional)';
+                        enableOAuthButtons();
+                    } else {
+                        // CAPTCHA done but score still too high — OAuth needed to continue
+                        enableOAuthButtons();
+                        document.getElementById('oauth-title').textContent = 'Sign in with a social account to continue';
+                        showStatus('CAPTCHA verified! Your trust score needs a boost. Sign in below to continue.', 'success');
                     }
                 } else {
                     showStatus('CAPTCHA verification failed: ' + (data.error || 'Unknown error'), 'error');
@@ -385,14 +393,18 @@ export function generateCaptchaAndOAuthIframe(options: CaptchaAndOAuthIframeOpti
                     const resp = await fetch(baseUrl + '/api/v1/oauth/status/' + encodeURIComponent(sessionId));
                     const data = await resp.json();
 
-                    if (data.completed) {
+                    if (data.oauthCompleted) {
                         isCompleted = true;
                         clearInterval(pollInterval);
                         pollInterval = null;
                         document.getElementById('buttons').style.display = 'none';
                         document.getElementById('step2-number').classList.remove('active');
                         document.getElementById('step2-number').classList.add('completed');
-                        showStatus('Verification complete! Click "done" in your plebbit client to continue.', 'success');
+                        if (challengePassed) {
+                            showStatus('Social account linked! This will help with future verifications.', 'success');
+                        } else {
+                            showStatus('Verification complete! Click "done" in your plebbit client to continue.', 'success');
+                        }
                     }
                 } catch (e) {
                     console.error('Polling error:', e);

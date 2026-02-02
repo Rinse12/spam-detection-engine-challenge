@@ -22,6 +22,8 @@ export interface ChallengeSession {
     challengeTier: ChallengeTierDb | null;
     /** Whether CAPTCHA portion is completed (for captcha_and_oauth tier) */
     captchaCompleted: number;
+    /** The risk score at evaluation time (used for score adjustment after CAPTCHA/OAuth) */
+    riskScore: number | null;
 }
 
 export interface IpRecord {
@@ -148,25 +150,30 @@ export class SpamDetectionDatabase {
         expiresAt: number;
         /** Challenge tier for tiered challenge selection */
         challengeTier?: ChallengeTierDb;
+        /** The risk score at evaluation time */
+        riskScore?: number;
     }): ChallengeSession {
         const stmt = this.db.prepare(`
       INSERT INTO challengeSessions (
         sessionId,
         subplebbitPublicKey,
         expiresAt,
-        challengeTier
+        challengeTier,
+        riskScore
       )
       VALUES (
         @sessionId,
         @subplebbitPublicKey,
         @expiresAt,
-        @challengeTier
+        @challengeTier,
+        @riskScore
       )
     `);
 
         stmt.run({
             ...params,
-            challengeTier: params.challengeTier ?? null
+            challengeTier: params.challengeTier ?? null,
+            riskScore: params.riskScore ?? null
         });
 
         return this.getChallengeSessionBySessionId(params.sessionId)!;

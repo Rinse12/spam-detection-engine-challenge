@@ -327,8 +327,8 @@ describe("Challenge Tier Integration", () => {
         resetPlebbitLoaderForTest();
     });
 
-    describe("Session creation with challenge tier", () => {
-        it("should store challengeTier in session and allow retrieving authorPublicKey from publication", async () => {
+    describe("Session creation with challenge tier and riskScore", () => {
+        it("should store challengeTier and riskScore in session", async () => {
             server = await createServer({
                 port: 0,
                 logging: false,
@@ -347,9 +347,9 @@ describe("Challenge Tier Integration", () => {
 
             const session = server.db.getChallengeSessionBySessionId(sessionId);
             expect(session).toBeDefined();
-            // Author public key is retrieved from publication tables, not stored in session
-            const authorPubKey = server.db.getAuthorPublicKeyBySessionId(sessionId);
-            expect(authorPubKey).toBe(authorSigner.publicKey);
+            expect(session?.riskScore).toBeTypeOf("number");
+            expect(session?.riskScore).toBeGreaterThanOrEqual(0);
+            expect(session?.riskScore).toBeLessThanOrEqual(1);
             // Challenge tier should be set based on risk score
             expect(["captcha_only", "captcha_and_oauth", null]).toContain(session?.challengeTier);
         });
@@ -373,7 +373,7 @@ describe("Challenge Tier Integration", () => {
 
             const payload = await createEvaluatePayload();
             const evalResponse = await injectCbor(server.fastify, "POST", "/api/v1/evaluate", payload);
-            const { sessionId, riskScore } = evalResponse.json();
+            const { sessionId } = evalResponse.json();
 
             // Verify session has captcha_only tier
             const session = server.db.getChallengeSessionBySessionId(sessionId);
@@ -397,25 +397,20 @@ describe("Challenge Tier Integration", () => {
                 baseUrl: "http://localhost:3000",
                 turnstileSiteKey: TURNSTILE_TEST_SITE_KEY,
                 turnstileSecretKey: TURNSTILE_TEST_SECRET_KEY,
-                // Set thresholds so all non-zero scores result in auto_reject
-                // Any score >= 0 will be auto_reject since autoRejectThreshold is 0
                 autoAcceptThreshold: 0,
                 captchaOnlyThreshold: 0.001,
                 autoRejectThreshold: 0.002
             });
             await server.fastify.ready();
 
-            // Use an author profile that should result in moderate/high risk score
             const payload = await createEvaluatePayload({
-                omitSubplebbitAuthor: true // New author = higher risk
+                omitSubplebbitAuthor: true
             });
             const evalResponse = await injectCbor(server.fastify, "POST", "/api/v1/evaluate", payload);
             const { sessionId, riskScore } = evalResponse.json();
 
-            // Verify the risk score is above auto_reject threshold
             expect(riskScore).toBeGreaterThanOrEqual(0.002);
 
-            // Verify session was marked as failed
             const session = server.db.getChallengeSessionBySessionId(sessionId);
             expect(session?.status).toBe("failed");
 
@@ -435,8 +430,6 @@ describe("Challenge Tier Integration", () => {
                 databasePath: ":memory:",
                 baseUrl: "http://localhost:3000",
                 turnstileSiteKey: TURNSTILE_TEST_SITE_KEY,
-                // Set thresholds so all scores (0.0 - 1.0) result in auto_accept
-                // autoAcceptThreshold > 1.0 means everything is auto_accept
                 autoAcceptThreshold: 1.1,
                 captchaOnlyThreshold: 1.2,
                 autoRejectThreshold: 1.3
@@ -447,14 +440,15 @@ describe("Challenge Tier Integration", () => {
             const evalResponse = await injectCbor(server.fastify, "POST", "/api/v1/evaluate", payload);
             const { sessionId } = evalResponse.json();
 
-            // Session should be marked as completed immediately
             const session = server.db.getChallengeSessionBySessionId(sessionId);
             expect(session?.status).toBe("completed");
         });
     });
 
-    describe("Complete route with partial completion", () => {
-        it("should mark captcha as completed for captcha_and_oauth tier", async () => {
+    describe("Score adjustment after CAPTCHA", () => {
+        it("should pass after CAPTCHA when adjusted score is below threshold (low risk)", async () => {
+            // Use multiplier=0.7 and threshold=0.4 (defaults)
+            // For this to pass: riskScore * 0.7 < 0.4 → riskScore < 0.571
             server = await createServer({
                 port: 0,
                 logging: false,
@@ -462,14 +456,13 @@ describe("Challenge Tier Integration", () => {
                 baseUrl: "http://localhost:3000",
                 turnstileSiteKey: TURNSTILE_TEST_SITE_KEY,
                 turnstileSecretKey: TURNSTILE_TEST_SECRET_KEY,
-                oauth: {
-                    github: { clientId: "test", clientSecret: "test" }
-                },
-                // Set thresholds so all non-zero scores result in captcha_and_oauth
-                // Score must be >= autoAcceptThreshold and >= captchaOnlyThreshold but < autoRejectThreshold
+                // Ensure score falls in challenge range (0.2–0.8)
                 autoAcceptThreshold: 0,
-                captchaOnlyThreshold: 0.001,
-                autoRejectThreshold: 1.0
+                captchaOnlyThreshold: 0.99,
+                autoRejectThreshold: 1.0,
+                // Use defaults for score adjustment
+                captchaScoreMultiplier: 0.7,
+                challengePassThreshold: 0.4
             });
             await server.fastify.ready();
 
@@ -477,66 +470,8 @@ describe("Challenge Tier Integration", () => {
             const evalResponse = await injectCbor(server.fastify, "POST", "/api/v1/evaluate", payload);
             const { sessionId, riskScore } = evalResponse.json();
 
-            // Verify risk score should be in captcha_and_oauth range
-            expect(riskScore).toBeGreaterThanOrEqual(0.001);
-            expect(riskScore).toBeLessThan(1.0);
-
-            // Verify session has captcha_and_oauth tier
-            let session = server.db.getChallengeSessionBySessionId(sessionId);
-            expect(session?.challengeTier).toBe("captcha_and_oauth");
-            expect(session?.captchaCompleted).toBe(0);
-
-            // Access iframe first (required before complete)
-            await server.fastify.inject({
-                method: "GET",
-                url: `/api/v1/iframe/${sessionId}`
-            });
-
-            // Complete CAPTCHA
-            const completeResponse = await server.fastify.inject({
-                method: "POST",
-                url: "/api/v1/challenge/complete",
-                payload: {
-                    sessionId,
-                    challengeResponse: "XXXX.DUMMY.TOKEN.XXXX",
-                    challengeType: "turnstile"
-                }
-            });
-
-            expect(completeResponse.statusCode).toBe(200);
-            const completeBody = completeResponse.json();
-            expect(completeBody.success).toBe(true);
-            expect(completeBody.captchaCompleted).toBe(true);
-            expect(completeBody.oauthRequired).toBe(true);
-
-            // Session should NOT be completed yet
-            session = server.db.getChallengeSessionBySessionId(sessionId);
-            expect(session?.status).toBe("pending");
-            expect(session?.captchaCompleted).toBe(1);
-        });
-
-        it("should complete session for captcha_only tier after CAPTCHA", async () => {
-            server = await createServer({
-                port: 0,
-                logging: false,
-                databasePath: ":memory:",
-                baseUrl: "http://localhost:3000",
-                turnstileSiteKey: TURNSTILE_TEST_SITE_KEY,
-                turnstileSecretKey: TURNSTILE_TEST_SECRET_KEY,
-                // Set thresholds so scores result in captcha_only
-                autoAcceptThreshold: 0,
-                captchaOnlyThreshold: 0.99,
-                autoRejectThreshold: 1.0
-            });
-            await server.fastify.ready();
-
-            const payload = await createEvaluatePayload();
-            const evalResponse = await injectCbor(server.fastify, "POST", "/api/v1/evaluate", payload);
-            const { sessionId } = evalResponse.json();
-
-            // Verify session has captcha_only tier
-            let session = server.db.getChallengeSessionBySessionId(sessionId);
-            expect(session?.challengeTier).toBe("captcha_only");
+            // For a standard user, riskScore should be moderate (0.3-0.5)
+            // 0.4 * 0.7 = 0.28 < 0.4, so CAPTCHA should suffice
 
             // Access iframe first
             await server.fastify.inject({
@@ -558,11 +493,181 @@ describe("Challenge Tier Integration", () => {
             expect(completeResponse.statusCode).toBe(200);
             const completeBody = completeResponse.json();
             expect(completeBody.success).toBe(true);
-            expect(completeBody.oauthRequired).toBeUndefined();
+
+            if (riskScore * 0.7 < 0.4) {
+                // CAPTCHA alone was sufficient
+                expect(completeBody.passed).toBe(true);
+                expect(completeBody.oauthSuggested).toBeUndefined();
+
+                const session = server.db.getChallengeSessionBySessionId(sessionId);
+                expect(session?.status).toBe("completed");
+                expect(session?.captchaCompleted).toBe(1);
+            } else {
+                // CAPTCHA not sufficient, OAuth suggested
+                expect(completeBody.passed).toBe(false);
+                expect(completeBody.oauthSuggested).toBe(true);
+
+                const session = server.db.getChallengeSessionBySessionId(sessionId);
+                expect(session?.status).toBe("pending");
+                expect(session?.captchaCompleted).toBe(1);
+            }
+        });
+
+        it("should require OAuth when adjusted score is above threshold (high risk)", async () => {
+            // Use a very low multiplier threshold to force OAuth requirement
+            server = await createServer({
+                port: 0,
+                logging: false,
+                databasePath: ":memory:",
+                baseUrl: "http://localhost:3000",
+                turnstileSiteKey: TURNSTILE_TEST_SITE_KEY,
+                turnstileSecretKey: TURNSTILE_TEST_SECRET_KEY,
+                oauth: {
+                    github: { clientId: "test", clientSecret: "test" }
+                },
+                autoAcceptThreshold: 0,
+                captchaOnlyThreshold: 0.99,
+                autoRejectThreshold: 1.0,
+                // Very low threshold so score * multiplier is always above it
+                captchaScoreMultiplier: 0.99,
+                challengePassThreshold: 0.01
+            });
+            await server.fastify.ready();
+
+            const payload = await createEvaluatePayload();
+            const evalResponse = await injectCbor(server.fastify, "POST", "/api/v1/evaluate", payload);
+            const { sessionId, riskScore } = evalResponse.json();
+
+            // riskScore is > 0 for any real scenario, so riskScore * 0.99 > 0.01
+
+            // Access iframe first
+            await server.fastify.inject({
+                method: "GET",
+                url: `/api/v1/iframe/${sessionId}`
+            });
+
+            // Complete CAPTCHA
+            const completeResponse = await server.fastify.inject({
+                method: "POST",
+                url: "/api/v1/challenge/complete",
+                payload: {
+                    sessionId,
+                    challengeResponse: "XXXX.DUMMY.TOKEN.XXXX",
+                    challengeType: "turnstile"
+                }
+            });
+
+            expect(completeResponse.statusCode).toBe(200);
+            const completeBody = completeResponse.json();
+            expect(completeBody.success).toBe(true);
+            expect(completeBody.passed).toBe(false);
+            expect(completeBody.oauthSuggested).toBe(true);
+
+            // Session should NOT be completed yet
+            const session = server.db.getChallengeSessionBySessionId(sessionId);
+            expect(session?.status).toBe("pending");
+            expect(session?.captchaCompleted).toBe(1);
+        });
+
+        it("should complete session for captcha_only tier after CAPTCHA with sufficient score reduction", async () => {
+            server = await createServer({
+                port: 0,
+                logging: false,
+                databasePath: ":memory:",
+                baseUrl: "http://localhost:3000",
+                turnstileSiteKey: TURNSTILE_TEST_SITE_KEY,
+                turnstileSecretKey: TURNSTILE_TEST_SECRET_KEY,
+                autoAcceptThreshold: 0,
+                captchaOnlyThreshold: 0.99,
+                autoRejectThreshold: 1.0,
+                // Very generous: any score * 0.01 < 0.99 always passes
+                captchaScoreMultiplier: 0.01,
+                challengePassThreshold: 0.99
+            });
+            await server.fastify.ready();
+
+            const payload = await createEvaluatePayload();
+            const evalResponse = await injectCbor(server.fastify, "POST", "/api/v1/evaluate", payload);
+            const { sessionId } = evalResponse.json();
+
+            // Access iframe first
+            await server.fastify.inject({
+                method: "GET",
+                url: `/api/v1/iframe/${sessionId}`
+            });
+
+            // Complete CAPTCHA
+            const completeResponse = await server.fastify.inject({
+                method: "POST",
+                url: "/api/v1/challenge/complete",
+                payload: {
+                    sessionId,
+                    challengeResponse: "XXXX.DUMMY.TOKEN.XXXX",
+                    challengeType: "turnstile"
+                }
+            });
+
+            expect(completeResponse.statusCode).toBe(200);
+            const completeBody = completeResponse.json();
+            expect(completeBody.success).toBe(true);
+            expect(completeBody.passed).toBe(true);
 
             // Session should be completed
-            session = server.db.getChallengeSessionBySessionId(sessionId);
+            const session = server.db.getChallengeSessionBySessionId(sessionId);
             expect(session?.status).toBe("completed");
+        });
+    });
+
+    describe("Verify route with simplified error messages", () => {
+        it("should return 'Challenge not yet completed' for any pending session", async () => {
+            server = await createServer({
+                port: 0,
+                logging: false,
+                databasePath: ":memory:",
+                baseUrl: "http://localhost:3000",
+                turnstileSiteKey: TURNSTILE_TEST_SITE_KEY,
+                turnstileSecretKey: TURNSTILE_TEST_SECRET_KEY
+            });
+            await server.fastify.ready();
+
+            // Test with captcha_only tier
+            const captchaSession = server.db.insertChallengeSession({
+                sessionId: "captcha-only-pending",
+                subplebbitPublicKey: testSigner.publicKey,
+                expiresAt: Date.now() + 600_000,
+                challengeTier: "captcha_only",
+                riskScore: 0.3
+            });
+
+            const createVerifyPayload = async (sessionId: string) => {
+                const timestamp = Math.floor(Date.now() / 1000);
+                const propsToSign = { sessionId, timestamp };
+                const signature = await createRequestSignature(propsToSign);
+                return { ...propsToSign, signature };
+            };
+
+            const payload1 = await createVerifyPayload(captchaSession.sessionId);
+            const response1 = await injectCbor(server.fastify, "POST", "/api/v1/challenge/verify", payload1);
+            expect(response1.json().error).toBe("Challenge not yet completed");
+
+            // Test with captcha_and_oauth tier
+            const combinedSession = server.db.insertChallengeSession({
+                sessionId: "combined-pending",
+                subplebbitPublicKey: testSigner.publicKey,
+                expiresAt: Date.now() + 600_000,
+                challengeTier: "captcha_and_oauth",
+                riskScore: 0.6
+            });
+
+            const payload2 = await createVerifyPayload(combinedSession.sessionId);
+            const response2 = await injectCbor(server.fastify, "POST", "/api/v1/challenge/verify", payload2);
+            expect(response2.json().error).toBe("Challenge not yet completed");
+
+            // Test with captcha done but OAuth pending
+            server.db.updateChallengeSessionCaptchaCompleted(combinedSession.sessionId);
+            const payload3 = await createVerifyPayload(combinedSession.sessionId);
+            const response3 = await injectCbor(server.fastify, "POST", "/api/v1/challenge/verify", payload3);
+            expect(response3.json().error).toBe("Challenge not yet completed");
         });
     });
 });

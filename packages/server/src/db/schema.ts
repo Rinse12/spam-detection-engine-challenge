@@ -16,7 +16,8 @@ CREATE TABLE IF NOT EXISTS challengeSessions (
   authorAccessedIframeAt INTEGER,
   oauthIdentity TEXT,  -- format: "provider:userId" (e.g., "github:12345678")
   challengeTier TEXT CHECK (challengeTier IS NULL OR challengeTier IN ('captcha_only', 'captcha_and_oauth')),
-  captchaCompleted INTEGER DEFAULT 0  -- 1 if CAPTCHA portion completed for combined challenges
+  captchaCompleted INTEGER DEFAULT 0,  -- 1 if CAPTCHA portion completed for combined challenges
+  riskScore REAL  -- The risk score at evaluation time (used for score adjustment after CAPTCHA/OAuth)
 );
 
 CREATE INDEX IF NOT EXISTS idx_challengeSessions_expiresAt ON challengeSessions(expiresAt);

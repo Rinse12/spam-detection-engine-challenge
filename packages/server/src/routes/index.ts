@@ -23,6 +23,12 @@ export interface RouteOptions {
     challengeTierConfig?: Partial<ChallengeTierConfig>;
     /** Allow non-domain (IPNS) subplebbits. Default: false */
     allowNonDomainSubplebbits?: boolean;
+    /** Multiplier applied to riskScore after CAPTCHA (0-1]. Default: 0.7 */
+    captchaScoreMultiplier?: number;
+    /** Additional multiplier after OAuth (0-1]. Default: 0.5 */
+    oauthScoreMultiplier?: number;
+    /** Adjusted score must be below this to pass. Default: 0.4 */
+    challengePassThreshold?: number;
 }
 
 /**
@@ -38,11 +44,15 @@ export function registerRoutes(fastify: FastifyInstance, options: RouteOptions):
         indexer,
         oauthProvidersResult,
         challengeTierConfig,
-        allowNonDomainSubplebbits
+        allowNonDomainSubplebbits,
+        captchaScoreMultiplier,
+        oauthScoreMultiplier,
+        challengePassThreshold
     } = options;
 
     // Determine available challenge providers
-    const hasOAuthProviders = oauthProvidersResult && getEnabledProviders(oauthProvidersResult).length > 0;
+    const enabledOAuthProviders = oauthProvidersResult ? getEnabledProviders(oauthProvidersResult) : [];
+    const hasOAuthProviders = enabledOAuthProviders.length > 0;
     const hasTurnstile = !!turnstileSiteKey;
 
     // Register individual routes
@@ -51,16 +61,24 @@ export function registerRoutes(fastify: FastifyInstance, options: RouteOptions):
         baseUrl,
         indexer,
         challengeTierConfig,
-        hasOAuthProviders,
+        enabledOAuthProviders,
         hasTurnstile,
         allowNonDomainSubplebbits
     });
     registerVerifyRoute(fastify, { db });
-    registerIframeRoute(fastify, { db, turnstileSiteKey, ipapiKey, oauthProvidersResult, baseUrl });
-    registerCompleteRoute(fastify, { db, turnstileSecretKey });
+    registerIframeRoute(fastify, {
+        db,
+        turnstileSiteKey,
+        ipapiKey,
+        oauthProvidersResult,
+        baseUrl,
+        captchaScoreMultiplier,
+        challengePassThreshold
+    });
+    registerCompleteRoute(fastify, { db, turnstileSecretKey, captchaScoreMultiplier, challengePassThreshold });
 
     // Register OAuth routes if any providers are configured
-    if (hasOAuthProviders) {
+    if (hasOAuthProviders && oauthProvidersResult) {
         registerOAuthRoutes(fastify, {
             db,
             providers: oauthProvidersResult.providers
