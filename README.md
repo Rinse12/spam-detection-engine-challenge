@@ -16,6 +16,8 @@ This monorepo uses package-specific licensing:
 
 The hosted Bitsocial spam blocker server implementation now lives in a separate private repository and is not included here. The repo root is marked `UNLICENSED` so the workspace metadata does not imply a single open-source license for the whole repository.
 
+The official hosted service at `https://spamblocker.bitsocial.net/api/v1` is the default and strongly recommended integration because its centralized history enables cross-community abuse and signer-cluster detection. `serverUrl` remains configurable for compatible independent services, but the official hosted server's proprietary implementation is not distributed by this repository.
+
 ## Development Workflow
 
 Repo-specific AI workflow guidance lives in:
@@ -155,7 +157,7 @@ Serves the iframe challenge page. The iframe uses an **OAuth-first** flow where 
 - **OAuth providers** (primary): GitHub, Google, Twitter, Yandex, TikTok, Discord, Reddit
 - **CAPTCHA provider** (fallback): Cloudflare Turnstile
 
-> **Privacy note**: For OAuth providers, the server only verifies successful authentication - it does NOT share account identifiers (username, email) with the community. For IP-based intelligence, only the country code is shared, never the raw IP address.
+> **Privacy note**: For OAuth providers, the server only verifies successful authentication - it does NOT share account identifiers (username, email) with the community. The hosted operator stores IP evidence for abuse prevention, including signer-cluster detection; only the country code and risk result are shared with the community, never the raw IP address.
 
 **Iframe logic (OAuth-first):**
 
@@ -274,9 +276,19 @@ User opens iframe -> lazy iframe posts signed payload to /evaluate -> riskScore
 
 ## Risk Score
 
-The risk score is a value between 0.0 and 1.0 that indicates the likelihood a publication is spam or malicious. It's calculated as a weighted combination of multiple factors including account age, karma, author reputation, content analysis, velocity, and IP intelligence.
+The risk score is a value between 0.0 and 1.0 that indicates the likelihood a publication is spam or malicious. It's calculated as a weighted combination of multiple factors including account age, karma, author reputation, content analysis, velocity, IP intelligence, and signer-cluster behavior.
 
 Detailed risk-scoring implementation notes live with the private server codebase. This public repo documents the exposed API contract and the public challenge/shared packages.
+
+### Signer-cluster Sybil resistance
+
+The hosted service links distinct signer public keys first observed on the same confirmed user-origin IP. This makes disposable Bitsocial accounts less useful for evading a community ban, manufacturing a conversation, or voting on related accounts' content.
+
+- A few signers are allowed to accommodate users who cannot yet sync their Bitsocial account across devices. The first three signers in the rolling 30-day window are normally treated as legitimate multi-device use.
+- Additional signers progressively raise risk and appear as operator evidence. Rapid account churn, ban evasion, repeated failures, or replies/votes between signers linked to the same IP can require stronger verification.
+- Severe rapid or compound abuse can cause a temporary IP-level rejection while the rolling evidence remains active. Operators may also apply a persistent manual IP block.
+
+This is a centralized, service-local defense rather than a protocol-wide Bitsocial identity or ban. Shared households, offices, and carrier networks can legitimately reuse an IP, so the signal is graduated and is not treated as proof that multiple signers are one person. The hosted challenge UI warns users about the policy.
 
 ## Indexer
 
@@ -539,7 +551,7 @@ These settings are configured on the HTTP server, not in the challenge package:
 
 **Risk factor disabling:**
 
-- `DISABLED_RISK_FACTORS`: Comma-separated list of risk factor names to disable. Disabled factors get `weight=0` and their weight is redistributed to remaining factors. Valid values: `commentContentTitleRisk`, `commentUrlRisk`, `velocityRisk`, `accountAge`, `karmaScore`, `ipRisk`, `networkBanHistory`, `modqueueRejectionRate`, `networkRemovalRate`, `socialVerification`, `walletVerification`. Example: `DISABLED_RISK_FACTORS=walletVerification`
+- `DISABLED_RISK_FACTORS`: Comma-separated list of risk factor names to disable. Disabled factors get `weight=0` and their weight is redistributed to remaining factors. Valid values: `commentContentTitleRisk`, `commentUrlRisk`, `velocityRisk`, `accountAge`, `karmaScore`, `ipRisk`, `signerClusterRisk`, `networkBanHistory`, `modqueueRejectionRate`, `networkRemovalRate`, `socialVerification`, `walletVerification`. Example: `DISABLED_RISK_FACTORS=walletVerification`
 
 **Other:**
 
@@ -577,6 +589,7 @@ These settings are configured on the HTTP server, not in the challenge package:
 - Treat IP intelligence as informational and use it only for rejection decisions
 - IP intelligence fields are optional and may be removed from the engine response in the future; challenge code only applies IP filtering options when they are present
 - IP-based options are intentionally rejection-only; we do not support IP-derived auto-approval (e.g., a country whitelist), because it is easy to game and can be used to flood a community
+- IP-linked signer clusters are probabilistic: shared networks can group legitimate users, while attackers can rotate IPs or use proxies. The allowance and compound-signal escalation reduce false positives but cannot eliminate them.
 
 ## Verification Plan
 

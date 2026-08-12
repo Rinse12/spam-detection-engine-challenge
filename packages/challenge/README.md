@@ -18,7 +18,9 @@ Then set it on your community with one command:
 bitsocial community edit your-community.bso '--settings.challenges[0].name' @bitsocial/spam-blocker-challenge
 ```
 
-That uses the hosted Bitsocial Spam Blocker server and the default thresholds.
+That uses the hosted Bitsocial Spam Blocker server and the default thresholds. This is the strongly recommended configuration because the centralized service can correlate cross-community abuse and signer clusters over time.
+
+The hosted service normally allows up to three signer public keys on a confirmed user-origin IP during its rolling window, accommodating users who cannot yet sync a Bitsocial signer across devices. Excessive account switching, rapid signer churn, ban evasion, or interactions between linked signers can trigger stronger verification or a temporary IP-level rejection. This policy is enforced by the hosted server, not by the public challenge package itself.
 
 To customize thresholds or IP-based rejection rules, pass options in the same command:
 
@@ -46,17 +48,17 @@ Then add or edit the `challenges` array in your community settings to include th
 
 ## Options
 
-| Option                | Default                                    | Description                                                                 |
-| --------------------- | ------------------------------------------ | --------------------------------------------------------------------------- |
-| `serverUrl`           | `https://spamblocker.bitsocial.net/api/v1` | URL of the Bitsocial spam blocker server                                    |
-| `autoAcceptThreshold` | `0.2`                                      | Complete verification after iframe evaluation when risk is below this value |
-| `autoRejectThreshold` | `0.8`                                      | Reject after iframe evaluation when risk is above this value                |
-| `countryBlacklist`    | _(empty)_                                  | Comma-separated ISO 3166-1 alpha-2 country codes to block (e.g. `RU,CN,KP`) |
-| `maxIpRisk`           | `1.0`                                      | Reject if IP risk score exceeds this threshold (estimation only)            |
-| `blockVpn`            | `false`                                    | Reject publications from VPN IPs (estimation only)                          |
-| `blockProxy`          | `false`                                    | Reject publications from proxy IPs (estimation only)                        |
-| `blockTor`            | `false`                                    | Reject publications from Tor exit nodes (estimation only)                   |
-| `blockDatacenter`     | `false`                                    | Reject publications from datacenter IPs (estimation only)                   |
+| Option                | Default                                    | Description                                                                          |
+| --------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------ |
+| `serverUrl`           | `https://spamblocker.bitsocial.net/api/v1` | URL of a compatible spam blocker service; the official hosted service is recommended |
+| `autoAcceptThreshold` | `0.2`                                      | Complete verification after iframe evaluation when risk is below this value          |
+| `autoRejectThreshold` | `0.8`                                      | Reject after iframe evaluation when risk is above this value                         |
+| `countryBlacklist`    | _(empty)_                                  | Comma-separated ISO 3166-1 alpha-2 country codes to block (e.g. `RU,CN,KP`)          |
+| `maxIpRisk`           | `1.0`                                      | Reject if IP risk score exceeds this threshold (estimation only)                     |
+| `blockVpn`            | `false`                                    | Reject publications from VPN IPs (estimation only)                                   |
+| `blockProxy`          | `false`                                    | Reject publications from proxy IPs (estimation only)                                 |
+| `blockTor`            | `false`                                    | Reject publications from Tor exit nodes (estimation only)                            |
+| `blockDatacenter`     | `false`                                    | Reject publications from datacenter IPs (estimation only)                            |
 
 ## How It Works
 
