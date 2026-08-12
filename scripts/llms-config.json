@@ -18,6 +18,7 @@
     ],
     "docs": [
         "README.md",
+        "docs/architecture/hosted-service-source-policy.md",
         "AGENTS.md",
         "packages/challenge/README.md",
         "packages/shared/README.md",

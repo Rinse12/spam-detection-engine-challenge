@@ -18,6 +18,8 @@ The hosted Bitsocial spam blocker server implementation now lives in a separate 
 
 The official hosted service at `https://spamblocker.bitsocial.net/api/v1` is the default and strongly recommended integration because its centralized history enables cross-community abuse and signer-cluster detection. `serverUrl` remains configurable for compatible independent services, but the official hosted server's proprietary implementation is not distributed by this repository.
 
+See [Hosted Spam Blocker Source Policy](./docs/architecture/hosted-service-source-policy.md) for the rationale, transparency commitments, and conditions for reconsidering this boundary.
+
 ## Development Workflow
 
 Repo-specific AI workflow guidance lives in:
@@ -46,7 +48,7 @@ Quick setup for a fresh machine:
 bitsocial-spam-blocker/
 ├── package.json                    # Root workspace config
 ├── tsconfig.base.json
-├── docs/                           # Agent playbooks and workflow notes
+├── docs/                           # Architecture decisions and agent playbooks
 ├── packages/
 │   ├── challenge/                  # package for community owners
 │   │   └── src/
