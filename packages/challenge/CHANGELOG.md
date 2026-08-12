@@ -1,5 +1,11 @@
 # Changelog
 
+## <small>0.1.6 (2026-08-12)</small>
+
+* docs: document hosted signer-cluster protection ([78d9673](https://github.com/bitsocialnet/spam-blocker/commit/78d9673))
+* chore(deps): resolve Dependabot alerts ([c2f9136](https://github.com/bitsocialnet/spam-blocker/commit/c2f9136))
+* chore(deps): resolve remaining Dependabot alerts ([e3045aa](https://github.com/bitsocialnet/spam-blocker/commit/e3045aa))
+
 ## <small>0.1.5 (2026-07-28)</small>
 
 * ci: add .prettierignore for generated files ([48defb6](https://github.com/bitsocialnet/spam-blocker/commit/48defb6))
